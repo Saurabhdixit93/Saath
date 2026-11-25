@@ -1,0 +1,10 @@
+# Dec 2025 Indian Railways chart preparation rules
+default:
+  morning_window_start_ist: "05:00"
+  morning_window_end_ist: "14:00"
+  morning_chart_previous_day_ist: "20:00"
+  standard_hours_before_departure: 10
+  poll_interval_minutes: 15
+  final_reverify_minutes_before_departure: 60
+
+overrides: {}

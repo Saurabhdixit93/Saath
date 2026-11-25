@@ -1,0 +1,148 @@
+/* Saath Design System Tokens (DESIGN.md §3 + WCAG 2.2 AA Accessible Ink Overrides) */
+
+:root {
+  /* Light theme (warm paper) */
+  --bg: #FAF7F2;
+  --surface: #FFFFFF;
+  --surface-2: #F2EEE7;
+  --border: #E4DDD2;
+  --text: #1C1A17;
+  --text-muted: #6B645A;
+  --primary: #E2572B;
+  --primary-ink: #FFFFFF;
+  --secondary: #1F6F78;
+  --success: #2E8B57;
+  --warning: #D99A1E;
+  --danger: #C2362F;
+  --women-mode: #B0418A;
+
+  /* Seat state tokens (always paired with icon/pattern) */
+  --seat-mine: #E2572B;
+  --seat-match: #1F6F78;
+  --seat-request: #D99A1E;
+  --seat-empty: #D9D2C6;
+
+  /* WCAG 2.2 AA (>= 4.5:1) accessible button/text complements */
+  --primary-btn-bg: #C8441B;
+  --primary-hover-bg: #B23A14;
+  --primary-text: #C8441B;
+  --secondary-ink: #FFFFFF;
+  --success-btn-bg: #247247;
+  --success-ink: #FFFFFF;
+  --warning-ink: #1C1A17;
+  --danger-ink: #FFFFFF;
+  --danger-text: #C2362F;
+  --women-mode-ink: #FFFFFF;
+  --focus-ring: #1F6F78;
+
+  /* Radii & elevation */
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 24px;
+  --shadow: 0 1px 2px rgba(28, 26, 23, 0.06), 0 8px 24px rgba(28, 26, 23, 0.06);
+
+  /* Typography */
+  --font-display: var(--font-bricolage, "Bricolage Grotesque"), "Mukta", system-ui, sans-serif;
+  --font-body: var(--font-inter, "Inter"), var(--font-devanagari, "Noto Sans Devanagari"), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains, "JetBrains Mono"), ui-monospace, monospace;
+
+  /* Type scale (rem for 200% text scaling) */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-3xl: 2.5rem;
+
+  /* 4px spacing grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1115;
+    --surface: #171A21;
+    --surface-2: #1F232C;
+    --border: #2A2F3A;
+    --text: #F3F1EC;
+    --text-muted: #A39E94;
+    --primary: #FF7A4D;
+    --secondary: #4FB3BD;
+
+    --primary-btn-bg: #FF7A4D;
+    --primary-hover-bg: #FF8F69;
+    --primary-ink: #0F1115;
+    --primary-text: #FF7A4D;
+    --secondary-ink: #0F1115;
+    --success-btn-bg: #3DA36D;
+    --success-ink: #0F1115;
+    --warning-ink: #0F1115;
+    --danger-ink: #FFFFFF;
+    --danger-text: #FF8A80;
+    --women-mode-ink: #FFFFFF;
+    --seat-mine: #FF7A4D;
+    --seat-match: #4FB3BD;
+    --seat-empty: #2E3440;
+    --focus-ring: #4FB3BD;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0F1115;
+  --surface: #171A21;
+  --surface-2: #1F232C;
+  --border: #2A2F3A;
+  --text: #F3F1EC;
+  --text-muted: #A39E94;
+  --primary: #FF7A4D;
+  --secondary: #4FB3BD;
+
+  --primary-btn-bg: #FF7A4D;
+  --primary-hover-bg: #FF8F69;
+  --primary-ink: #0F1115;
+  --primary-text: #FF7A4D;
+  --secondary-ink: #0F1115;
+  --success-btn-bg: #3DA36D;
+  --success-ink: #0F1115;
+  --warning-ink: #0F1115;
+  --danger-ink: #FFFFFF;
+  --danger-text: #FF8A80;
+  --women-mode-ink: #FFFFFF;
+  --seat-mine: #FF7A4D;
+  --seat-match: #4FB3BD;
+  --seat-empty: #2E3440;
+  --focus-ring: #4FB3BD;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

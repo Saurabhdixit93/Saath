@@ -1,0 +1,29 @@
+train:
+  LB: 100
+  SL: 75
+  UB: 50
+  MB: 50
+  SU: 50
+  CC: 75
+  "1A": 100
+  "2A": 85
+  "3E": 50
+  EC: 75
+  "2S": 50
+
+flight:
+  W: 100
+  A: 75
+  M: 50
+  EXIT: 100
+
+bonus:
+  helped_senior: 25
+  helped_solo_woman: 25
+  cycle_participant: 10
+
+caps:
+  per_user_per_day: 300
+  same_pair_per_90d: 1
+
+credit_rule: "both_confirm OR (one_confirm AND chart_corroborates)"

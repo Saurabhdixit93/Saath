@@ -1,0 +1,21 @@
+auth:
+  anonymous_per_ip_per_minute: 20
+  otp_start_per_ip_per_minute: 5
+  otp_start_per_phone_per_hour: 5
+  otp_resend_cooldown_seconds: 30
+  otp_ttl_seconds: 60
+  otp_max_attempts: 5
+
+verify:
+  per_ip_per_minute: 10
+  per_user_per_day: 30
+
+messages_new_partner:
+  new_account_age_days: 7
+  per_day: 5
+
+swaps_created:
+  per_user_per_day: 10
+
+ai:
+  per_user_per_day: 20

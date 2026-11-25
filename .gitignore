@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Build & caches
+.next/
+out/
+dist/
+build/
+.turbo/
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/swe-worker-*.js
+
+# Environment & local secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Playwright & test outputs
+test-results/
+playwright-report/
+blob-report/
+
+# OS & editor
+.DS_Store
+*.log

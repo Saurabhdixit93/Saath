@@ -1,0 +1,30 @@
+{
+  "name": "@saath/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:tier1": "playwright test --grep @tier1",
+    "test:tier2": "playwright test --grep @tier2",
+    "test:tier3": "playwright test --grep @tier3",
+    "test:tier4": "playwright test --grep @tier4",
+    "test:list": "playwright test --list",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@eslint/js": "^9.25.0",
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.18.1",
+    "bwip-js": "^4.5.1",
+    "eslint": "^9.25.0",
+    "eslint-plugin-playwright": "^2.2.0",
+    "pdf-lib": "^1.17.1",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.30.0",
+    "ws": "^8.18.1"
+  }
+}

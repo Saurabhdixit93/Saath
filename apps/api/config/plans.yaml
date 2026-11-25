@@ -1,0 +1,40 @@
+plans:
+  free_passenger:
+    code: free_passenger
+    name: Free Passenger
+    price_inr_paise: 0
+    currency: INR
+    billing_type: free
+    max_party_members: 4
+    organiser_dashboard: false
+    summary_export: false
+    b2b_api: false
+    widget_access: false
+    priority_seat_bump: false
+
+  group_organiser_pass:
+    code: group_organiser_pass
+    name: Group-Organiser Trip Pass
+    price_inr_paise: 19900
+    currency: INR
+    billing_type: per_trip
+    scope: journey_or_party
+    max_party_members: 50
+    organiser_dashboard: true
+    summary_export: true
+    b2b_api: false
+    widget_access: false
+    priority_seat_bump: false
+
+  b2b_partner:
+    code: b2b_partner
+    name: B2B / API Partner
+    price_inr_paise: 0
+    currency: INR
+    billing_type: subscription
+    max_party_members: 50
+    organiser_dashboard: true
+    summary_export: true
+    b2b_api: true
+    widget_access: true
+    priority_seat_bump: false
