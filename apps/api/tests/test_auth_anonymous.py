@@ -74,3 +74,13 @@ def test_client_ip_ignores_spoofed_xff_when_peer_untrusted() -> None:
     scope["headers"] = [(b"x-forwarded-for", b"9.9.9.9, 203.0.113.7, 10.0.0.1")]
     req_trusted = StarletteRequest(scope)
     assert _client_ip(req_trusted) == "203.0.113.7"
+
+    # When trusted proxy sends only non-IP entries in X-Forwarded-For, fall back to peer_ip
+    scope["headers"] = [(b"x-forwarded-for", b"unknown, invalid-hop")]
+    req_non_ip = StarletteRequest(scope)
+    assert _client_ip(req_non_ip) == "10.0.0.1"
+
+    # When trusted proxy sends only valid trusted-proxy hops, return rightmost valid IP
+    scope["headers"] = [(b"x-forwarded-for", b"10.0.0.1, unknown")]
+    req_all_trusted = StarletteRequest(scope)
+    assert _client_ip(req_all_trusted) == "10.0.0.1"

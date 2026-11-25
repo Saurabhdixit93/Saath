@@ -25,6 +25,9 @@ def test_settings() -> Settings:
         turnstile_mode="fake",
         whatsapp_mode="fake",
         sms_mode="fake",
+        rail_provider_mode="fake",
+        flight_provider_mode="fake",
+        payment_provider="sandbox",
     )
 
 
@@ -56,7 +59,11 @@ async def client(
         async with app.state.session_factory() as session:
             await session.execute(
                 text(
-                    "TRUNCATE TABLE audit_log, consents, refresh_tokens, devices, users "
+                    "TRUNCATE TABLE "
+                    "b2b_api_keys, entitlements, payment_webhook_events, payment_orders, "
+                    "notifications_outbox, goals, party_members, parties, "
+                    "seat_holders, bookings, journey_instances, "
+                    "audit_log, consents, refresh_tokens, devices, users "
                     "RESTART IDENTITY CASCADE"
                 )
             )

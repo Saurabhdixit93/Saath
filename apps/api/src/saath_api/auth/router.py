@@ -70,15 +70,18 @@ def _client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+        last_valid_ip: str | None = None
         for hop in reversed(hops):
             try:
                 ipaddress.ip_address(hop)
             except ValueError:
                 continue
+            if last_valid_ip is None:
+                last_valid_ip = hop
             if not _is_trusted_proxy(hop, settings.trusted_proxy_list):
                 return hop
-        if hops:
-            return hops[-1]
+        if last_valid_ip is not None:
+            return last_valid_ip
     return peer_ip
 
 

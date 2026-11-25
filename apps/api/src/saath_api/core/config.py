@@ -137,11 +137,18 @@ def load_yaml_configs(config_dir: Path | None = None) -> YamlConfigBundle:
             raise ValueError(f"Config file {path} must parse to a YAML mapping")
         return raw
 
+    plans_bundle = PlansConfig.model_validate(_read_yaml("plans.yaml"))
+    for plan_code, plan in plans_bundle.plans.items():
+        if plan.priority_seat_bump:
+            raise ValueError(
+                f"Plan {plan_code!r} violates anti-seat-sale invariant: priority_seat_bump must be false"
+            )
+
     return YamlConfigBundle(
         rate_limits=RateLimitsConfig.model_validate(_read_yaml("rate_limits.yaml")),
         chart_rules=ChartRulesConfig.model_validate(_read_yaml("chart_rules.yaml")),
         karma=KarmaConfig.model_validate(_read_yaml("karma.yaml")),
-        plans=PlansConfig.model_validate(_read_yaml("plans.yaml")),
+        plans=plans_bundle,
     )
 
 
@@ -198,7 +205,15 @@ class Settings(BaseSettings):
     turnstile_secret_key: str = ""
 
     rail_provider_mode: Literal["fake", "live"] = "fake"
+    provider_rail_a_base_url: str = ""
+    provider_rail_a_api_key: str = ""
+    provider_rail_b_base_url: str = ""
+    provider_rail_b_api_key: str = ""
+    provider_rail_timeout_ms: int = 3000
+
     flight_provider_mode: Literal["fake", "live"] = "fake"
+    provider_flight_base_url: str = ""
+    provider_flight_api_key: str = ""
 
     whatsapp_mode: Literal["fake", "live"] = "fake"
     whatsapp_access_token: str = ""
@@ -212,7 +227,13 @@ class Settings(BaseSettings):
     msg91_dlt_te_id_otp: str = ""
 
     ai_mode: Literal["fake", "anthropic"] = "fake"
+    anthropic_api_key: str = ""
+    anthropic_fast_model: str = "claude-haiku-5-5"
+
     payment_provider: Literal["sandbox", "razorpay"] = "sandbox"
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_webhook_secret: str = ""
 
     config_dir: Path = Field(default_factory=_default_config_dir)
 
@@ -255,6 +276,15 @@ class Settings(BaseSettings):
                 raise ValueError("AI_MODE=fake is forbidden when ENV=production")
             if self.payment_provider == "sandbox":
                 raise ValueError("PAYMENT_PROVIDER=sandbox is forbidden when ENV=production")
+            if self.payment_provider == "razorpay" and (
+                not self.razorpay_key_id
+                or not self.razorpay_key_secret
+                or not self.razorpay_webhook_secret
+            ):
+                raise ValueError(
+                    "RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET "
+                    "are mandatory when ENV=production and PAYMENT_PROVIDER=razorpay"
+                )
         else:
             if not self.jwt_private_key or not self.jwt_public_key:
                 priv, pub = _get_dev_ed25519_pair()

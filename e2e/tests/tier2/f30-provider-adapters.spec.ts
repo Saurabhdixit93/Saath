@@ -35,8 +35,10 @@ test.describe('F30 Tier 2: Pluggable Adapter Failure, Timeout & Sandbox Guards @
       headers: { 'X-Simulate-Provider-Failure': 'true' },
       body: { mode: 'train', pnr: TEST_PNRS.rajdhani3A },
     });
-    expect([200, 503]).toContain(res.status);
+    expect(res.status).toBe(503);
+    api.assertProblemJson(res, 503);
     expect(res.rawText).not.toContain('Traceback');
+    expect(res.rawText).not.toMatch(/File ".*", line \d+/);
   });
 
   test('B2B partner route rejects invalid X-API-Key with 401/403 RFC 9457', async () => {

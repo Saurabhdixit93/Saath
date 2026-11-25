@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from saath_api.auth.models import Base
 from saath_api.core.config import get_settings
+from saath_api.journeys import models as _journeys_models  # noqa: F401
+from saath_api.notifications import models as _notifications_models  # noqa: F401
+from saath_api.parties import models as _parties_models  # noqa: F401
+from saath_api.pricing import models as _pricing_models  # noqa: F401
 
 config = context.config
 

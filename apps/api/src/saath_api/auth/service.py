@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.dependencies import Actor, authorize
 from saath_api.auth.models import AuditLog, Device, RefreshToken, User
+from saath_api.journeys.models import Booking, SeatHolder
+from saath_api.parties.models import Party
 from saath_api.auth.schemas import (
     AnonymousAuthResponse,
     OtpStartRequest,
@@ -245,16 +247,46 @@ async def merge_anonymous_identity(
 ) -> None:
     """Hook invoked on OTP verify when caller holds an anonymous JWT.
 
-    M1 records the merge audit event and Redis marker; M2 extends this hook
-    to reassign anonymous bookings and party leadership in PostgreSQL.
+    Reassigns anonymous bookings, party leadership, and lead passenger linkage
+    in PostgreSQL, records the merge audit event, and sets the Redis marker.
     """
+    claimed_booking_ids_result = await db.execute(
+        select(Booking.id).where(Booking.owner_anon_id == anon_id)
+    )
+    claimed_booking_ids = list(claimed_booking_ids_result.scalars().all())
+
+    if claimed_booking_ids:
+        await db.execute(
+            update(Booking)
+            .where(Booking.owner_anon_id == anon_id)
+            .values(owner_user_id=user_id, owner_anon_id=None)
+        )
+        await db.execute(
+            update(SeatHolder)
+            .where(
+                SeatHolder.booking_id.in_(claimed_booking_ids),
+                SeatHolder.pax_seq == 1,
+                SeatHolder.linked_user_id.is_(None),
+            )
+            .values(linked_user_id=user_id)
+        )
+
+    await db.execute(
+        update(Party)
+        .where(Party.leader_anon_id == anon_id)
+        .values(leader_user_id=user_id, leader_anon_id=None)
+    )
+
     await redis.set(f"anon:merged:{anon_id}", str(user_id), ex=86400)
     db.add(
         AuditLog(
             actor=f"user:{user_id}",
             action="auth.anon_merged",
             resource=f"user:{user_id}",
-            meta={"anon_id": anon_id},
+            meta={
+                "anon_id": anon_id,
+                "merged_booking_count": len(claimed_booking_ids),
+            },
         )
     )
 

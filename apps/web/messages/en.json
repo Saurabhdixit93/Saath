@@ -73,7 +73,9 @@
     "errRateLimit": "Lots of people checking right now. Give us 30 seconds.",
     "errInvalidOtp": "That 6-digit code doesn't match. Please try again.",
     "errExpiredOtp": "Your code expired after 60 seconds. Request a new one.",
-    "errMaxAttempts": "Too many wrong attempts. Please request a fresh code."
+    "errMaxAttempts": "Too many wrong attempts. Please request a fresh code.",
+    "errTurnstile": "Bot check expired or failed. Please complete the check again.",
+    "errMessagingUnavailable": "We couldn't send the code right now. Please try again shortly."
   },
   "profile": {
     "title": "Your profile & safety",

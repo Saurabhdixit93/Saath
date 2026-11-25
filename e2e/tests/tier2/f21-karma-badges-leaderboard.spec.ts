@@ -1,6 +1,6 @@
 import { test, expect } from '../../fixtures/multi-browser.js';
 import { SaathApiClient, type MatchCardDto } from '../../helpers/api.js';
-import { TEST_PNRS, uniquePhone } from '../../helpers/env.js';
+import { TEST_PNRS, futureDateIso, uniquePhone, uniquePnr } from '../../helpers/env.js';
 
 function asRecord(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -29,11 +29,18 @@ async function completePairSwap(
   tokenA: string,
   apiB: SaathApiClient,
   tokenB: string,
-  pnrA: string,
-  pnrB: string,
+  inputA: string,
+  inputB: string,
+  viaSms = false,
 ): Promise<string> {
-  const vA = await apiA.verifyTrainPnr(tokenA, pnrA);
-  const vB = await apiB.verifyTrainPnr(tokenB, pnrB);
+  const vA = viaSms
+    ? await apiA.verifyTrainSms(tokenA, inputA)
+    : await apiA.verifyTrainPnr(tokenA, inputA);
+  const vB = viaSms
+    ? await apiB.verifyTrainSms(tokenB, inputB)
+    : await apiB.verifyTrainPnr(tokenB, inputB);
+  expect(vA.ok).toBe(true);
+  expect(vB.ok).toBe(true);
   const hubA = await apiA.getJourney(tokenA, getString(asRecord(vA.data.journey, 'jA'), 'id'));
   const hubB = await apiB.getJourney(tokenB, getString(asRecord(vB.data.journey, 'jB'), 'id'));
   const pA = getString(asRecord(hubA.data.party, 'pA'), 'id');
@@ -91,22 +98,29 @@ test.describe('F21 Tier 2: Karma Anti-Fraud Caps & Ledger Invariants @tier2', ()
       TEST_PNRS.cycleA,
       TEST_PNRS.cycleB,
     );
-    await apiA.confirmCompletion(authA.access, swap1, 'yes');
-    await apiB.confirmCompletion(authB.access, swap1, 'yes');
+    const c1A = await apiA.confirmCompletion(authA.access, swap1, 'yes');
+    expect(c1A.ok).toBe(true);
+    const c1B = await apiB.confirmCompletion(authB.access, swap1, 'yes');
+    expect(c1B.ok).toBe(true);
 
     const karmaAfter1 = await apiB.getKarma(authB.access);
     const bal1 = Number(karmaAfter1.data.balance ?? 0);
+    expect(bal1).toBeGreaterThanOrEqual(50);
 
+    const travelDate = futureDateIso(15);
     const swap2 = await completePairSwap(
       apiA,
       authA.access,
       apiB,
       authB.access,
-      TEST_PNRS.sleeperSL,
-      TEST_PNRS.rajdhani3A,
+      `IRCTC PNR:${uniquePnr('f21-t2-swap2-a')},TRN:12137,DOJ:${travelDate},CLS:SL,S3 11 UB,NDLS-CSMT`,
+      `IRCTC PNR:${uniquePnr('f21-t2-swap2-b')},TRN:12137,DOJ:${travelDate},CLS:SL,S3 12 LB,NDLS-CSMT`,
+      true,
     );
-    await apiA.confirmCompletion(authA.access, swap2, 'yes');
-    await apiB.confirmCompletion(authB.access, swap2, 'yes');
+    const c2A = await apiA.confirmCompletion(authA.access, swap2, 'yes');
+    expect(c2A.ok).toBe(true);
+    const c2B = await apiB.confirmCompletion(authB.access, swap2, 'yes');
+    expect(c2B.ok).toBe(true);
 
     const karmaAfter2 = await apiB.getKarma(authB.access);
     const bal2 = Number(karmaAfter2.data.balance ?? 0);

@@ -1,5 +1,5 @@
 import { test, expect, injectAuthSession } from '../../fixtures/multi-browser.js';
-import { E2E_ENV, TEST_PNRS, uniquePhone } from '../../helpers/env.js';
+import { E2E_ENV, futureDateIso, uniquePhone, uniquePnr } from '../../helpers/env.js';
 
 function asRecord(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -56,7 +56,12 @@ test.describe('S02: Pricing, Group-Organiser Trip Pass & B2B Entitlements @tier4
     await expect(organiser.page.getByText(/₹199/).first()).toBeVisible();
 
     // Organiser verifies primary PNR and checks that unentitled organiser summary is gated (402/403)
-    const vOrg = await organiser.api.verifyTrainPnr(authOrg.access, TEST_PNRS.cycleA);
+    const travelDate = futureDateIso(21);
+    const vOrg = await organiser.api.verifyTrainSms(
+      authOrg.access,
+      `IRCTC PNR:${uniquePnr('s02-org')},TRN:12951,DOJ:${travelDate},CLS:3A,B3 1 LB,NDLS-MMCT`,
+    );
+    expect(vOrg.ok).toBe(true);
     const jId = getString(asRecord(vOrg.data.journey, 'journey'), 'id');
     const hub = await organiser.api.getJourney(authOrg.access, jId);
     const partyId = getString(asRecord(hub.data.party, 'party'), 'id');
@@ -98,17 +103,29 @@ test.describe('S02: Pricing, Group-Organiser Trip Pass & B2B Entitlements @tier4
     await organiser.page.reload({ waitUntil: 'domcontentloaded' });
     await expect(organiser.page.getByText(/Active|Trip Pass|Unlocked/i).first()).toBeVisible();
 
-    // Multi-PNR party merge across additional isolated passenger sessions (>4 member group)
+    // Multi-PNR party merge across 4 additional isolated passenger sessions (total 5 members -> >4 member group)
     const inviteRes = await organiser.api.createPartyInvite(authOrg.access, jId);
     const inviteToken = extractPartyInviteToken(inviteRes.data);
 
-    const extraMember = await createIsolatedPassenger('group-member-2');
-    const authMember = await extraMember.api.loginWithOtp(uniquePhone(402_002));
-    const joinRes = await extraMember.api.joinParty(authMember.access, inviteToken, {
-      pnr: TEST_PNRS.cycleB,
-      mode: 'train',
-    });
-    expect([200, 201]).toContain(joinRes.status);
+    const additionalMembers = [
+      { seed: 402_002, pnrSeed: 's02-m2', seat: 'B3 2 MB' },
+      { seed: 402_003, pnrSeed: 's02-m3', seat: 'B3 3 UB' },
+      { seed: 402_004, pnrSeed: 's02-m4', seat: 'B3 4 LB' },
+      { seed: 402_005, pnrSeed: 's02-m5', seat: 'B3 5 MB' },
+    ] as const;
+
+    let finalMemberCount = 0;
+    for (const [idx, spec] of additionalMembers.entries()) {
+      const extraMember = await createIsolatedPassenger(`group-member-${idx + 2}`);
+      const authMember = await extraMember.api.loginWithOtp(uniquePhone(spec.seed));
+      const joinRes = await extraMember.api.joinParty(authMember.access, inviteToken, {
+        sms_text: `IRCTC PNR:${uniquePnr(spec.pnrSeed)},TRN:12951,DOJ:${travelDate},CLS:3A,${spec.seat},NDLS-MMCT`,
+        mode: 'train',
+      });
+      expect([200, 201]).toContain(joinRes.status);
+      finalMemberCount = asArray(joinRes.data.seat_holders, 'joinRes.seat_holders').length;
+    }
+    expect(finalMemberCount).toBeGreaterThanOrEqual(5);
 
     // Unlocked organiser summary/export now succeeds
     const unlockedAfter = await organiser.api.request(

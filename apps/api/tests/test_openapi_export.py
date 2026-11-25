@@ -26,7 +26,10 @@ def test_offline_openapi_export_contains_auth_and_problem_detail(tmp_path: Path)
         assert expected in paths
 
     assert "ProblemDetail" in schema["components"]["schemas"]
-    anon_403 = paths["/v1/auth/anonymous"]["post"]["responses"]["403"]["content"]
+    assert "ProblemFieldError" in schema["components"]["schemas"]
+    anon_403_resp = paths["/v1/auth/anonymous"]["post"]["responses"]["403"]
+    anon_403 = anon_403_resp["content"]
+    assert "application/json" not in anon_403
     assert "application/problem+json" in anon_403
     assert anon_403["application/problem+json"]["schema"] == {
         "$ref": "#/components/schemas/ProblemDetail"

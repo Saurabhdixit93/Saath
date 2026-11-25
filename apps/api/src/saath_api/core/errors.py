@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from pydantic.json_schema import models_json_schema
 
 logger = structlog.get_logger(__name__)
 
@@ -145,7 +146,7 @@ def openapi_error_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
     mapping: dict[int | str, dict[str, Any]] = {}
     for code in statuses:
         mapping[code] = {
-            "model": ProblemDetail,
+            "description": "RFC 9457 Problem Details error response",
             "content": {
                 PROBLEM_JSON_MEDIA_TYPE: {
                     "schema": {"$ref": "#/components/schemas/ProblemDetail"}
@@ -153,3 +154,17 @@ def openapi_error_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
             },
         }
     return mapping
+
+
+def ensure_problem_schemas(schema: dict[str, Any]) -> dict[str, Any]:
+    components = schema.setdefault("components", {})
+    schemas = components.setdefault("schemas", {})
+    if "ProblemDetail" not in schemas or "ProblemFieldError" not in schemas:
+        _, top_schema = models_json_schema(
+            [(ProblemDetail, "validation"), (ProblemFieldError, "validation")],
+            ref_template="#/components/schemas/{model}",
+        )
+        defs = top_schema.get("$defs", {})
+        for name, definition in defs.items():
+            schemas.setdefault(name, definition)
+    return schema

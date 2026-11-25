@@ -114,10 +114,12 @@ test.describe('F28: Chart-Watcher Scheduler & Auto-Invalidation @tier1', () => {
     expect(reverify.ok).toBe(true);
 
     const swapAfter = await apiA.getSwap(authA.access, swapId);
-    expect(['invalidated', 'confirmed']).toContain(String(swapAfter.data.status));
+    expect(swapAfter.data.status).toBe('invalidated');
 
     const pubCard = await apiA.verifyPublicSwapCard(publicCode);
     expect(pubCard.status).toBe(200);
+    expect(pubCard.data.valid).toBe(false);
+    expect(pubCard.data.revoked).toBe(true);
   });
 
   test('Chart reverify updates journey chart metadata and preserves match_version integrity', async () => {

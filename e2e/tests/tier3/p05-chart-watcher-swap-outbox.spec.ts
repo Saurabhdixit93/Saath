@@ -1,6 +1,7 @@
 import { test, expect } from '../../fixtures/multi-browser.js';
 import { SaathApiClient } from '../../helpers/api.js';
 import { TEST_PNRS, uniquePhone } from '../../helpers/env.js';
+import { assertNoPiiLeak } from '../../helpers/pii.js';
 import { SaathSseClient, SaathWsClient } from '../../helpers/ws-sse.js';
 
 function extractIds(payload: Record<string, unknown>): {
@@ -23,12 +24,17 @@ test.describe('@tier3 P05: Chart Watcher BerthChanged -> Invalidation -> Outbox 
     const uA = await api.loginWithOtp(uniquePhone('p05-a'), 'whatsapp');
     const uB = await api.loginWithOtp(uniquePhone('p05-b'), 'whatsapp');
 
-    const vA = await api.verifyTrainPnr(uA.access, TEST_PNRS.morningChart);
+    const vA = await api.verifyTrainPnr(uA.access, TEST_PNRS.cycleA);
     const vB = await api.verifyTrainPnr(uB.access, TEST_PNRS.cycleB);
     const a = extractIds(vA.data);
     const b = extractIds(vB.data);
 
-    await api.setGoal(uB.access, b.partyId, { goal_type: 'open_to_help', movers: [b.holderId], constraints: {} });
+    await api.setGoal(uB.access, b.partyId, {
+      goal_type: 'open_to_help',
+      movers: [b.holderId],
+      constraints: {},
+      standing_offer: { give_to: 'anyone' },
+    });
     await api.setGoal(uA.access, a.partyId, { goal_type: 'lower', movers: [a.holderId], constraints: {} });
 
     let cardId = '';
@@ -49,7 +55,10 @@ test.describe('@tier3 P05: Chart Watcher BerthChanged -> Invalidation -> Outbox 
     await ws.connectAndAuth(uA.access);
 
     try {
-      const revRes = await api.reverifyJourney(uA.access, a.journeyId);
+      const revRes = await api.request('POST', `/v1/journeys/${a.journeyId}/reverify`, {
+        token: uA.access,
+        headers: { 'X-Simulate-Chart-Change': 'true' },
+      });
       expect(revRes.status).toBe(200);
 
       const chartEvt = await ws.waitForEvent(
@@ -60,12 +69,15 @@ test.describe('@tier3 P05: Chart Watcher BerthChanged -> Invalidation -> Outbox 
       expect(chartEvt.journey_id).toBe(a.journeyId);
 
       const swapAfter = await api.getSwap<{ status: string }>(uA.access, swap.data.id);
-      expect(['invalidated', 'confirmed']).toContain(swapAfter.data.status);
+      expect(swapAfter.data.status).toBe('invalidated');
 
       const publicCard = await api.verifyPublicSwapCard<{ valid: boolean; revoked: boolean }>(
         card.data.public_code,
       );
       expect(publicCard.status).toBe(200);
+      expect(publicCard.data.valid).toBe(false);
+      expect(publicCard.data.revoked).toBe(true);
+      assertNoPiiLeak(publicCard.data, 'p05 public swap card after chart invalidation');
     } finally {
       await ws.close();
     }

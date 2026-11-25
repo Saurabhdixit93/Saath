@@ -209,3 +209,40 @@ def authorize(
             title="Forbidden",
             detail="You do not have access to this resource.",
         )
+
+
+def authorize_resource_owner(
+    actor: Actor,
+    action: str,
+    *,
+    owner_user_id: UUID | None = None,
+    owner_anon_id: str | None = None,
+) -> None:
+    """Enforce ownership for dual-owned resources (anonymous or authenticated user)."""
+    _ = action
+    if actor.kind == "admin":
+        return
+    if actor.kind == "user" and actor.user_id is not None:
+        if owner_user_id is not None and actor.user_id == owner_user_id:
+            return
+        raise ProblemDetailError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="forbidden",
+            title="Forbidden",
+            detail="You do not have access to this resource.",
+        )
+    if actor.kind == "anon" and actor.anon_id is not None:
+        if owner_anon_id is not None and actor.anon_id == owner_anon_id:
+            return
+        raise ProblemDetailError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="forbidden",
+            title="Forbidden",
+            detail="You do not have access to this resource.",
+        )
+    raise ProblemDetailError(
+        status_code=status.HTTP_403_FORBIDDEN,
+        code="forbidden",
+        title="Forbidden",
+        detail="You are not allowed to perform this action.",
+    )

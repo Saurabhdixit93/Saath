@@ -160,4 +160,97 @@ describe("PhoneOtpSheet", () => {
     expect(seenVerifyAuthHeaders[0]).not.toBe(`Bearer ${expiredAnonJwt}`);
     vi.unstubAllGlobals();
   });
+
+  it("resets cloudflare turnstile token and maps turnstile_failed & messaging_unavailable", async () => {
+    const { publicEnv } = await import("../src/lib/env");
+    const prevMode = publicEnv.NEXT_PUBLIC_TURNSTILE_MODE;
+    const prevKey = publicEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    publicEnv.NEXT_PUBLIC_TURNSTILE_MODE = "cloudflare";
+    publicEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY = "test-site-key";
+
+    let renderCount = 0;
+    let latestCallback: ((tok: string) => void) | null = null;
+    window.turnstile = {
+      render: (_el, opts) => {
+        renderCount += 1;
+        latestCallback = opts.callback;
+        setTimeout(() => opts.callback(`cf-token-${renderCount}`), 0);
+        return `widget-${renderCount}`;
+      },
+      remove: vi.fn(),
+    };
+
+    let attempt = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("/v1/auth/anonymous")) {
+        return new Response(
+          JSON.stringify({ access: "anon.jwt", token_type: "bearer", expires_in: 7200 }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.endsWith("/v1/auth/otp/start")) {
+        attempt += 1;
+        if (attempt === 1) {
+          return new Response(
+            JSON.stringify({
+              type: "https://saath.app/problems/turnstile_failed",
+              title: "Bot Check Failed",
+              status: 403,
+              detail: "Bot check failed.",
+              code: "turnstile_failed",
+            }),
+            { status: 403, headers: { "content-type": "application/problem+json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            type: "https://saath.app/problems/messaging_unavailable",
+            title: "Messaging Unavailable",
+            status: 503,
+            detail: "Messaging unavailable.",
+            code: "messaging_unavailable",
+          }),
+          { status: 503, headers: { "content-type": "application/problem+json" } }
+        );
+      }
+      return new Response("{}", { status: 404 });
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    try {
+      render(
+        <NextIntlClientProvider locale="en" messages={enMessages}>
+          <AuthProvider>
+            <PhoneOtpSheet open={true} onClose={vi.fn()} />
+          </AuthProvider>
+        </NextIntlClientProvider>
+      );
+
+      await waitFor(() => expect(renderCount).toBeGreaterThanOrEqual(1));
+      expect(latestCallback).not.toBeNull();
+
+      const phoneInput = screen.getByLabelText("Indian mobile number");
+      await user.type(phoneInput, "9876543210");
+      await user.click(screen.getByRole("button", { name: "Send 6-digit code" }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Bot check expired or failed. Please complete the check again."
+      );
+      await waitFor(() => expect(renderCount).toBeGreaterThanOrEqual(2));
+
+      await user.click(screen.getByRole("button", { name: "Send 6-digit code" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "We couldn't send the code right now. Please try again shortly."
+      );
+      await waitFor(() => expect(renderCount).toBeGreaterThanOrEqual(3));
+    } finally {
+      publicEnv.NEXT_PUBLIC_TURNSTILE_MODE = prevMode;
+      publicEnv.NEXT_PUBLIC_TURNSTILE_SITE_KEY = prevKey;
+      delete window.turnstile;
+      vi.unstubAllGlobals();
+    }
+  });
 });

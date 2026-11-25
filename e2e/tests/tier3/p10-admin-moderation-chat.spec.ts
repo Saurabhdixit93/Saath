@@ -1,6 +1,13 @@
 import { test, expect } from '../../fixtures/multi-browser.js';
 import { SaathApiClient } from '../../helpers/api.js';
-import { E2E_ENV, TEST_PNRS, uniquePhone } from '../../helpers/env.js';
+import { E2E_ENV, futureDateIso, uniquePhone, uniquePnr } from '../../helpers/env.js';
+
+function asArray(value: unknown, label: string): unknown[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`Expected array for ${label}`);
+  }
+  return value;
+}
 
 function extractIds(payload: Record<string, unknown>): {
   partyId: string;
@@ -15,50 +22,134 @@ function extractIds(payload: Record<string, unknown>): {
 }
 
 test.describe('@tier3 P10: Chat Report -> Admin Moderation Queue -> Audit Log & Sender Restrict', () => {
-  test('Reporting abusive chat creates open report and 3 reports auto-restrict offending sender', async () => {
+  test('3 distinct reporter accounts auto-restrict offending sender and admin moderation hide writes audit_log', async () => {
     const api = new SaathApiClient();
-    const victim = await api.loginWithOtp(uniquePhone('p10-vic'), 'whatsapp');
+    const travelDate = futureDateIso(22);
     const offender = await api.loginWithOtp(uniquePhone('p10-off'), 'whatsapp');
 
-    const vV = await api.verifyTrainPnr(victim.access, TEST_PNRS.cycleA);
-    const vO = await api.verifyTrainPnr(offender.access, TEST_PNRS.cycleB);
-    const v = extractIds(vV.data);
-    const o = extractIds(vO.data);
-
-    await api.setGoal(offender.access, o.partyId, { goal_type: 'open_to_help', movers: [o.holderId], constraints: {} });
-    await api.setGoal(victim.access, v.partyId, { goal_type: 'lower', movers: [v.holderId], constraints: {} });
-
-    let cardId = '';
-    await expect(async () => {
-      const m = await api.getMatches(victim.access, v.partyId);
-      expect(m.data.items.length).toBeGreaterThanOrEqual(1);
-      cardId = m.data.items[0]?.card_id ?? '';
-    }).toPass({ timeout: 12_000 });
-
-    const convo = await api.createConversation<{ id: string }>(victim.access, cardId);
-    const msg = await api.sendMessage<{ id: string }>(
+    const vO = await api.verifyTrainSms(
       offender.access,
-      convo.data.id,
-      'Spam harassment message',
+      `IRCTC PNR:${uniquePnr('p10-offender')},TRN:12951,DOJ:${travelDate},CLS:3A,B3 1 LB,NDLS-MMCT`,
     );
-    expect([200, 201]).toContain(msg.status);
+    expect(vO.ok).toBe(true);
+    const o = extractIds(vO.data);
+    await api.setGoal(offender.access, o.partyId, {
+      goal_type: 'open_to_help',
+      movers: [o.holderId],
+      preferred_seats: [],
+      constraints: { women_only: false, no_middle: false, same_coach_only: false, verified_only: false },
+      standing_offer: { give_to: 'anyone' },
+    });
 
-    for (let i = 0; i < 3; i += 1) {
-      const rep = await api.reportUser<{ report_id: string; status: string }>(victim.access, {
+    const reporters = [
+      { seed: 'p10-rep-1', seat: '3', reason: 'abuse' },
+      { seed: 'p10-rep-2', seat: '6', reason: 'scam' },
+      { seed: 'p10-rep-3', seat: '11', reason: 'harassment' },
+    ] as const;
+
+    let firstReportId = '';
+    let lastConversationId = '';
+
+    for (const spec of reporters) {
+      const repUser = await api.loginWithOtp(uniquePhone(spec.seed), 'whatsapp');
+      const vR = await api.verifyTrainSms(
+        repUser.access,
+        `IRCTC PNR:${uniquePnr(spec.seed)},TRN:12951,DOJ:${travelDate},CLS:3A,B3 ${spec.seat} UB,NDLS-MMCT`,
+      );
+      expect(vR.ok).toBe(true);
+      const r = extractIds(vR.data);
+
+      await api.setGoal(repUser.access, r.partyId, {
+        goal_type: 'lower',
+        movers: [r.holderId],
+        preferred_seats: [],
+        constraints: { women_only: false, no_middle: false, same_coach_only: false, verified_only: false },
+      });
+
+      let cardId = '';
+      await expect(async () => {
+        const m = await api.getMatches(repUser.access, r.partyId, 'pair');
+        expect(m.status).toBe(200);
+        expect(m.data.items.length).toBeGreaterThanOrEqual(1);
+        cardId = m.data.items[0]?.card_id ?? '';
+        expect(cardId.length).toBeGreaterThan(0);
+      }).toPass({ timeout: 12_000, intervals: [500, 1000, 1500] });
+
+      const convo = await api.createConversation<{ id: string }>(repUser.access, cardId);
+      expect([200, 201]).toContain(convo.status);
+      lastConversationId = convo.data.id;
+
+      const msg = await api.sendMessage<{ id: string }>(
+        offender.access,
+        convo.data.id,
+        `Spam harassment message (${spec.reason})`,
+      );
+      expect([200, 201]).toContain(msg.status);
+
+      const rep = await api.reportUser<{ report_id: string; status: string }>(repUser.access, {
         conversation_id: convo.data.id,
         message_id: msg.data.id,
-        reason: `harassment_${i + 1}`,
+        reason: spec.reason,
       });
       expect([200, 201]).toContain(rep.status);
+      expect(typeof rep.data.report_id).toBe('string');
+      if (!firstReportId) {
+        firstReportId = rep.data.report_id;
+      }
     }
 
     const sendAfterRestrict = await api.sendMessage(
       offender.access,
-      convo.data.id,
+      lastConversationId,
       'Trying to send after auto-restrict',
     );
     api.assertProblemJson(sendAfterRestrict, [403, 429]);
     expect([403, 429]).toContain(sendAfterRestrict.status);
+
+    // Admin portal moderation queue + hide action + audit_log verification
+    const adminSession = await api.request<{ access?: string; token?: string }>(
+      'POST',
+      '/v1/admin/auth/session',
+      { body: { email: E2E_ENV.adminTestEmail } },
+    );
+    expect([200, 201]).toContain(adminSession.status);
+    const adminToken = adminSession.data.access ?? adminSession.data.token ?? '';
+    expect(adminToken.length).toBeGreaterThan(0);
+
+    const auditBefore = await api.getAdminAuditLog<{
+      total?: number;
+      items?: unknown[];
+      entries?: unknown[];
+    }>(adminToken);
+    expect(auditBefore.status).toBe(200);
+    const beforeCount =
+      typeof auditBefore.data.total === 'number'
+        ? auditBefore.data.total
+        : asArray(
+            auditBefore.data.items ?? auditBefore.data.entries ?? auditBefore.data,
+            'audit before',
+          ).length;
+
+    const queue = await api.getAdminModerationQueue(adminToken);
+    expect(queue.status).toBe(200);
+
+    const hideRes = await api.actOnModeration(adminToken, firstReportId, 'hide');
+    expect(hideRes.status).toBe(200);
+
+    const auditAfter = await api.getAdminAuditLog<{
+      total?: number;
+      items?: unknown[];
+      entries?: unknown[];
+    }>(adminToken);
+    expect(auditAfter.status).toBe(200);
+    const afterCount =
+      typeof auditAfter.data.total === 'number'
+        ? auditAfter.data.total
+        : asArray(
+            auditAfter.data.items ?? auditAfter.data.entries ?? auditAfter.data,
+            'audit after',
+          ).length;
+    expect(afterCount).toBeGreaterThan(beforeCount);
   });
 
   test('Non-admin user cannot access admin moderation queue or audit log (403)', async () => {

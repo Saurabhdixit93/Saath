@@ -120,10 +120,21 @@ export function PhoneOtpSheet({ open, onClose }: PhoneOtpSheetProps) {
         return t("errMaxAttempts");
       case "invalid_phone":
         return t("phoneInvalid");
+      case "turnstile_failed":
+        return t("errTurnstile");
+      case "messaging_unavailable":
+        return t("errMessagingUnavailable");
       default:
         return detail || t("errRateLimit");
     }
   };
+
+  const resetTurnstileIfCloudflare = useCallback(() => {
+    if (publicEnv.NEXT_PUBLIC_TURNSTILE_MODE === "cloudflare") {
+      setTurnstileToken(null);
+      setTurnstileResetKey((prev) => prev + 1);
+    }
+  }, []);
 
   const handleStartOtp = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -152,18 +163,17 @@ export function PhoneOtpSheet({ open, onClose }: PhoneOtpSheetProps) {
       if (error || !data) {
         const problem = parseProblemDetail(error);
         setErrorMsg(mapProblemMessage(problem?.code, problem?.detail));
+        resetTurnstileIfCloudflare();
         return;
       }
       setPhone(parsed.data);
       setRequestId(data.request_id);
       setResendSeconds(data.resend_after);
       setStep("otp");
-      if (publicEnv.NEXT_PUBLIC_TURNSTILE_MODE === "cloudflare") {
-        setTurnstileToken(null);
-        setTurnstileResetKey((prev) => prev + 1);
-      }
+      resetTurnstileIfCloudflare();
     } catch {
       setErrorMsg(t("errRateLimit"));
+      resetTurnstileIfCloudflare();
     } finally {
       setSubmitting(false);
     }

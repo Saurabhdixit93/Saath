@@ -70,6 +70,29 @@ def hash_token(raw_token: str) -> bytes:
     return hashlib.sha256(raw_token.encode("utf-8")).digest()
 
 
+def hmac_sha256_bytes(secret: str, value: str | bytes) -> bytes:
+    payload = value.encode("utf-8") if isinstance(value, str) else value
+    return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
+
+
+def hmac_sha256_hex(secret: str, value: str | bytes) -> str:
+    return hmac_sha256_bytes(secret, value).hex()
+
+
+def verify_hmac_sha256_hex(secret: str, payload: bytes, signature: str) -> bool:
+    expected = hmac_sha256_hex(secret, payload)
+    return hmac.compare_digest(expected, signature.strip().lower())
+
+
+def hash_pnr(pnr: str, pepper: str) -> bytes:
+    normalized = pnr.strip().upper()
+    return hmac_sha256_bytes(pepper, normalized)
+
+
+def hash_invite_token(token: str, secret: str) -> bytes:
+    return hmac_sha256_bytes(secret, token.strip())
+
+
 def hash_otp(code: str) -> str:
     return _PASSWORD_HASHER.hash(code)
 
