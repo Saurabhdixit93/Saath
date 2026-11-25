@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { SeatLegendBadge } from "@saath/ui";
+import type { CoachMapSeatDTO } from "@saath/contracts";
 import { resolveAircraftLayout, seatTypeForColumn } from "@/lib/aircraftLayouts";
 
 export interface CabinMapProps {
@@ -11,6 +12,8 @@ export interface CabinMapProps {
   mySeats?: string[];
   selectedSeats?: string[];
   onToggleSeat?: (seatNo: string) => void;
+  coachMapSeats?: CoachMapSeatDTO[];
+  onSelectMatchSeat?: (seat: CoachMapSeatDTO) => void;
   womenOnly?: boolean;
   maxRowsPreview?: number;
 }
@@ -21,10 +24,13 @@ export function CabinMap({
   mySeats = [],
   selectedSeats = [],
   onToggleSeat,
+  coachMapSeats,
+  onSelectMatchSeat,
   womenOnly = false,
   maxRowsPreview,
 }: CabinMapProps) {
   const t = useTranslations("journeys");
+  const uid = useId().replace(/:/g, "");
   const spec = useMemo(
     () => resolveAircraftLayout(layoutRef, carrierCode),
     [layoutRef, carrierCode]
@@ -38,6 +44,13 @@ export function CabinMap({
     () => new Set(selectedSeats.map((s) => s.trim().toUpperCase())),
     [selectedSeats]
   );
+  const mapSeatByNo = useMemo(() => {
+    const out = new Map<string, CoachMapSeatDTO>();
+    for (const s of coachMapSeats ?? []) {
+      out.set(s.seat_no.trim().toUpperCase(), s);
+    }
+    return out;
+  }, [coachMapSeats]);
 
   const displayRows = maxRowsPreview ? Math.min(spec.rows, maxRowsPreview) : spec.rows;
   const cellW = 34;
@@ -57,10 +70,32 @@ export function CabinMap({
     return padX + idx * (cellW + gap) + aislesBefore * aisleGap;
   });
 
+  const orderedSeatNos = useMemo(() => {
+    const list: string[] = [];
+    for (let r = 1; r <= displayRows; r += 1) {
+      for (const letter of spec.columns) {
+        const seatNo = `${r}${letter}`;
+        if (!spec.excludedSeats.includes(seatNo)) {
+          list.push(seatNo);
+        }
+      }
+    }
+    return list;
+  }, [displayRows, spec.columns, spec.excludedSeats]);
+
+  const [activeSeatNo, setActiveSeatNo] = useState<string>(orderedSeatNos[0] ?? "1A");
+  const optionRefs = useRef<Record<string, SVGGElement | null>>({});
+
+  const moveFocus = (nextNo: string) => {
+    setActiveSeatNo(nextNo);
+    optionRefs.current[nextNo]?.focus();
+  };
+
   const maxColX = colXPositions[colXPositions.length - 1] ?? 180;
   const viewBoxW = maxColX + cellW + 20;
   const viewBoxH = padY + displayRows * (cellH + gap) + 16;
   const title = `${t("mapTitleFlight")} · ${spec.aircraftName}`;
+  const isInteractive = Boolean(onToggleSeat || onSelectMatchSeat || coachMapSeats);
 
   return (
     <div className="space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)]">
@@ -78,12 +113,11 @@ export function CabinMap({
         </div>
         <div className="flex flex-wrap gap-2">
           <SeatLegendBadge kind="mine" label={t("legendMine")} />
-          {onToggleSeat ? (
+          {coachMapSeats ? <SeatLegendBadge kind="match" label={t("legendMatch")} /> : null}
+          {onToggleSeat || coachMapSeats ? (
             <SeatLegendBadge kind="request" label={t("legendRequest")} />
           ) : null}
-          {womenOnly ? (
-            <SeatLegendBadge kind="women" label={t("legendWomen")} />
-          ) : null}
+          {womenOnly ? <SeatLegendBadge kind="women" label={t("legendWomen")} /> : null}
           <SeatLegendBadge kind="empty" label={t("legendEmpty")} />
         </div>
       </div>
@@ -92,10 +126,22 @@ export function CabinMap({
         <svg
           viewBox={`0 0 ${viewBoxW} ${viewBoxH}`}
           className="mx-auto w-full max-w-md"
-          role="img"
+          role={isInteractive ? "listbox" : "img"}
           aria-label={title}
         >
           <title>{title}</title>
+          <defs>
+            <pattern
+              id={`cabin-match-${uid}`}
+              width="6"
+              height="6"
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
+              <rect width="6" height="6" fill="var(--seat-match)" />
+              <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,255,255,0.22)" strokeWidth="2" />
+            </pattern>
+          </defs>
           {spec.columns.map((colLetter, colIdx) => (
             <text
               key={colLetter}
@@ -135,7 +181,8 @@ export function CabinMap({
                   }
                   const x = colXPositions[colIdx] ?? 0;
                   const seatType = seatTypeForColumn(spec, colIdx);
-                  const isMine = mineSet.has(seatNo);
+                  const dto = mapSeatByNo.get(seatNo);
+                  const isMine = dto ? dto.state === "mine" : mineSet.has(seatNo);
                   const isSelected = selectedSet.has(seatNo);
 
                   let fill = "var(--seat-empty)";
@@ -148,28 +195,80 @@ export function CabinMap({
                     textFill = "var(--primary-ink)";
                     stroke = "var(--seat-mine)";
                     marker = "●";
-                  } else if (isSelected) {
+                  } else if (dto?.state === "party") {
+                    fill = "var(--surface-2)";
+                    textFill = "var(--text)";
+                    stroke = "var(--seat-mine)";
+                    marker = "◉";
+                  } else if (dto?.state === "match") {
+                    fill = womenOnly ? "var(--women-mode)" : `url(#cabin-match-${uid})`;
+                    textFill = womenOnly ? "var(--women-mode-ink)" : "var(--secondary-ink)";
+                    stroke = womenOnly ? "var(--women-mode)" : "var(--seat-match)";
+                    marker = womenOnly ? "◆" : "★";
+                  } else if (dto?.state === "incoming" || isSelected) {
                     fill = womenOnly ? "var(--women-mode)" : "var(--seat-request)";
                     textFill = womenOnly ? "var(--women-mode-ink)" : "var(--warning-ink)";
                     stroke = fill;
                     marker = womenOnly ? "◆" : "⇄";
+                  } else if (dto?.state === "occupied") {
+                    fill = "var(--surface-2)";
+                    textFill = "var(--text-muted)";
+                    marker = "•";
                   }
+
+                  const slotIdx = orderedSeatNos.indexOf(seatNo);
+                  const isFocused = activeSeatNo === seatNo;
+                  const colsLen = spec.columns.length;
+
+                  const handleActivate = () => {
+                    if (onToggleSeat) onToggleSeat(seatNo);
+                    if (dto && onSelectMatchSeat) onSelectMatchSeat(dto);
+                  };
 
                   return (
                     <g
                       key={seatNo}
-                      role={onToggleSeat ? "button" : undefined}
-                      tabIndex={onToggleSeat ? 0 : undefined}
-                      aria-label={`Seat ${seatNo} ${seatType}${isExit ? " exit row" : ""}`}
-                      aria-pressed={onToggleSeat ? isSelected : undefined}
-                      onClick={() => onToggleSeat?.(seatNo)}
-                      onKeyDown={(ev) => {
-                        if (onToggleSeat && (ev.key === "Enter" || ev.key === " ")) {
-                          ev.preventDefault();
-                          onToggleSeat(seatNo);
-                        }
+                      ref={(el) => {
+                        optionRefs.current[seatNo] = el;
                       }}
-                      className={onToggleSeat ? "cursor-pointer focus:outline-none" : undefined}
+                      role={isInteractive ? "option" : undefined}
+                      tabIndex={isInteractive ? (isFocused ? 0 : -1) : undefined}
+                      aria-label={`Seat ${seatNo} ${seatType}${isExit ? " exit row" : ""}`}
+                      aria-selected={isInteractive ? isFocused || isSelected : undefined}
+                      onClick={
+                        isInteractive
+                          ? () => {
+                              setActiveSeatNo(seatNo);
+                              handleActivate();
+                            }
+                          : undefined
+                      }
+                      onKeyDown={
+                        isInteractive
+                          ? (ev) => {
+                              let targetIdx: number | null = null;
+                              if (ev.key === "ArrowRight")
+                                targetIdx = Math.min(orderedSeatNos.length - 1, slotIdx + 1);
+                              else if (ev.key === "ArrowLeft") targetIdx = Math.max(0, slotIdx - 1);
+                              else if (ev.key === "ArrowDown")
+                                targetIdx = Math.min(orderedSeatNos.length - 1, slotIdx + colsLen);
+                              else if (ev.key === "ArrowUp")
+                                targetIdx = Math.max(0, slotIdx - colsLen);
+                              else if (ev.key === "Home") targetIdx = 0;
+                              else if (ev.key === "End") targetIdx = orderedSeatNos.length - 1;
+                              else if (ev.key === "Enter" || ev.key === " ") {
+                                ev.preventDefault();
+                                handleActivate();
+                                return;
+                              }
+                              if (targetIdx !== null && orderedSeatNos[targetIdx]) {
+                                ev.preventDefault();
+                                moveFocus(orderedSeatNos[targetIdx]!);
+                              }
+                            }
+                          : undefined
+                      }
+                      className={isInteractive ? "cursor-pointer focus:outline-none" : undefined}
                     >
                       <rect
                         x={x}
@@ -178,8 +277,8 @@ export function CabinMap({
                         height={cellH}
                         rx={5}
                         fill={fill}
-                        stroke={stroke}
-                        strokeWidth={isMine || isSelected || isExit ? 1.5 : 1}
+                        stroke={isInteractive && isFocused ? "var(--focus-ring)" : stroke}
+                        strokeWidth={isMine || isSelected || isExit || isFocused ? 1.8 : 1}
                       />
                       <text
                         x={x + cellW / 2}

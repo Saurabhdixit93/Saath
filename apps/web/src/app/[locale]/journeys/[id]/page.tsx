@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, EmptyState, useToast } from "@saath/ui";
 import { parseProblemDetail, type PutGoalRequest } from "@saath/contracts";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { ChartStatusPill } from "@/components/ChartStatusPill";
 import { PartyAvatarRow } from "@/components/PartyAvatarRow";
@@ -223,6 +223,12 @@ export default function JourneyHubPage({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/journeys/${journeyId}/matches`}
+              className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] bg-[var(--primary-btn-bg)] px-4 text-sm font-bold text-[var(--primary-ink)] hover:bg-[var(--primary-hover-bg)]"
+            >
+              {t("viewMatchesCta")}
+            </Link>
             <Button
               variant="secondary"
               size="md"

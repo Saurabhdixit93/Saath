@@ -61,6 +61,37 @@ export interface paths {
   "/v1/parties/{party_id}/organiser-summary": {
     get: operations["get_v1_party_organiser_summary_v1_parties__party_id__organiser_summary_get"];
   };
+  "/v1/parties/{party_id}/matches": {
+    get: operations["get_v1_party_matches_v1_parties__party_id__matches_get"];
+  };
+  "/v1/journeys/{journey_id}/coach-map": {
+    get: operations["get_v1_journey_coach_map_v1_journeys__journey_id__coach_map_get"];
+  };
+  "/v1/swaps": {
+    post: operations["post_v1_swaps_v1_swaps_post"];
+    get: operations["get_v1_swaps_v1_swaps_get"];
+  };
+  "/v1/swaps/{swap_id}": {
+    get: operations["get_v1_swap_detail_v1_swaps__swap_id__get"];
+  };
+  "/v1/swaps/{swap_id}/accept": {
+    post: operations["post_v1_swap_accept_v1_swaps__swap_id__accept_post"];
+  };
+  "/v1/swaps/{swap_id}/decline": {
+    post: operations["post_v1_swap_decline_v1_swaps__swap_id__decline_post"];
+  };
+  "/v1/swaps/{swap_id}/cancel": {
+    post: operations["post_v1_swap_cancel_v1_swaps__swap_id__cancel_post"];
+  };
+  "/v1/swaps/{swap_id}/confirm-completion": {
+    post: operations["post_v1_swap_confirm_completion_v1_swaps__swap_id__confirm_completion_post"];
+  };
+  "/v1/swaps/{swap_id}/card": {
+    get: operations["get_v1_swap_card_v1_swaps__swap_id__card_get"];
+  };
+  "/v1/public/swap-cards/{code}": {
+    get: operations["get_v1_public_swap_card_v1_public_swap_cards__code__get"];
+  };
   "/v1/pricing/plans": {
     get: operations["get_v1_pricing_plans_v1_pricing_plans_get"];
   };
@@ -270,11 +301,15 @@ export interface components {
       coach_active_count: number;
       journey_active_count: number;
     };
+    VerifyPartyRef: {
+      id: string;
+    };
     VerifyJourneyResponse: {
       journey: components["schemas"]["JourneySummaryDTO"];
       booking: components["schemas"]["BookingSummaryDTO"];
       seat_holders: components["schemas"]["SeatHolderOwnDTO"][];
       party_id: string;
+      party: components["schemas"]["VerifyPartyRef"];
       trust_tier: "verified_provider" | "verified_bcbp" | "verified_doc" | "declared";
       chart: components["schemas"]["ChartStatusDTO"];
     };
@@ -293,6 +328,7 @@ export interface components {
       journey: components["schemas"]["JourneySummaryDTO"];
       chart: components["schemas"]["ChartStatusDTO"];
       booking: components["schemas"]["BookingSummaryDTO"];
+      seat_holders?: components["schemas"]["SeatHolderOwnDTO"][];
       party: components["schemas"]["PartySummaryDTO"];
       goal?: components["schemas"]["GoalDTO"] | null;
       suggestions?: components["schemas"]["SmartSuggestionDTO"][];
@@ -470,6 +506,160 @@ export interface components {
       active_parties: number;
       supported_modes: string[];
       anti_seat_sale_guarantee?: boolean;
+    };
+    YouGetDTO: {
+      coach: string;
+      seat_type: string;
+      bay?: number | null;
+    };
+    MatchOtherDTO: {
+      alias: string;
+      trust: string;
+      reliability: string;
+      responds_in: string;
+    };
+    MatchSegmentDTO: {
+      overlap: "full" | "partial";
+    };
+    MatchKarmaPreviewDTO: {
+      you: number;
+    };
+    MatchCardDTO: {
+      card_id: string;
+      kind: "pair" | "cycle3" | "cycle4" | "plan";
+      score: number;
+      label: string;
+      you_give: string;
+      you_get: components["schemas"]["YouGetDTO"];
+      others: components["schemas"]["MatchOtherDTO"][];
+      reasons: string[];
+      reason_codes?: string[];
+      segment: components["schemas"]["MatchSegmentDTO"];
+      karma_preview: components["schemas"]["MatchKarmaPreviewDTO"];
+    };
+    MatchesResponse: {
+      match_version: number;
+      items: components["schemas"]["MatchCardDTO"][];
+    };
+    CoachMapSeatDTO: {
+      seat_no: string;
+      bay: number;
+      seat_type: string;
+      is_side?: boolean;
+      is_exit_row?: boolean;
+      is_premium?: boolean;
+      state: "mine" | "party" | "match" | "incoming" | "occupied" | "unknown";
+      card_id?: string | null;
+      alias?: string | null;
+    };
+    CoachMapResponse: {
+      journey_id: string;
+      mode: "train" | "flight" | "bus";
+      coach: string;
+      travel_class: string;
+      layout_ref: string;
+      match_version: number;
+      coaches: string[];
+      seats: components["schemas"]["CoachMapSeatDTO"][];
+    };
+    CreateSwapRequest: {
+      card_id: string;
+      note?: string | null;
+    };
+    AcceptSwapRequest: {
+      version: number;
+    };
+    DeclineSwapRequest: {
+      reason?: string | null;
+    };
+    ConfirmCompletionRequest: {
+      answer: "yes" | "no" | "did_not_board";
+    };
+    SwapParticipantViewDTO: {
+      alias: string;
+      decision: "pending" | "accepted" | "declined";
+      decided_at?: string | null;
+      post_confirm?: "yes" | "no" | "did_not_board" | null;
+      is_me: boolean;
+      gives_seat?: string | null;
+      gets_seat?: string | null;
+      gives_coach?: string | null;
+      gets_coach?: string | null;
+      gives_seat_type?: string | null;
+      gets_seat_type?: string | null;
+    };
+    SwapDetailDTO: {
+      id: string;
+      journey_instance_id: string;
+      kind: "pair" | "cycle3" | "cycle4" | "plan";
+      status:
+        | "draft"
+        | "pending"
+        | "confirmed"
+        | "declined"
+        | "expired"
+        | "invalidated"
+        | "cancelled"
+        | "awaiting_confirmation"
+        | "completed"
+        | "not_completed";
+      version: number;
+      expires_at: string;
+      created_at: string;
+      confirmed_at?: string | null;
+      note?: string | null;
+      decline_reason?: string | null;
+      service: string;
+      date: string;
+      mode: "train" | "flight" | "bus";
+      you_give: string;
+      you_get_summary: string;
+      participants: components["schemas"]["SwapParticipantViewDTO"][];
+      swap_card_code?: string | null;
+      can_accept?: boolean;
+      can_cancel?: boolean;
+      can_confirm_completion?: boolean;
+      my_post_confirm?: "yes" | "no" | "did_not_board" | null;
+    };
+    SwapListResponse: {
+      items: components["schemas"]["SwapDetailDTO"][];
+    };
+    SwapCardParticipantDTO: {
+      alias: string;
+      from_seat: string;
+      to_seat: string;
+      gives_seat: string;
+      gets_seat: string;
+      decided_at?: string | null;
+    };
+    SwapCardJsonResponse: {
+      proposal_id: string;
+      public_code: string;
+      signature: string;
+      public_key: string;
+      alg?: "Ed25519";
+      service: string;
+      date: string;
+      mode: "train" | "flight" | "bus";
+      revoked: boolean;
+      revoked_reason?: string | null;
+      confirmed_at: string;
+      qr_url: string;
+      tte_note?: string;
+      participants: components["schemas"]["SwapCardParticipantDTO"][];
+    };
+    PublicSwapCardVerifyResponse: {
+      public_code: string;
+      valid: boolean;
+      revoked: boolean;
+      revoked_reason?: string | null;
+      service: string;
+      date: string;
+      mode: "train" | "flight" | "bus";
+      seats: string;
+      confirmed_at: string;
+      signature_verified: boolean;
+      tte_note?: string;
     };
   };
 }
@@ -722,6 +912,130 @@ export interface operations {
       200: { content: { "application/json": components["schemas"]["B2BStatsResponse"] } };
       401: ProblemResp;
       403: ProblemResp;
+    };
+  };
+  get_v1_party_matches_v1_parties__party_id__matches_get: {
+    parameters: {
+      path: { party_id: string };
+      query?: { kind?: "pair" | "cycle" | "plan" | null };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["MatchesResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+    };
+  };
+  get_v1_journey_coach_map_v1_journeys__journey_id__coach_map_get: {
+    parameters: {
+      path: { journey_id: string };
+      query?: { coach?: string | null };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["CoachMapResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  post_v1_swaps_v1_swaps_post: {
+    requestBody: { content: { "application/json": components["schemas"]["CreateSwapRequest"] } };
+    responses: {
+      201: { content: { "application/json": components["schemas"]["SwapDetailDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+      422: ProblemResp;
+      429: ProblemResp;
+    };
+  };
+  get_v1_swaps_v1_swaps_get: {
+    parameters: {
+      query?: { state?: "active" | "past" | "all" };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["SwapListResponse"] } };
+      401: ProblemResp;
+    };
+  };
+  get_v1_swap_detail_v1_swaps__swap_id__get: {
+    parameters: { path: { swap_id: string } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["SwapDetailDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+    };
+  };
+  post_v1_swap_accept_v1_swaps__swap_id__accept_post: {
+    parameters: { path: { swap_id: string } };
+    requestBody: { content: { "application/json": components["schemas"]["AcceptSwapRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["SwapDetailDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+    };
+  };
+  post_v1_swap_decline_v1_swaps__swap_id__decline_post: {
+    parameters: { path: { swap_id: string } };
+    requestBody: { content: { "application/json": components["schemas"]["DeclineSwapRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["SwapDetailDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+    };
+  };
+  post_v1_swap_cancel_v1_swaps__swap_id__cancel_post: {
+    parameters: { path: { swap_id: string } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["SwapDetailDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+    };
+  };
+  post_v1_swap_confirm_completion_v1_swaps__swap_id__confirm_completion_post: {
+    parameters: { path: { swap_id: string } };
+    requestBody: {
+      content: { "application/json": components["schemas"]["ConfirmCompletionRequest"] };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["SwapDetailDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  get_v1_swap_card_v1_swaps__swap_id__card_get: {
+    parameters: {
+      path: { swap_id: string };
+      query?: { format?: "json" | "svg" | "png" };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["SwapCardJsonResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+    };
+  };
+  get_v1_public_swap_card_v1_public_swap_cards__code__get: {
+    parameters: { path: { code: string } };
+    responses: {
+      200: {
+        content: { "application/json": components["schemas"]["PublicSwapCardVerifyResponse"] };
+      };
+      404: ProblemResp;
+      422: ProblemResp;
     };
   };
 }

@@ -195,6 +195,12 @@ async def join_party_via_invite(
 
     await db.commit()
     await db.refresh(ji)
+    if incoming_ids:
+        from saath_api.matching.service import schedule_or_run_match_recompute
+
+        await schedule_or_run_match_recompute(
+            db=db, redis=redis, journey_instance_id=ji.id
+        )
     return await _build_journey_hub(
         db=db,
         yaml_configs=yaml_configs,
@@ -282,6 +288,7 @@ async def remove_party_member(
     *,
     yaml_configs: YamlConfigBundle,
     db: AsyncSession,
+    redis: Redis | None = None,
     actor: Actor,
     party_id: UUID,
     seat_holder_id: UUID,
@@ -331,6 +338,11 @@ async def remove_party_member(
     ji.match_version += 1
     await db.commit()
     await db.refresh(ji)
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
+    await schedule_or_run_match_recompute(
+        db=db, redis=redis, journey_instance_id=ji.id
+    )
     return await _build_journey_hub(
         db=db, yaml_configs=yaml_configs, actor=actor, ji=ji, booking=booking, party=party
     )
@@ -339,6 +351,7 @@ async def remove_party_member(
 async def put_party_goal(
     *,
     db: AsyncSession,
+    redis: Redis | None = None,
     actor: Actor,
     party_id: UUID,
     req: PutGoalRequest,
@@ -442,6 +455,12 @@ async def put_party_goal(
     await db.refresh(goal)
     await db.refresh(ji)
 
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
+    await schedule_or_run_match_recompute(
+        db=db, redis=redis, journey_instance_id=ji.id
+    )
+
     dto = _goal_dto(goal)
     assert dto is not None
     return GoalMutationResponse(goal=dto, match_version=ji.match_version)
@@ -450,6 +469,7 @@ async def put_party_goal(
 async def delete_party_goal(
     *,
     db: AsyncSession,
+    redis: Redis | None = None,
     actor: Actor,
     party_id: UUID,
 ) -> DeleteGoalResponse:
@@ -464,6 +484,12 @@ async def delete_party_goal(
     ji.match_version += 1
     await db.commit()
     await db.refresh(ji)
+
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
+    await schedule_or_run_match_recompute(
+        db=db, redis=redis, journey_instance_id=ji.id
+    )
     return DeleteGoalResponse(ok=True, match_version=ji.match_version)
 
 

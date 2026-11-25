@@ -56,14 +56,14 @@ _FIVE_DIGIT_TRAIN_RE = re.compile(r"\b([12][0-9]{4})\b")
 _CLASS_RE = re.compile(r"\b(1A|2A|3A|3E|SL|CC|EC|2S)\b", re.IGNORECASE)
 _ROUTE_RE = re.compile(r"\b([A-Z]{2,5})\s*(?:->|TO|-)\s*([A-Z]{2,5})\b")
 _DATE_RE = re.compile(
-    r"\b(\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{2,4})\b"
+    r"\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/](?:[A-Za-z]{3}|\d{1,2})[-/]\d{2,4})\b"
 )
 _PAX_BERTH_SLASH_RE = re.compile(
     r"(?:P\d+\s*[-:]\s*)?(CNF|RAC(?:\s*\d+)?|WL(?:\s*\d+)?)\s*/\s*([A-Z]{1,3}\d{1,2})\s*/\s*(\d{1,3})\s*(?:/\s*(LB|MB|UB|SL|SM|SU|WS|MS|AS))?",
     re.IGNORECASE,
 )
 _PAX_COACH_BERTH_RE = re.compile(
-    r"\b([A-Z]{1,2}\d{1,2})\s*[-/]\s*(\d{1,3})(?:\s*\(?(LB|MB|UB|SL|SM|SU|WS|MS|AS)\)?)?",
+    r"\b([A-Z]{1,2}\d{1,2})\s*(?:[-/]|\s)\s*(\d{1,3})(?:\s*\(?(LB|MB|UB|SL|SM|SU|WS|MS|AS)\)?)?",
     re.IGNORECASE,
 )
 _PAX_STATUS_ONLY_RE = re.compile(r"\b(RAC\s*\d+|WL\s*\d+|RLWL\s*\d+|PQWL\s*\d+)\b", re.I)
@@ -103,7 +103,28 @@ class ParsedSmsTicket:
     departure_at: datetime
     arrival_at: datetime
     passengers: tuple[ParsedSmsPassenger, ...]
+    from_seq: int = 1
+    to_seq: int = 2
     used_llm_fallback: bool = False
+
+
+_STATION_CORRIDORS: tuple[tuple[str, ...], ...] = (
+    ("NDLS", "MTJ", "AGC", "KOTA", "RTM", "BRC", "ST", "BVI", "MMCT", "BCT"),
+    ("NDLS", "GZB", "CNB", "PRYJ", "DDU", "BSB", "GAYA", "DHN", "HWH", "SDAH"),
+    ("SBC", "DMM", "GTL", "SC", "KZJ", "BPQ", "NGP", "BPL", "JHS", "AGC", "NDLS"),
+)
+
+
+def resolve_route_sequences(from_code: str, to_code: str) -> tuple[int, int]:
+    fc = from_code.strip().upper()
+    tc = to_code.strip().upper()
+    for corridor in _STATION_CORRIDORS:
+        if fc in corridor and tc in corridor:
+            i_from = corridor.index(fc) + 1
+            i_to = corridor.index(tc) + 1
+            if i_from < i_to:
+                return i_from, i_to
+    return 1, 2
 
 
 class SmsParseError(ValueError):
@@ -138,7 +159,7 @@ def _resolve_sms_seat(tclass: CoachClass, seat_raw: str) -> tuple[int, SeatType]
 
 def _parse_date_token(token: str) -> date:
     cleaned = token.strip().replace("/", "-")
-    for fmt in ("%d-%m-%y", "%d-%m-%Y", "%d-%b-%y", "%d-%b-%Y"):
+    for fmt in ("%Y-%m-%d", "%d-%m-%y", "%d-%m-%Y", "%d-%b-%y", "%d-%b-%Y"):
         try:
             return datetime.strptime(cleaned, fmt).date()
         except ValueError:
@@ -253,6 +274,8 @@ def parse_irctc_sms_text(
     )
     arr_ist = dep_ist + timedelta(hours=15, minutes=40)
 
+    from_seq, to_seq = resolve_route_sequences(from_code, to_code)
+
     return ParsedSmsTicket(
         pnr=pnr,
         train_no=train_no,
@@ -260,6 +283,8 @@ def parse_irctc_sms_text(
         travel_class=resolved_class,
         from_code=from_code,
         to_code=to_code,
+        from_seq=from_seq,
+        to_seq=to_seq,
         departure_at=dep_ist.astimezone(UTC),
         arrival_at=arr_ist.astimezone(UTC),
         passengers=tuple(passengers),
@@ -292,6 +317,8 @@ async def parse_irctc_sms_with_optional_llm(
             travel_class=parsed.travel_class,
             from_code=parsed.from_code,
             to_code=parsed.to_code,
+            from_seq=parsed.from_seq,
+            to_seq=parsed.to_seq,
             departure_at=parsed.departure_at,
             arrival_at=parsed.arrival_at,
             passengers=parsed.passengers,

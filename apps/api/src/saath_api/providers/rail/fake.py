@@ -168,6 +168,43 @@ class FakeRailProvider:
                     gender_band="M",
                 )
             ],
+            # M3 cycle & party test PNRs (all single-pax on 12951 Rajdhani 3A)
+            "4111111111": [
+                _make_pax(
+                    pax_seq=1,
+                    travel_class="3A",
+                    booking_status="CNF",
+                    current_status="CNF",
+                    coach="B3",
+                    seat_no=11,  # UB
+                    age_band="senior",
+                    gender_band="F",
+                )
+            ],
+            "4222222222": [
+                _make_pax(
+                    pax_seq=1,
+                    travel_class="3A",
+                    booking_status="CNF",
+                    current_status="CNF",
+                    coach="B3",
+                    seat_no=20,  # LB
+                    age_band="adult",
+                    gender_band="M",
+                )
+            ],
+            "4333333333": [
+                _make_pax(
+                    pax_seq=1,
+                    travel_class="3A",
+                    booking_status="CNF",
+                    current_status="CNF",
+                    coach="B3",
+                    seat_no=12,  # LB
+                    age_band="adult",
+                    gender_band="F",
+                )
+            ],
             # M1 HomeTabs test PNR
             "4512890341": [
                 _make_pax(

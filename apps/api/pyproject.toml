@@ -23,6 +23,9 @@ dependencies = [
     "argon2-cffi>=23.1.0,<26.0",
     "pyyaml>=6.0.2,<7.0",
     "structlog>=24.4.0,<26.0",
+    "ortools>=9.11.4210,<10.0",
+    "pillow>=11.0.0,<12.0",
+    "qrcode>=8.0,<9.0",
     "opentelemetry-api>=1.28.0,<2.0",
     "opentelemetry-sdk>=1.28.0,<2.0",
     "opentelemetry-instrumentation-fastapi>=0.49b0,<1.0",
@@ -40,6 +43,7 @@ dev = [
     "mypy>=1.13.0",
     "types-pyyaml>=6.0.12",
     "fakeredis>=2.26.0",
+    "hypothesis>=6.118.0",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -75,5 +79,7 @@ disallow_any_generics = true
 module = [
     "arq.*",
     "opentelemetry.instrumentation.*",
+    "ortools.*",
+    "qrcode.*",
 ]
 ignore_missing_imports = true

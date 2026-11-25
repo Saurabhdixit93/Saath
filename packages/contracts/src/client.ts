@@ -41,6 +41,26 @@ export type CheckoutResponse = components["schemas"]["CheckoutResponse"];
 export type SandboxCompleteResponse = components["schemas"]["SandboxCompleteResponse"];
 export type B2BKeyCreatedResponse = components["schemas"]["B2BKeyCreatedResponse"];
 export type B2BStatsResponse = components["schemas"]["B2BStatsResponse"];
+export type YouGetDTO = components["schemas"]["YouGetDTO"];
+export type MatchOtherDTO = components["schemas"]["MatchOtherDTO"];
+export type MatchCardDTO = components["schemas"]["MatchCardDTO"];
+export type MatchesResponse = components["schemas"]["MatchesResponse"];
+export type CoachMapSeatDTO = components["schemas"]["CoachMapSeatDTO"];
+export type CoachMapResponse = components["schemas"]["CoachMapResponse"];
+export type CreateSwapRequest = components["schemas"]["CreateSwapRequest"];
+export type AcceptSwapRequest = components["schemas"]["AcceptSwapRequest"];
+export type DeclineSwapRequest = components["schemas"]["DeclineSwapRequest"];
+export type ConfirmCompletionRequest = components["schemas"]["ConfirmCompletionRequest"];
+export type SwapParticipantViewDTO = components["schemas"]["SwapParticipantViewDTO"];
+export type SwapDetailDTO = components["schemas"]["SwapDetailDTO"];
+export type SwapProposalDTO = SwapDetailDTO;
+export type SwapParticipantDTO = SwapParticipantViewDTO;
+export type SwapListResponse = components["schemas"]["SwapListResponse"];
+export type SwapCardParticipantDTO = components["schemas"]["SwapCardParticipantDTO"];
+export type SwapCardJsonResponse = components["schemas"]["SwapCardJsonResponse"];
+export type SwapCardDTO = SwapCardJsonResponse;
+export type PublicSwapCardVerifyResponse = components["schemas"]["PublicSwapCardVerifyResponse"];
+export type PublicSwapCardResponse = PublicSwapCardVerifyResponse;
 
 export interface SaathClientOptions {
   baseUrl: string;

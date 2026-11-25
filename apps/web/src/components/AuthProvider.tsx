@@ -25,6 +25,24 @@ const ACCESS_STORAGE_KEY = "saath_access";
 const REFRESH_STORAGE_KEY = "saath_refresh";
 const KIND_STORAGE_KEY = "saath_auth_kind";
 
+function inferAuthKindFromJwt(token: string): "anon" | "user" {
+  const parts = token.split(".");
+  if (parts.length !== 3 || !parts[1]) {
+    return "user";
+  }
+  try {
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64.padEnd(Math.ceil(b64.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded)) as { kind?: unknown; sub?: unknown };
+    if (payload.kind === "anon" || (typeof payload.sub === "string" && payload.sub.startsWith("anon:"))) {
+      return "anon";
+    }
+  } catch {
+    // ignore decode failures
+  }
+  return "user";
+}
+
 export function isJwtExpired(token: string, leewaySeconds = 15): boolean {
   const parts = token.split(".");
   if (parts.length !== 3 || !parts[1]) {
@@ -207,9 +225,18 @@ function InnerAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      const storedAccess = window.sessionStorage.getItem(ACCESS_STORAGE_KEY);
-      const storedKind = window.sessionStorage.getItem(KIND_STORAGE_KEY) as AuthKind | null;
-      const storedRefresh = window.localStorage.getItem(REFRESH_STORAGE_KEY);
+      const sessionAccess = window.sessionStorage.getItem(ACCESS_STORAGE_KEY);
+      const localAccess =
+        window.localStorage.getItem("saath_access_token") ??
+        window.localStorage.getItem("access_token");
+      const storedAccess = sessionAccess || localAccess;
+      const storedKind =
+        (window.sessionStorage.getItem(KIND_STORAGE_KEY) as AuthKind | null) ??
+        (storedAccess ? inferAuthKindFromJwt(storedAccess) : null);
+      const storedRefresh =
+        window.localStorage.getItem(REFRESH_STORAGE_KEY) ??
+        window.localStorage.getItem("saath_refresh_token") ??
+        window.localStorage.getItem("refresh_token");
       refreshRef.current = storedRefresh;
 
       if (storedAccess && (storedKind === "anon" || storedKind === "user")) {

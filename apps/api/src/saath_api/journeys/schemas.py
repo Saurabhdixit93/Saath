@@ -132,11 +132,16 @@ class JourneyCountsDTO(BaseModel):
     journey_active_count: int
 
 
+class VerifyPartyRef(BaseModel):
+    id: UUID
+
+
 class VerifyJourneyResponse(BaseModel):
     journey: JourneySummaryDTO
     booking: BookingSummaryDTO
     seat_holders: list[SeatHolderOwnDTO]
     party_id: UUID
+    party: VerifyPartyRef
     trust_tier: Literal["verified_provider", "verified_bcbp", "verified_doc", "declared"]
     chart: ChartStatusDTO
 
@@ -158,6 +163,7 @@ class JourneyHubResponse(BaseModel):
     journey: JourneySummaryDTO
     chart: ChartStatusDTO
     booking: BookingSummaryDTO
+    seat_holders: list[SeatHolderOwnDTO] = Field(default_factory=list)
     party: PartySummaryDTO
     goal: GoalDTO | None = None
     suggestions: list[SmartSuggestionDTO] = Field(default_factory=list)

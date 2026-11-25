@@ -132,6 +132,7 @@ async def get_v1_journey_detail(
         status.HTTP_401_UNAUTHORIZED,
         status.HTTP_403_FORBIDDEN,
         status.HTTP_404_NOT_FOUND,
+        status.HTTP_429_TOO_MANY_REQUESTS,
     ),
 )
 async def post_v1_journey_reverify(
@@ -139,6 +140,7 @@ async def post_v1_journey_reverify(
     request: Request,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
     x_simulate_chart_change: str | None = Header(default=None),
 ) -> JourneyHubResponse:
     simulate_change = (x_simulate_chart_change or "").strip().lower() == "true"
@@ -146,6 +148,7 @@ async def post_v1_journey_reverify(
         settings=get_request_settings(request),
         yaml_configs=_get_yaml_configs(request),
         db=db,
+        redis=redis,
         actor=actor,
         journey_id=journey_id,
         simulate_chart_change=simulate_change,

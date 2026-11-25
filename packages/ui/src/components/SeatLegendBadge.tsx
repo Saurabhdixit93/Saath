@@ -1,6 +1,13 @@
 import { cn } from "../cn";
 
-export type SeatLegendKind = "mine" | "match" | "request" | "empty" | "women";
+export type SeatLegendKind =
+  | "mine"
+  | "party"
+  | "match"
+  | "request"
+  | "empty"
+  | "occupied"
+  | "women";
 
 export interface SeatLegendBadgeProps {
   kind: SeatLegendKind;
@@ -13,6 +20,11 @@ const KIND_STYLES: Record<SeatLegendKind, { dotColor: string; inkColor: string; 
     dotColor: "bg-[var(--seat-mine)] border-[var(--seat-mine)]",
     inkColor: "text-[var(--primary-ink)]",
     symbol: "●",
+  },
+  party: {
+    dotColor: "bg-[var(--surface-2)] border-[var(--seat-mine)]",
+    inkColor: "text-[var(--text)]",
+    symbol: "◉",
   },
   match: {
     dotColor: "bg-[var(--seat-match)] border-[var(--seat-match)]",
@@ -28,6 +40,11 @@ const KIND_STYLES: Record<SeatLegendKind, { dotColor: string; inkColor: string; 
     dotColor: "bg-[var(--seat-empty)] border-[var(--border)] border-dashed",
     inkColor: "text-[var(--text)]",
     symbol: "○",
+  },
+  occupied: {
+    dotColor: "bg-[var(--surface-2)] border-[var(--border)]",
+    inkColor: "text-[var(--text)]",
+    symbol: "•",
   },
   women: {
     dotColor: "bg-[var(--women-mode)] border-[var(--women-mode)]",

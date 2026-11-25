@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSaathClient } from "../src/client";
+import { createSaathClient, parseProblemDetail } from "../src/client";
 
 describe("createSaathClient 401 single-flight refresh & retry", () => {
   it("retries PATCH /v1/me with preserved JSON body after 401 token refresh", async () => {
@@ -127,5 +127,50 @@ describe("createSaathClient 401 single-flight refresh & retry", () => {
     expect(res2.error).toBeUndefined();
     expect(refreshTokens).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("supports M3 matches, coach-map, swaps, and 409 parseProblemDetail", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(req.url);
+      if (url.pathname === "/v1/parties/p1/matches") {
+        return new Response(JSON.stringify({ match_version: 2, items: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.pathname === "/v1/swaps/s1/accept") {
+        return new Response(
+          JSON.stringify({
+            type: "https://saath.app/problems/seat_locked",
+            title: "Seat Already Locked",
+            status: 409,
+            detail: "Your seat is already locked.",
+            code: "seat_locked",
+          }),
+          { status: 409, headers: { "content-type": "application/problem+json" } }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+
+    const client = createSaathClient({
+      baseUrl: "http://localhost:8000",
+      getAccessToken: () => "valid-jwt",
+      fetch: fetchMock as typeof globalThis.fetch,
+    });
+
+    const matchesRes = await client.GET("/v1/parties/{party_id}/matches", {
+      params: { path: { party_id: "p1" }, query: { kind: "pair" } },
+    });
+    expect(matchesRes.data?.match_version).toBe(2);
+
+    const acceptRes = await client.POST("/v1/swaps/{swap_id}/accept", {
+      params: { path: { swap_id: "s1" } },
+      body: { version: 0 },
+    });
+    const problem = parseProblemDetail(acceptRes.error);
+    expect(problem?.status).toBe(409);
+    expect(problem?.code).toBe("seat_locked");
   });
 });

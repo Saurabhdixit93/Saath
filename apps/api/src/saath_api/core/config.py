@@ -28,6 +28,7 @@ def _generate_dev_ed25519_pair() -> tuple[str, str]:
 
 
 _DEV_ED25519_PAIR: tuple[str, str] | None = None
+_DEV_SWAP_CARD_ED25519_PAIR: tuple[str, str] | None = None
 
 
 def _get_dev_ed25519_pair() -> tuple[str, str]:
@@ -35,6 +36,13 @@ def _get_dev_ed25519_pair() -> tuple[str, str]:
     if _DEV_ED25519_PAIR is None:
         _DEV_ED25519_PAIR = _generate_dev_ed25519_pair()
     return _DEV_ED25519_PAIR
+
+
+def _get_dev_swap_card_ed25519_pair() -> tuple[str, str]:
+    global _DEV_SWAP_CARD_ED25519_PAIR
+    if _DEV_SWAP_CARD_ED25519_PAIR is None:
+        _DEV_SWAP_CARD_ED25519_PAIR = _generate_dev_ed25519_pair()
+    return _DEV_SWAP_CARD_ED25519_PAIR
 
 
 def _default_config_dir() -> Path:
@@ -195,6 +203,10 @@ class Settings(BaseSettings):
     jwt_anon_ttl_seconds: int = 7200
     refresh_token_ttl_days: int = 30
 
+    swap_card_signing_private_key: str = ""
+    swap_card_signing_public_key: str = ""
+    match_debounce_seconds: float = 1.0
+
     pnr_pepper: str = _DEV_PNR_PEPPER
     phone_aes_key: str = _DEV_PHONE_AES_KEY
     phone_blind_index_key: str = _DEV_PHONE_BLIND_INDEX_KEY
@@ -243,6 +255,14 @@ class Settings(BaseSettings):
             self.jwt_private_key = self.jwt_private_key.replace("\\n", "\n")
         if self.jwt_public_key:
             self.jwt_public_key = self.jwt_public_key.replace("\\n", "\n")
+        if self.swap_card_signing_private_key:
+            self.swap_card_signing_private_key = self.swap_card_signing_private_key.replace(
+                "\\n", "\n"
+            )
+        if self.swap_card_signing_public_key:
+            self.swap_card_signing_public_key = self.swap_card_signing_public_key.replace(
+                "\\n", "\n"
+            )
 
         _validate_b64_32bytes(self.phone_aes_key, "PHONE_AES_KEY")
         _validate_b64_32bytes(self.phone_blind_index_key, "PHONE_BLIND_INDEX_KEY")
@@ -251,6 +271,11 @@ class Settings(BaseSettings):
             if not self.jwt_private_key or not self.jwt_public_key:
                 raise ValueError(
                     "JWT_PRIVATE_KEY and JWT_PUBLIC_KEY are mandatory when ENV=production"
+                )
+            if not self.swap_card_signing_private_key or not self.swap_card_signing_public_key:
+                raise ValueError(
+                    "SWAP_CARD_SIGNING_PRIVATE_KEY and SWAP_CARD_SIGNING_PUBLIC_KEY "
+                    "are mandatory when ENV=production"
                 )
             if self.phone_aes_key == _DEV_PHONE_AES_KEY:
                 raise ValueError("PHONE_AES_KEY dev default is forbidden when ENV=production")
@@ -290,6 +315,10 @@ class Settings(BaseSettings):
                 priv, pub = _get_dev_ed25519_pair()
                 self.jwt_private_key = priv
                 self.jwt_public_key = pub
+            if not self.swap_card_signing_private_key or not self.swap_card_signing_public_key:
+                card_priv, card_pub = _get_dev_swap_card_ed25519_pair()
+                self.swap_card_signing_private_key = card_priv
+                self.swap_card_signing_public_key = card_pub
 
         return self
 

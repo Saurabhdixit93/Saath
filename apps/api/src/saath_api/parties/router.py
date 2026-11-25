@@ -121,10 +121,12 @@ async def delete_v1_party_member(
     request: Request,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> JourneyHubResponse:
     return await remove_party_member(
         yaml_configs=_get_yaml_configs(request),
         db=db,
+        redis=redis,
         actor=actor,
         party_id=party_id,
         seat_holder_id=seat_holder_id,
@@ -146,8 +148,11 @@ async def put_v1_party_goal(
     body: PutGoalRequest,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> GoalMutationResponse:
-    return await put_party_goal(db=db, actor=actor, party_id=party_id, req=body)
+    return await put_party_goal(
+        db=db, redis=redis, actor=actor, party_id=party_id, req=body
+    )
 
 
 @router.delete(
@@ -163,8 +168,9 @@ async def delete_v1_party_goal(
     party_id: UUID,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> DeleteGoalResponse:
-    return await delete_party_goal(db=db, actor=actor, party_id=party_id)
+    return await delete_party_goal(db=db, redis=redis, actor=actor, party_id=party_id)
 
 
 @router.get(

@@ -43,6 +43,7 @@ from saath_api.journeys.schemas import (
     StandingOfferDTO,
     VerifyJourneyRequest,
     VerifyJourneyResponse,
+    VerifyPartyRef,
 )
 from saath_api.journeys.sms_parser import (
     SmsParseError,
@@ -437,8 +438,8 @@ def _booking_dto_from_sms(sms_text: str) -> BookingDTO:
         travel_class=parsed.travel_class,
         from_code=parsed.from_code,
         to_code=parsed.to_code,
-        from_seq=1,
-        to_seq=2,
+        from_seq=parsed.from_seq,
+        to_seq=parsed.to_seq,
         departure_at=parsed.departure_at,
         arrival_at=parsed.arrival_at,
         chart_state="pending",
@@ -981,11 +982,18 @@ async def verify_journey(
     await db.refresh(ji)
     await db.refresh(booking)
 
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
+    await schedule_or_run_match_recompute(
+        db=db, redis=redis, journey_instance_id=ji.id
+    )
+
     return VerifyJourneyResponse(
         journey=_journey_summary_dto(ji),
         booking=_booking_summary_dto(booking),
         seat_holders=[_seat_holder_dto(sh) for sh in seat_holders],
         party_id=party.id,
+        party=VerifyPartyRef(id=party.id),
         trust_tier=booking.trust_tier,  # type: ignore[arg-type]
         chart=_chart_dto(ji),
     )
@@ -1037,10 +1045,18 @@ async def _build_journey_hub(
         )
         coach_active_count = int(coach_res.scalar_one() or 0)
 
+    own_res = await db.execute(
+        select(SeatHolder)
+        .where(SeatHolder.booking_id == booking.id)
+        .order_by(SeatHolder.pax_seq, SeatHolder.id)
+    )
+    own_holders = [_seat_holder_dto(sh) for sh in own_res.scalars().all()]
+
     return JourneyHubResponse(
         journey=_journey_summary_dto(ji),
         chart=_chart_dto(ji),
         booking=_booking_summary_dto(booking),
+        seat_holders=own_holders or members,
         party=PartySummaryDTO(
             id=party.id,
             leader_is_me=_is_actor_party_leader(actor, party),
@@ -1205,6 +1221,7 @@ async def reverify_journey(
     settings: Settings,
     yaml_configs: YamlConfigBundle,
     db: AsyncSession,
+    redis: Redis | None = None,
     actor: Actor,
     journey_id: UUID,
     simulate_chart_change: bool = False,
@@ -1219,9 +1236,27 @@ async def reverify_journey(
         owner_anon_id=booking.owner_anon_id,
     )
 
+    if redis is not None:
+        actor_key = str(actor.user_id) if actor.user_id else (actor.anon_id or "anon")
+        limiter = SlidingWindowRateLimiter(redis)
+        allowed, retry_after = await limiter.allow(
+            f"rl:reverify:{actor_key}:{journey_id}",
+            limit=10,
+            window_seconds=60,
+        )
+        if not allowed:
+            raise ProblemDetailError(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                code="rate_limited",
+                title="Too Many Reverify Requests",
+                detail="Please wait a moment before refreshing this journey again.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
     now = datetime.now(UTC)
     booking.last_verified_at = now
     changed = False
+    berth_changed_ids: list[UUID] = []
 
     if simulate_chart_change and not settings.is_production:
         sh_res = await db.execute(
@@ -1252,6 +1287,7 @@ async def reverify_journey(
             ji.chart_state = "final"
             ji.match_version += 1
             changed = True
+            berth_changed_ids.append(target.id)
             db.add(
                 NotificationsOutbox(
                     user_id=actor.user_id,
@@ -1269,6 +1305,14 @@ async def reverify_journey(
                     idempotency_key=f"berth_changed:{booking.id}:{ji.match_version}",
                 )
             )
+            from saath_api.swaps.service import invalidate_swaps_for_berth_change
+
+            await invalidate_swaps_for_berth_change(
+                db=db,
+                journey_instance_id=ji.id,
+                affected_seat_holder_ids=berth_changed_ids,
+                reason="chart_berth_changed",
+            )
     elif ji.mode == "train" and ji.chart_due_at is not None and now >= ji.chart_due_at:
         if ji.chart_state == "pending":
             ji.chart_state = "final"
@@ -1279,6 +1323,13 @@ async def reverify_journey(
         await db.commit()
         await db.refresh(ji)
         await db.refresh(booking)
+
+    if changed:
+        from saath_api.matching.service import schedule_or_run_match_recompute
+
+        await schedule_or_run_match_recompute(
+            db=db, redis=redis, journey_instance_id=ji.id
+        )
 
     return await _build_journey_hub(
         db=db, yaml_configs=yaml_configs, actor=actor, ji=ji, booking=booking, party=party

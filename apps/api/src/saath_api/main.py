@@ -17,8 +17,10 @@ from saath_api.core.logging import configure_logging, request_id_ctx
 from saath_api.core.redis import create_redis_client
 from saath_api.core.telemetry import configure_telemetry
 from saath_api.journeys.router import router as journeys_router
+from saath_api.matching.router import router as matching_router
 from saath_api.parties.router import router as parties_router
 from saath_api.pricing.router import build_pricing_router
+from saath_api.swaps.router import router as swaps_router
 from saath_api.providers.flight.schedule import (
     FlightScheduleProvider,
     build_flight_schedule_provider,
@@ -114,6 +116,8 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(journeys_router)
     app.include_router(parties_router)
+    app.include_router(matching_router)
+    app.include_router(swaps_router)
     app.include_router(build_pricing_router(resolved_settings))
 
     def custom_openapi() -> dict[str, object]:

@@ -56,6 +56,12 @@ export function AppHeader() {
               {tCommon("navJourneys")}
             </Link>
             <Link
+              href="/inbox"
+              className="inline-flex min-h-[44px] items-center rounded-[var(--radius-sm)] px-2.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
+            >
+              {tCommon("navInbox")}
+            </Link>
+            <Link
               href="/pricing"
               className="inline-flex min-h-[44px] items-center rounded-[var(--radius-sm)] px-2.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
             >

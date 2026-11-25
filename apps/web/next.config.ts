@@ -11,6 +11,7 @@ const withSerwist = withSerwistInit({
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@saath/ui", "@saath/contracts"],
+  serverExternalPackages: ["@resvg/resvg-js"],
 };
 
 export default withNextIntl(withSerwist(nextConfig));
