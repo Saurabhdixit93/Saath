@@ -272,7 +272,9 @@ export default function PricingPage() {
                 loading={sandboxMutation.isPending}
                 onClick={() => sandboxMutation.mutate(activeOrder.order_id)}
               >
-                {t("sandboxCompleteCta")}
+                {selectedPlanCode === "b2b_partner"
+                  ? t("sandboxCompleteB2bCta")
+                  : t("sandboxCompleteCta")}
               </Button>
             </div>
           ) : (

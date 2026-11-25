@@ -16,6 +16,29 @@ from saath_api.journeys.geometry import (
 
 IST = ZoneInfo("Asia/Kolkata")
 
+_INDIC_MARK = (
+    r"[\u0300-\u036f\u200c\u200d"
+    r"\u0900-\u0903\u093a-\u094f\u0951-\u0957\u0962-\u0963"
+    r"\u0981-\u0983\u09bc\u09be-\u09c4\u09c7-\u09cd\u09d7\u09e2-\u09e3"
+    r"\u0a01-\u0a03\u0a3c\u0a3e-\u0a4d\u0a70-\u0a71"
+    r"\u0a81-\u0a83\u0abc\u0abe-\u0acd\u0ae2-\u0ae3"
+    r"\u0b01-\u0b03\u0b3c\u0b3e-\u0b4d\u0b56-\u0b57\u0b62-\u0b63"
+    r"\u0b82\u0bbe-\u0bcd\u0bd7"
+    r"\u0c00-\u0c04\u0c3e-\u0c56\u0c62-\u0c63"
+    r"\u0c81-\u0c83\u0cbc\u0cbe-\u0cd6\u0ce2-\u0ce3"
+    r"\u0d00-\u0d03\u0d3b-\u0d4d\u0d57\u0d62-\u0d63]"
+)
+_LETTER_CHAR = r"[^\W\d_]"
+_NAME_CHAR = rf"(?:{_LETTER_CHAR}|{_INDIC_MARK})"
+_NAME_WORD = rf"{_LETTER_CHAR}(?:{_NAME_CHAR}|['’\-](?={_LETTER_CHAR}))*\.?"
+_NAME_WORDS = rf"{_NAME_WORD}(?:[ \t]+{_NAME_WORD}){{0,4}}"
+_SALUTATION_STOP_WORDS = (
+    r"(?:your|yours|pnr|train|trn|ticket|booking|journey|trip|has|have|is|was|are|for|on|with|from|to|confirm|confirmed|"
+    r"आपका|आपकी|आपके|ट्रेन|गाड़ी|गाडी|पीएनआर|टिकट|बुकिंग|यात्रा)"
+)
+_SALUTATION_WORD = rf"(?!{_SALUTATION_STOP_WORDS}(?!{_NAME_CHAR})){_NAME_WORD}"
+_SALUTATION_NAME = rf"{_SALUTATION_WORD}(?:[ \t]+{_SALUTATION_WORD}){{0,3}}"
+
 _LABELED_PNR_RE = re.compile(r"\bPNR\s*(?:NO\.?|NUMBER)?\s*[:\-]?\s*([0-9]{10})\b", re.IGNORECASE)
 _LABELED_PNR_MASK_RE = re.compile(
     r"\bPNR\s*(?:NO\.?|NUMBER)?\s*[:\-]?\s*(?:\d[\s\-]*){9}\d\b",
@@ -23,10 +46,10 @@ _LABELED_PNR_MASK_RE = re.compile(
 )
 _TEN_DIGIT_RE = re.compile(r"\b([0-9]{10})\b")
 _SPACED_PNR_MASK_RE = re.compile(
-    r"(?<!\d)(?:\d{3}[\s\-]\d{3}[\s\-]\d{4}|\d{3}[\s\-]\d{7}|\d{4}[\s\-]\d{3}[\s\-]\d{3}|\d{5}[\-]\d{5})(?!\d)"
+    r"(?<!\d)(?:\d{3}[ \t\-]\d{3}[ \t\-]\d{4}|\d{3}[ \t\-]\d{7}|\d{4}[ \t\-]\d{3}[ \t\-]\d{3}|\d{5}[ \t\-]\d{5})(?!\d)"
 )
 _PHONE_MASK_RE = re.compile(
-    r"(?<!\d)(?:\+91[\s\-]?|0)[6-9]\d{4}[\s\-]?\d{5}(?!\d)"
+    r"(?<!\d)(?:\+?91[ \t\-]?|0)?[6-9](?:\d{9}|\d{4}[ \t\-]\d{5}|\d{3}[ \t\-]\d{6}|\d{2}[ \t\-]\d{3}[ \t\-]\d{4})(?!\d)"
 )
 _TRAIN_RE = re.compile(r"\b(?:TRAIN|TRN|T\.?NO\.?)\s*(?:NO\.?)?\s*[:\-]?\s*([0-9]{5})\b", re.I)
 _FIVE_DIGIT_TRAIN_RE = re.compile(r"\b([12][0-9]{4})\b")
@@ -45,16 +68,16 @@ _PAX_COACH_BERTH_RE = re.compile(
 )
 _PAX_STATUS_ONLY_RE = re.compile(r"\b(RAC\s*\d+|WL\s*\d+|RLWL\s*\d+|PQWL\s*\d+)\b", re.I)
 _TABULAR_PAX_RE = re.compile(
-    r"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?[A-Za-z][A-Za-z .']{1,40}?\s*/\s*\d{1,3}\s*/\s*[MFOT]\b(?:\s*/)?"
+    rf"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?{_NAME_WORDS}[ \t]*/[ \t]*\d{{1,3}}[ \t]*/[ \t]*[MFOT]\b(?:[ \t]*/)?"
 )
 _PAREN_PAX_RE = re.compile(
-    r"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?[A-Za-z][A-Za-z .']{1,40}?\s*\(\s*\d{1,3}\s*[/,]\s*[MFOT]\s*\)"
+    rf"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?{_NAME_WORDS}[ \t]*\([ \t]*\d{{1,3}}[ \t]*[/,][ \t]*[MFOT][ \t]*\)"
 )
 _SALUTATION_RE = re.compile(
-    r"(?i)\b(Dear|Hi|Hello)\s+[A-Za-z][A-Za-z .']{1,40}?(?=[,;:\n]|$)"
+    rf"(?i)(?<!{_NAME_CHAR})(Dear|Hi|Hello|Namaste|नमस्ते)(?!{_NAME_CHAR})(?:[ \t]*,[ \t]*|[ \t]+){_SALUTATION_NAME}"
 )
 _NAME_LABEL_RE = re.compile(
-    r"(?i)\b(?:passenger\s*name|pax\s*name|name|passenger|pax)\s*(?:\d+\s*)?[:\-]\s*[^\n,;|]+?(?=\s*(?:[,;|\n]|\b(?:PNR|Train|TRN|DOJ|Date|Class|Coach|Berth|Seat|CNF|RAC|WL|Status|1A|2A|3A|3E|SL|CC|EC|2S)\b|$))"
+    rf"(?i)(?<!\w)(?:passenger\s*name|pax\s*name|name|passenger|pax|यात्री(?:\s*का)?\s*नाम|नाम|यात्री)\s*(?:\d+\s*)?[:\-]\s*[^\n,;|]+?(?=\s*(?:[,;|\n]|(?<!{_NAME_CHAR})(?:PNR|Train|TRN|DOJ|Date|Class|Coach|Berth|Seat|CNF|RAC|WL|Status|1A|2A|3A|3E|SL|CC|EC|2S|ट्रेन|पीएनआर|तारीख|कोच|बर्थ|सीट)(?!{_NAME_CHAR})|$))"
 )
 
 

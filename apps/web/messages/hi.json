@@ -266,6 +266,7 @@
     "createOrderCta": "₹199 भुगतान करें",
     "createB2bOrderCta": "B2B पार्टनर सक्रिय करें",
     "sandboxCompleteCta": "सैंडबॉक्स भुगतान पूरा करें (₹199)",
+    "sandboxCompleteB2bCta": "B2B सैंडबॉक्स सक्रियण पूरा करें",
     "sandboxNotice": "लोकल सैंडबॉक्स बिलिंग मोड सक्रिय है (प्रोडक्शन में बंद)।",
     "razorpayNotice": "ऑर्डर {orderId} बन गया है। Razorpay चेकआउट में भुगतान पूरा करें।",
     "activatedToast": "पास सक्रिय हो गया! मल्टी-PNR ग्रुप सुविधाएँ अब अनलॉक हैं।"

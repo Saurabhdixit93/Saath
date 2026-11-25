@@ -33,7 +33,7 @@ describe("PricingPage", () => {
     window.sessionStorage.setItem("saath_auth_kind", "user");
 
     let unlocked = false;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.url;
       if (url.endsWith("/v1/pricing/plans")) {
         return new Response(
@@ -136,13 +136,18 @@ describe("PricingPage", () => {
         );
       }
       if (url.endsWith("/v1/billing/checkout")) {
+        const parsedBody =
+          typeof init?.body === "string"
+            ? (JSON.parse(init.body) as { plan_code?: string })
+            : {};
+        const reqPlanCode = parsedBody.plan_code ?? "group_organiser_pass";
         return new Response(
           JSON.stringify({
-            order_id: "ord-1",
-            plan_code: "group_organiser_pass",
+            order_id: reqPlanCode === "b2b_partner" ? "ord-b2b-1" : "ord-1",
+            plan_code: reqPlanCode,
             provider: "sandbox",
-            provider_order_id: "order_sbx_1",
-            amount_paise: 19900,
+            provider_order_id: reqPlanCode === "b2b_partner" ? "order_sbx_b2b" : "order_sbx_1",
+            amount_paise: reqPlanCode === "b2b_partner" ? 0 : 19900,
             currency: "INR",
             checkout_mode: "sandbox",
             status: "created",
@@ -187,15 +192,21 @@ describe("PricingPage", () => {
       expect(screen.getByText(/group_organiser_pass · Active/)).toBeInTheDocument()
     );
 
-    // B2B Partner checkout CTA uses B2B label instead of ₹199
+    // B2B Partner step-1 and step-2 checkout CTAs use B2B labels instead of ₹199
     await user.click(screen.getByRole("button", { name: "Activate B2B Partner" }));
     const dialog = screen.getByRole("dialog");
     expect(
       within(dialog).queryByRole("button", { name: "Proceed to pay ₹199" })
     ).not.toBeInTheDocument();
+    const b2bStep1Btn = within(dialog).getByRole("button", { name: "Activate B2B Partner" });
+    expect(b2bStep1Btn).toBeInTheDocument();
+    await user.click(b2bStep1Btn);
     expect(
-      within(dialog).getByRole("button", { name: "Activate B2B Partner" })
+      await within(dialog).findByRole("button", { name: "Complete B2B Sandbox Activation" })
     ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Complete Sandbox Payment (₹199)" })
+    ).not.toBeInTheDocument();
     vi.unstubAllGlobals();
   });
 });

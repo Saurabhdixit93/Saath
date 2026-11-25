@@ -266,6 +266,7 @@
     "createOrderCta": "Proceed to pay ₹199",
     "createB2bOrderCta": "Activate B2B Partner",
     "sandboxCompleteCta": "Complete Sandbox Payment (₹199)",
+    "sandboxCompleteB2bCta": "Complete B2B Sandbox Activation",
     "sandboxNotice": "Local sandbox billing mode active (disabled in production).",
     "razorpayNotice": "Order {orderId} created. Complete payment in Razorpay checkout.",
     "activatedToast": "Pass activated! Multi-PNR group features are now unlocked."

@@ -108,9 +108,19 @@ def test_bcbp_15_plus_synthetic_cases() -> None:
     assert parse_bcbp(_make_bcbp(compartment="W"), pnr_pepper=pepper, reference_date=ref).legs[0].travel_class == "W"
     assert parse_bcbp(_make_bcbp(compartment="Y"), pnr_pepper=pepper, reference_date=ref).legs[0].travel_class == "Y"
 
-    # 11. Variable length hex block handled cleanly
+    # 11. Variable length hex block handled cleanly (including trailing space padding)
     var_bcbp = _make_bcbp()[:-2] + "04ABCD"
     assert parse_bcbp(var_bcbp, pnr_pepper=pepper, reference_date=ref).legs[0].seat_no == "14A"
+
+    var_space_padded = f"  \n\t{_make_bcbp()[:-2]}04AB  \r\n"
+    assert parse_bcbp(var_space_padded, pnr_pepper=pepper, reference_date=ref).legs[0].seat_no == "14A"
+
+    two_leg_var_space = _make_bcbp(
+        extra_legs=[{"frm": "BOM", "to": "GOI", "carrier": "6E", "flight": "0710", "seat": "005C"}]
+    )[:-2] + "04    \r\n"
+    res_var2 = parse_bcbp(two_leg_var_space, pnr_pepper=pepper, reference_date=ref)
+    assert res_var2.num_legs == 2
+    assert res_var2.legs[1].seat_no == "5C"
 
     # 12-16. Malformed & error cases
     with pytest.raises(BcbpParseError, match="60 characters"):

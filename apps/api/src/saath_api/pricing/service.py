@@ -687,6 +687,25 @@ async def get_b2b_stats(
                 title="Invalid API Key",
                 detail="B2B API key is missing, invalid, or revoked.",
             )
+        if key_row.user_id is not None:
+            now = datetime.now(UTC)
+            owner_ent = (
+                await db.execute(
+                    select(Entitlement).where(
+                        Entitlement.user_id == key_row.user_id,
+                        Entitlement.plan_code == "b2b_partner",
+                        Entitlement.status == "active",
+                        Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
+                    )
+                )
+            ).scalars().first()
+            if owner_ent is None:
+                raise ProblemDetailError(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    code="b2b_entitlement_required",
+                    title="B2B Partner Plan Required",
+                    detail="B2B Partner entitlement has expired or is inactive.",
+                )
         partner_name = key_row.partner_name
     elif actor is not None and actor.kind == "user" and actor.user_id is not None:
         now = datetime.now(UTC)

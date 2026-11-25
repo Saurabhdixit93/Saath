@@ -8,7 +8,7 @@ export interface BcbpLegPreview {
 }
 
 export function previewBcbp(raw: string): { numLegs: number; legs: BcbpLegPreview[] } | null {
-  const trimmed = raw ? raw.trim() : "";
+  const trimmed = raw ? raw.trimStart().replace(/[\r\n\t]+$/, "") : "";
   if (!trimmed || trimmed.length < 60 || trimmed[0] !== "M") {
     return null;
   }

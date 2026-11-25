@@ -222,6 +222,10 @@ async def test_webhook_hmac_verification_idempotency_and_b2b_stats(
     assert expired_stats_resp.status_code == 403
     assert expired_stats_resp.json()["code"] == "b2b_entitlement_required"
 
+    expired_key_stats_resp = await client.get("/v1/b2b/stats", headers={"X-API-Key": api_key})
+    assert expired_key_stats_resp.status_code == 403
+    assert expired_key_stats_resp.json()["code"] == "b2b_entitlement_required"
+
 
 def test_sandbox_route_omitted_when_razorpay_or_production() -> None:
     rzp_settings = Settings(

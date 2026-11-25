@@ -185,7 +185,7 @@ def parse_bcbp(
     reference_date: date | None = None,
 ) -> BcbpParseResult:
     """Parse an IATA Resolution 792 single- or multi-leg BCBP barcode string."""
-    raw = raw.strip() if raw else ""
+    raw = raw.lstrip().rstrip("\r\n\t") if raw else ""
     if not raw or len(raw) < 60:
         raise BcbpParseError(
             "malformed_bcbp",

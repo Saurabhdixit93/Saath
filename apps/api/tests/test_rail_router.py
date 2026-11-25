@@ -263,3 +263,50 @@ async def test_irctc_sms_parser_and_pii_masked_llm_fallback() -> None:
         parse_irctc_sms_text("PNR 4512890341 Train 12951 DOJ 25-11-26 3A B3-999")
     with pytest.raises(SmsParseError, match="positive"):
         parse_irctc_sms_text("PNR 4512890341 Train 12951 DOJ 25-11-26 3A B3-0")
+
+
+def test_mask_sms_pii_for_llm_adversarial_unicode_and_spacing() -> None:
+    # 1. Hindi/Devanagari salutation
+    m1 = mask_sms_pii_for_llm("Dear आशा शर्मा, PNR 4512890341 Train 12951")
+    assert "आशा" not in m1
+    assert "शर्मा" not in m1
+    assert "4512890341" not in m1
+    assert "Train 12951" in m1
+
+    # 2. Hindi/Devanagari tabular passenger row
+    m2 = mask_sms_pii_for_llm("1. आशा शर्मा / 32 / F / CNF/B3/42/MB")
+    assert "आशा" not in m2
+    assert "शर्मा" not in m2
+    assert "CNF/B3/42/MB" in m2
+
+    # 3. Hindi/Devanagari parenthesized passenger
+    m3 = mask_sms_pii_for_llm("आशा शर्मा (32/F) Train 12951")
+    assert "आशा" not in m3
+    assert "शर्मा" not in m3
+    assert "Train 12951" in m3
+
+    # 4. Long unpunctuated salutation line (English & Hindi)
+    m4 = mask_sms_pii_for_llm(
+        "Dear Asha Sharma your ticket for Train 12951 from NDLS to MMCT on 25-11-26 is confirmed"
+    )
+    assert "Asha" not in m4
+    assert "Sharma" not in m4
+    assert "your ticket for Train 12951 from NDLS to MMCT on 25-11-26 is confirmed" in m4
+
+    m4_hi = mask_sms_pii_for_llm("नमस्ते प्रिया नायर आपकी ट्रेन 12951 पीएनआर 4512890341")
+    assert "प्रिया" not in m4_hi
+    assert "नायर" not in m4_hi
+    assert "4512890341" not in m4_hi
+    assert "आपकी ट्रेन 12951" in m4_hi
+
+    # 5. Bare 5+5 space-separated mobile & unlabeled 5+5 PNR
+    m5 = mask_sms_pii_for_llm("Call 98765 43210 for Ticket 45128 90341 Train 12951")
+    for leaked in ("98765", "43210", "45128", "90341"):
+        assert leaked not in m5
+    assert "Train 12951" in m5
+
+    # 6. 91-prefixed 12-digit mobile without '+' & Hindi name label
+    m6 = mask_sms_pii_for_llm("नाम: रोहित कुमार, Call 919876543210 for Train 12951")
+    for leaked in ("रोहित", "कुमार", "919876543210"):
+        assert leaked not in m6
+    assert "Train 12951" in m6
