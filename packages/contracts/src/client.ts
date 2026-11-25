@@ -14,6 +14,33 @@ export interface ProblemDetail {
 }
 
 export type UserProfile = components["schemas"]["UserProfile"];
+export type VerifyJourneyRequest = components["schemas"]["VerifyJourneyRequest"];
+export type VerifyJourneyResponse = components["schemas"]["VerifyJourneyResponse"];
+export type JourneySummaryDTO = components["schemas"]["JourneySummaryDTO"];
+export type BookingSummaryDTO = components["schemas"]["BookingSummaryDTO"];
+export type SeatHolderOwnDTO = components["schemas"]["SeatHolderOwnDTO"];
+export type ChartStatusDTO = components["schemas"]["ChartStatusDTO"];
+export type JourneyListItemDTO = components["schemas"]["JourneyListItemDTO"];
+export type JourneyListResponse = components["schemas"]["JourneyListResponse"];
+export type JourneyHubResponse = components["schemas"]["JourneyHubResponse"];
+export type PartySummaryDTO = components["schemas"]["PartySummaryDTO"];
+export type SmartSuggestionDTO = components["schemas"]["SmartSuggestionDTO"];
+export type GoalDTO = components["schemas"]["GoalDTO"];
+export type GoalConstraintsDTO = components["schemas"]["GoalConstraintsDTO"];
+export type PutGoalRequest = components["schemas"]["PutGoalRequest"];
+export type PartyInviteResponse = components["schemas"]["PartyInviteResponse"];
+export type PartyJoinRequest = components["schemas"]["PartyJoinRequest"];
+export type AircraftLayoutSummaryDTO = components["schemas"]["AircraftLayoutSummaryDTO"];
+export type OrganiserSummaryResponse = components["schemas"]["OrganiserSummaryResponse"];
+export type PricingPlanDTO = components["schemas"]["PricingPlanDTO"];
+export type PricingPlansResponse = components["schemas"]["PricingPlansResponse"];
+export type EntitlementDTO = components["schemas"]["EntitlementDTO"];
+export type MyEntitlementsResponse = components["schemas"]["MyEntitlementsResponse"];
+export type CheckoutRequest = components["schemas"]["CheckoutRequest"];
+export type CheckoutResponse = components["schemas"]["CheckoutResponse"];
+export type SandboxCompleteResponse = components["schemas"]["SandboxCompleteResponse"];
+export type B2BKeyCreatedResponse = components["schemas"]["B2BKeyCreatedResponse"];
+export type B2BStatsResponse = components["schemas"]["B2BStatsResponse"];
 
 export interface SaathClientOptions {
   baseUrl: string;

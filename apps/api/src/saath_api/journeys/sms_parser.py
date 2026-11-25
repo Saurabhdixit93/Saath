@@ -6,12 +6,28 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from saath_api.journeys.geometry import normalize_coach_class, seat_to_bay_and_type
+from saath_api.journeys.geometry import (
+    CoachClass,
+    SeatType,
+    normalize_coach_class,
+    seat_to_bay_and_type,
+    supported_capacities_for_class,
+)
 
 IST = ZoneInfo("Asia/Kolkata")
 
 _LABELED_PNR_RE = re.compile(r"\bPNR\s*(?:NO\.?|NUMBER)?\s*[:\-]?\s*([0-9]{10})\b", re.IGNORECASE)
+_LABELED_PNR_MASK_RE = re.compile(
+    r"\bPNR\s*(?:NO\.?|NUMBER)?\s*[:\-]?\s*(?:\d[\s\-]*){9}\d\b",
+    re.IGNORECASE,
+)
 _TEN_DIGIT_RE = re.compile(r"\b([0-9]{10})\b")
+_SPACED_PNR_MASK_RE = re.compile(
+    r"(?<!\d)(?:\d{3}[\s\-]\d{3}[\s\-]\d{4}|\d{3}[\s\-]\d{7}|\d{4}[\s\-]\d{3}[\s\-]\d{3}|\d{5}[\-]\d{5})(?!\d)"
+)
+_PHONE_MASK_RE = re.compile(
+    r"(?<!\d)(?:\+91[\s\-]?|0)[6-9]\d{4}[\s\-]?\d{5}(?!\d)"
+)
 _TRAIN_RE = re.compile(r"\b(?:TRAIN|TRN|T\.?NO\.?)\s*(?:NO\.?)?\s*[:\-]?\s*([0-9]{5})\b", re.I)
 _FIVE_DIGIT_TRAIN_RE = re.compile(r"\b([12][0-9]{4})\b")
 _CLASS_RE = re.compile(r"\b(1A|2A|3A|3E|SL|CC|EC|2S)\b", re.IGNORECASE)
@@ -28,7 +44,18 @@ _PAX_COACH_BERTH_RE = re.compile(
     re.IGNORECASE,
 )
 _PAX_STATUS_ONLY_RE = re.compile(r"\b(RAC\s*\d+|WL\s*\d+|RLWL\s*\d+|PQWL\s*\d+)\b", re.I)
-_NAME_LINE_RE = re.compile(r"(?im)^(?:name|passenger|pax)\s*[:\-].*$")
+_TABULAR_PAX_RE = re.compile(
+    r"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?[A-Za-z][A-Za-z .']{1,40}?\s*/\s*\d{1,3}\s*/\s*[MFOT]\b(?:\s*/)?"
+)
+_PAREN_PAX_RE = re.compile(
+    r"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?[A-Za-z][A-Za-z .']{1,40}?\s*\(\s*\d{1,3}\s*[/,]\s*[MFOT]\s*\)"
+)
+_SALUTATION_RE = re.compile(
+    r"(?i)\b(Dear|Hi|Hello)\s+[A-Za-z][A-Za-z .']{1,40}?(?=[,;:\n]|$)"
+)
+_NAME_LABEL_RE = re.compile(
+    r"(?i)\b(?:passenger\s*name|pax\s*name|name|passenger|pax)\s*(?:\d+\s*)?[:\-]\s*[^\n,;|]+?(?=\s*(?:[,;|\n]|\b(?:PNR|Train|TRN|DOJ|Date|Class|Coach|Berth|Seat|CNF|RAC|WL|Status|1A|2A|3A|3E|SL|CC|EC|2S)\b|$))"
+)
 
 
 @dataclass(frozen=True)
@@ -61,11 +88,29 @@ class SmsParseError(ValueError):
 
 
 def mask_sms_pii_for_llm(raw_text: str) -> str:
-    """Strip 10-digit PNR numbers and passenger name lines before any LLM fallback."""
-    masked = _LABELED_PNR_RE.sub("PNR:[REDACTED]", raw_text)
+    """Strip 10-digit PNRs, phone numbers, salutations, and passenger names before any LLM fallback."""
+    masked = _LABELED_PNR_MASK_RE.sub("PNR:[REDACTED]", raw_text)
+    masked = _PHONE_MASK_RE.sub("[REDACTED_PHONE]", masked)
+    masked = _SPACED_PNR_MASK_RE.sub("[REDACTED_10D]", masked)
     masked = _TEN_DIGIT_RE.sub("[REDACTED_10D]", masked)
-    masked = _NAME_LINE_RE.sub("Name:[REDACTED]", masked)
+    masked = _TABULAR_PAX_RE.sub("[REDACTED_PAX] ", masked)
+    masked = _PAREN_PAX_RE.sub("[REDACTED_PAX]", masked)
+    masked = _SALUTATION_RE.sub(r"\1 [REDACTED]", masked)
+    masked = _NAME_LABEL_RE.sub("Name:[REDACTED]", masked)
     return masked.strip()
+
+
+def _resolve_sms_seat(tclass: CoachClass, seat_raw: str) -> tuple[int, SeatType]:
+    seat_int = int(seat_raw)
+    if seat_int <= 0:
+        raise SmsParseError(f"Seat number {seat_raw!r} must be positive for class {tclass}.")
+    for cap in supported_capacities_for_class(tclass):
+        try:
+            bay, default_stype, _ = seat_to_bay_and_type(tclass, seat_int, capacity=cap)
+            return bay, default_stype
+        except ValueError:
+            continue
+    raise SmsParseError(f"Seat {seat_int} is out of range for class {tclass}.")
 
 
 def _parse_date_token(token: str) -> date:
@@ -120,12 +165,10 @@ def parse_irctc_sms_text(
     for idx, m in enumerate(_PAX_BERTH_SLASH_RE.finditer(text), start=1):
         status_tok = re.sub(r"\s+", " ", m.group(1).upper().strip())
         coach = m.group(2).upper()
-        seat_num = str(int(m.group(3)))
+        seat_int = int(m.group(3))
+        seat_num = str(seat_int)
         tclass = normalize_coach_class(explicit_class, coach)
-        try:
-            bay, default_stype, _ = seat_to_bay_and_type(tclass, int(seat_num))
-        except ValueError:
-            bay, default_stype = None, None
+        bay, default_stype = _resolve_sms_seat(tclass, seat_num)
         stype = m.group(4).upper() if m.group(4) else default_stype
         passengers.append(
             ParsedSmsPassenger(
@@ -142,12 +185,10 @@ def parse_irctc_sms_text(
     if not passengers:
         for idx, m in enumerate(_PAX_COACH_BERTH_RE.finditer(text), start=1):
             coach = m.group(1).upper()
-            seat_num = str(int(m.group(2)))
+            seat_int = int(m.group(2))
+            seat_num = str(seat_int)
             tclass = normalize_coach_class(explicit_class, coach)
-            try:
-                bay, default_stype, _ = seat_to_bay_and_type(tclass, int(seat_num))
-            except ValueError:
-                bay, default_stype = None, None
+            bay, default_stype = _resolve_sms_seat(tclass, seat_num)
             stype = m.group(3).upper() if m.group(3) else default_stype
             passengers.append(
                 ParsedSmsPassenger(

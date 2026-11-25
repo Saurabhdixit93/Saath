@@ -48,6 +48,20 @@ export function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <nav aria-label="Desktop navigation" className="hidden items-center gap-1 md:flex">
+            <Link
+              href="/journeys"
+              className="inline-flex min-h-[44px] items-center rounded-[var(--radius-sm)] px-2.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
+            >
+              {tCommon("navJourneys")}
+            </Link>
+            <Link
+              href="/pricing"
+              className="inline-flex min-h-[44px] items-center rounded-[var(--radius-sm)] px-2.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
+            >
+              {tCommon("navPricing")}
+            </Link>
+          </nav>
           <LanguageSwitcher
             locale={locale}
             onToggle={handleToggleLocale}

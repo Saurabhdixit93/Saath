@@ -568,7 +568,6 @@ async def complete_sandbox_payment(
         "provider_order_id": order.provider_order_id,
         "provider_payment_id": pay_id,
     }
-    raw_body = json.dumps(payload_dict).encode("utf-8")
 
     # Record idempotent webhook event via same pipeline
     await db.execute(
@@ -623,12 +622,14 @@ async def create_b2b_api_key(
     authorize(actor, "b2b.create_key", resource_owner_id=actor.user_id)
     assert actor.user_id is not None
 
+    now = datetime.now(UTC)
     ent = (
         await db.execute(
             select(Entitlement).where(
                 Entitlement.user_id == actor.user_id,
                 Entitlement.plan_code == "b2b_partner",
                 Entitlement.status == "active",
+                Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
             )
         )
     ).scalars().first()
@@ -688,12 +689,14 @@ async def get_b2b_stats(
             )
         partner_name = key_row.partner_name
     elif actor is not None and actor.kind == "user" and actor.user_id is not None:
+        now = datetime.now(UTC)
         ent = (
             await db.execute(
                 select(Entitlement).where(
                     Entitlement.user_id == actor.user_id,
                     Entitlement.plan_code == "b2b_partner",
                     Entitlement.status == "active",
+                    Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
                 )
             )
         ).scalars().first()

@@ -9,8 +9,14 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { BottomSheet, Button, EmptyState, useToast } from "@saath/ui";
+import { parseProblemDetail } from "@saath/contracts";
+import { useRouter } from "@/i18n/navigation";
 import { parsePnrInput } from "@/lib/pnr";
 import { useAuth } from "./AuthProvider";
+import {
+  BoardingPassScanner,
+  type BoardingPassSubmitPayload,
+} from "./BoardingPassScanner";
 
 type ModeTab = "train" | "flight" | "bus";
 type InfoSheetKey = "how" | "safety" | "tools" | "faq" | null;
@@ -20,15 +26,18 @@ const MODES: ModeTab[] = ["train", "flight", "bus"];
 export function HomeTabs() {
   const t = useTranslations("home");
   const tCommon = useTranslations("common");
-  const { ensureAuth } = useAuth();
+  const router = useRouter();
+  const { ensureAuth, apiClient } = useAuth();
   const { showToast } = useToast();
 
   const [activeMode, setActiveMode] = useState<ModeTab>("train");
+  const [smsMode, setSmsMode] = useState(false);
   const [pnrText, setPnrText] = useState("");
+  const [smsText, setSmsText] = useState("");
   const [pnrHint, setPnrHint] = useState<string | null>(null);
   const [pnrError, setPnrError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [flightMessage, setFlightMessage] = useState<string | null>(null);
+  const [flightError, setFlightError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [infoSheet, setInfoSheet] = useState<InfoSheetKey>(null);
 
   const tabRefs = useRef<Record<ModeTab, HTMLButtonElement | null>>({
@@ -56,7 +65,6 @@ export function HomeTabs() {
 
   const applyPnrValue = (value: string, isPaste = false) => {
     setPnrError(null);
-    setStatusMessage(null);
     const parsed = parsePnrInput(value);
     if (parsed.isValid && parsed.pnr && (parsed.extractedFromSms || isPaste)) {
       setPnrText(parsed.pnr);
@@ -85,18 +93,64 @@ export function HomeTabs() {
   const handleVerifyTrain = async (ev: FormEvent) => {
     ev.preventDefault();
     setPnrError(null);
-    setStatusMessage(null);
 
-    const parsed = parsePnrInput(pnrText);
-    if (!parsed.isValid || !parsed.pnr) {
-      setPnrError(t("pnrInvalid"));
-      return;
+    let payload: { mode: "train"; pnr?: string; sms_text?: string };
+    if (smsMode) {
+      if (smsText.trim().length < 10) {
+        setPnrError(t("pnrInvalid"));
+        return;
+      }
+      payload = { mode: "train", sms_text: smsText.trim() };
+    } else {
+      const parsed = parsePnrInput(pnrText);
+      if (!parsed.isValid || !parsed.pnr) {
+        setPnrError(t("pnrInvalid"));
+        return;
+      }
+      setPnrText(parsed.pnr);
+      payload = { mode: "train", pnr: parsed.pnr };
     }
-    setPnrText(parsed.pnr);
-    await ensureAuth();
-    const readyMsg = t("trainSessionReady", { pnr: parsed.pnr });
-    setStatusMessage(readyMsg);
-    showToast({ variant: "info", message: readyMsg });
+
+    setSubmitting(true);
+    try {
+      await ensureAuth();
+      const { data, error } = await apiClient.POST("/v1/journeys/verify", {
+        body: payload,
+      });
+      if (error || !data) {
+        const problem = parseProblemDetail(error);
+        setPnrError(problem?.detail || tCommon("errorBody"));
+        return;
+      }
+      showToast({ variant: "success", message: t("verifySuccessToast") });
+      router.push(`/journeys/${data.journey.id}`);
+    } catch {
+      setPnrError(tCommon("errorBody"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleVerifyFlight = async (payload: BoardingPassSubmitPayload) => {
+    setFlightError(null);
+    setSubmitting(true);
+    try {
+      await ensureAuth();
+      const { data, error } = await apiClient.POST("/v1/journeys/verify", {
+        body: payload,
+      });
+      if (error || !data) {
+        const problem = parseProblemDetail(error);
+        setFlightError(problem?.detail || tCommon("errorBody"));
+        return;
+      }
+      showToast({ variant: "success", message: t("verifySuccessToast") });
+      router.push(`/journeys/${data.journey.id}`);
+    } catch {
+      setFlightError(tCommon("errorBody"));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const sheetCopy =
@@ -158,46 +212,74 @@ export function HomeTabs() {
           aria-labelledby="tab-train"
           className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow)]"
         >
-          <form onSubmit={handleVerifyTrain} className="space-y-3" noValidate>
-            <label
-              htmlFor="pnr-input"
-              className="block text-sm font-semibold text-[var(--text)]"
+          <form onSubmit={(ev) => void handleVerifyTrain(ev)} className="space-y-3" noValidate>
+            {!smsMode ? (
+              <>
+                <label
+                  htmlFor="pnr-input"
+                  className="block text-sm font-semibold text-[var(--text)]"
+                >
+                  {t("pnrLabel")}
+                </label>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    id="pnr-input"
+                    type="text"
+                    inputMode="numeric"
+                    value={pnrText}
+                    onPaste={handlePnrPaste}
+                    onChange={(ev) => applyPnrValue(ev.target.value)}
+                    placeholder={t("pnrPlaceholder")}
+                    className="min-h-[48px] flex-1 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-4 text-lg tracking-wider text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  />
+                  <Button type="submit" variant="primary" loading={submitting} className="shrink-0">
+                    {submitting ? t("verifyingCta") : t("verifyCta")}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label
+                  htmlFor="sms-input"
+                  className="block text-sm font-semibold text-[var(--text)]"
+                >
+                  {t("pnrSmsInputLabel")}
+                </label>
+                <textarea
+                  id="sms-input"
+                  rows={3}
+                  value={smsText}
+                  onChange={(ev) => {
+                    setSmsText(ev.target.value);
+                    setPnrError(null);
+                  }}
+                  placeholder={t("pnrSmsPlaceholder")}
+                  className="w-full rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] p-3 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+                />
+                <Button type="submit" variant="primary" loading={submitting} fullWidth>
+                  {submitting ? t("verifyingCta") : t("verifyCta")}
+                </Button>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setSmsMode((prev) => !prev);
+                setPnrError(null);
+              }}
+              className="text-xs font-semibold text-[var(--secondary)] underline underline-offset-4 cursor-pointer"
             >
-              {t("pnrLabel")}
-            </label>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                id="pnr-input"
-                type="text"
-                inputMode="numeric"
-                value={pnrText}
-                onPaste={handlePnrPaste}
-                onChange={(ev) => applyPnrValue(ev.target.value)}
-                placeholder={t("pnrPlaceholder")}
-                className="min-h-[48px] flex-1 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-4 text-lg tracking-wider text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
-                style={{ fontFamily: "var(--font-mono)" }}
-              />
-              <Button type="submit" variant="primary" className="shrink-0">
-                {t("verifyCta")}
-              </Button>
-            </div>
+              {t("pnrSmsModeToggle")}
+            </button>
 
             {pnrHint ? (
-              <p className="text-sm font-medium text-[var(--secondary)]">
-                {pnrHint}
-              </p>
+              <p className="text-sm font-medium text-[var(--secondary)]">{pnrHint}</p>
             ) : null}
             {pnrError ? (
               <p role="alert" className="text-sm font-medium text-[var(--danger-text)]">
                 {pnrError}
-              </p>
-            ) : null}
-            {statusMessage ? (
-              <p
-                role="status"
-                className="rounded-[var(--radius-sm)] border border-[var(--secondary)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--text)]"
-              >
-                {statusMessage}
               </p>
             ) : null}
           </form>
@@ -211,39 +293,16 @@ export function HomeTabs() {
           aria-labelledby="tab-flight"
           className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow)]"
         >
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button
-              variant="primary"
-              fullWidth
-              onClick={() => setFlightMessage(t("flightScaffoldHint"))}
-            >
-              {t("flightScanCta")}
-            </Button>
-            <Button
-              variant="ghost"
-              fullWidth
-              onClick={() => setFlightMessage(t("flightScaffoldHint"))}
-            >
-              {t("flightManualCta")}
-            </Button>
-          </div>
-          {flightMessage ? (
-            <p
-              role="status"
-              className="mt-3 rounded-[var(--radius-sm)] bg-[var(--surface-2)] px-3.5 py-2.5 text-sm text-[var(--text-muted)]"
-            >
-              {flightMessage}
-            </p>
-          ) : null}
+          <BoardingPassScanner
+            onSubmit={handleVerifyFlight}
+            loading={submitting}
+            error={flightError}
+          />
         </section>
       ) : null}
 
       {activeMode === "bus" ? (
-        <section
-          id="panel-bus"
-          role="tabpanel"
-          aria-labelledby="tab-bus"
-        >
+        <section id="panel-bus" role="tabpanel" aria-labelledby="tab-bus">
           <EmptyState
             title={t("busTitle")}
             description={t("busDescription")}

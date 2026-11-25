@@ -6,6 +6,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_TURNSTILE_MODE: z.enum(["fake", "cloudflare"]).default("fake"),
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().default(""),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().default(""),
 });
 
 export const publicEnv = envSchema.parse({
@@ -15,4 +16,5 @@ export const publicEnv = envSchema.parse({
     process.env.NEXT_PUBLIC_TURNSTILE_MODE === "cloudflare" ? "cloudflare" : "fake",
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "",
   NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+  NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "",
 });

@@ -19,7 +19,7 @@ const serwist = new Serwist({
   navigationPreload: true,
   runtimeCaching: [
     {
-      matcher: ({ url }) => url.pathname.startsWith("/v1/auth/") || url.pathname.startsWith("/v1/me"),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/"),
       handler: new NetworkOnly(),
     },
     ...defaultCache,

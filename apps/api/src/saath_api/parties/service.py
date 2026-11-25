@@ -22,6 +22,7 @@ from saath_api.journeys.service import (
     _build_journey_hub,
     _goal_dto,
     _load_actor_journey_context,
+    _prune_goal_movers,
     resolve_party_entitlement_limits,
     verify_and_persist_booking,
 )
@@ -49,6 +50,12 @@ async def create_party_invite(
 ) -> PartyInviteResponse:
     _, _, party = await _load_actor_journey_context(
         db=db, actor=actor, journey_id=journey_id
+    )
+    authorize_resource_owner(
+        actor,
+        "party.create_invite",
+        owner_user_id=party.leader_user_id,
+        owner_anon_id=party.leader_anon_id,
     )
 
     raw_token = secrets.token_urlsafe(16)
@@ -182,7 +189,7 @@ async def join_party_via_invite(
                     "journey_instance_id": str(ji.id),
                     "added_members": len(incoming_ids),
                 },
-                idempotency_key=f"party_joined:{target_party.id}:{booking.id}",
+                idempotency_key=f"party_joined:{target_party.id}:{booking.id}:{uuid7().hex}",
             )
         )
 
@@ -318,6 +325,9 @@ async def remove_party_member(
         )
 
     await db.delete(pm)
+    await _prune_goal_movers(
+        db=db, party_id=party.id, removed_seat_holder_ids={seat_holder_id}
+    )
     ji.match_version += 1
     await db.commit()
     await db.refresh(ji)
@@ -382,15 +392,16 @@ async def put_party_goal(
                 await db.execute(select(User.gender_self).where(User.id == actor.user_id))
             ).scalar_one_or_none()
             user_is_female = user_gender == "female"
+        has_male_mover = any(member_map[mid].gender_band == "M" for mid in movers)
         movers_all_female = all(member_map[mid].gender_band == "F" for mid in movers)
-        if not user_is_female and not movers_all_female:
+        if has_male_mover or (not user_is_female and not movers_all_female):
             raise ProblemDetailError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="women_only_not_eligible",
                 title="Women-Only Guard",
                 detail=(
                     "Women-only swap mode requires a female profile or verified female "
-                    "passenger berth records."
+                    "passenger berth records, and cannot include male travellers."
                 ),
             )
 

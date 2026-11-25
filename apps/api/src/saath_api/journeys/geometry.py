@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -84,29 +86,35 @@ def normalize_coach_class(travel_class: str | None, coach_code: str | None = Non
 
 
 def parse_rail_seat_number(raw_seat: str | int, travel_class: str) -> int:
+    if isinstance(raw_seat, bool):
+        raise ValueError(f"Invalid rail seat number: {raw_seat!r}")
     if isinstance(raw_seat, int):
         return raw_seat
     cleaned = raw_seat.strip().upper()
-    if cleaned.isdigit():
+    if re.fullmatch(r"[1-9][0-9]*", cleaned):
         return int(cleaned)
-    # Support 1A cabin-letter notation like "A-1" .. "H-4"
-    if travel_class.strip().upper() == "1A" and "-" in cleaned:
-        cabin_part, berth_part = cleaned.split("-", 1)
-        if len(cabin_part) == 1 and "A" <= cabin_part <= "H" and berth_part.isdigit():
-            cabin_idx = ord(cabin_part) - ord("A") + 1
-            berth_idx = int(berth_part)
-            counts = [4, 2, 4, 2, 4, 2, 4, 2]
-            offset = sum(counts[: cabin_idx - 1])
-            if 1 <= berth_idx <= counts[cabin_idx - 1]:
-                return offset + berth_idx
-    digits = "".join(ch for ch in cleaned if ch.isdigit())
-    if not digits:
-        raise ValueError(f"Invalid rail seat number: {raw_seat!r}")
-    return int(digits)
+    # Support 1A cabin-letter notation like "A-1" .. "H-2" matching cabin capacity
+    if normalize_coach_class(travel_class) == "1A":
+        match = re.fullmatch(r"([A-H])-([1-4])", cleaned)
+        if match:
+            cabin_idx = ord(match.group(1)) - ord("A") + 1
+            berth_idx = int(match.group(2))
+            counts = (4, 2, 4, 2, 4, 2, 4, 2)
+            cabin_cap = counts[cabin_idx - 1]
+            if 1 <= berth_idx <= cabin_cap:
+                return sum(counts[: cabin_idx - 1]) + berth_idx
+            raise ValueError(
+                f"Invalid 1A cabin berth {raw_seat!r}: cabin {match.group(1)} has {cabin_cap} berths"
+            )
+    raise ValueError(f"Invalid rail seat number: {raw_seat!r}")
 
 
 def default_capacity_for_class(travel_class: CoachClass) -> int:
     return _DEFAULT_CAPACITY[travel_class]
+
+
+def supported_capacities_for_class(travel_class: CoachClass) -> tuple[int, ...]:
+    return _SUPPORTED_VARIANTS[travel_class]
 
 
 def seat_to_bay_and_type(
@@ -145,8 +153,8 @@ def seat_to_bay_and_type(
         for bay_idx, size in enumerate(bay_sizes, start=1):
             if s <= running + size:
                 pos = s - running
-                stype: SeatType = "LB" if pos % 2 == 1 else "UB"
-                return bay_idx, stype, False
+                stype_1a: SeatType = "LB" if pos % 2 == 1 else "UB"
+                return bay_idx, stype_1a, False
             running += size
         raise ValueError(f"Seat {s} out of 1A range")  # pragma: no cover
 
@@ -389,7 +397,7 @@ def generate_train_coach_svg(
             f"</g>"
         )
 
-    title = f"Coach {coach_label} ({spec.travel_class})".strip()
+    title = html.escape(f"Coach {coach_label} ({spec.travel_class})".strip(), quote=True)
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {max_x} {max_y}" '
         f'role="img" aria-label="{title}">'

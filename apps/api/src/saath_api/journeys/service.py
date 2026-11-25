@@ -252,6 +252,7 @@ async def resolve_party_entitlement_limits(
     stmt = select(Entitlement).where(
         Entitlement.user_id.in_(candidate_user_ids),
         Entitlement.status == "active",
+        Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
     )
     res = await db.execute(stmt)
     entitlements = list(res.scalars().all())
@@ -1284,6 +1285,29 @@ async def reverify_journey(
     )
 
 
+async def _prune_goal_movers(
+    *,
+    db: AsyncSession,
+    party_id: UUID,
+    removed_seat_holder_ids: set[UUID],
+) -> None:
+    if not removed_seat_holder_ids:
+        return
+    active_goals = (
+        await db.execute(
+            select(Goal).where(Goal.party_id == party_id, Goal.active.is_(True))
+        )
+    ).scalars().all()
+    now = datetime.now(UTC)
+    for goal in active_goals:
+        remaining = [mid for mid in goal.movers if mid not in removed_seat_holder_ids]
+        if len(remaining) != len(goal.movers):
+            goal.movers = remaining
+            goal.updated_at = now
+            if not remaining and goal.goal_type != "open_to_help":
+                goal.active = False
+
+
 async def delete_journey_booking(
     *,
     db: AsyncSession,
@@ -1301,17 +1325,46 @@ async def delete_journey_booking(
     )
 
     deleted_id = booking.id
+    deleted_sh_ids = set(
+        (
+            await db.execute(
+                select(SeatHolder.id).where(SeatHolder.booking_id == booking.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     await db.delete(booking)
     await db.flush()
 
-    remaining_res = await db.execute(
-        select(func.count(PartyMember.seat_holder_id)).where(
-            PartyMember.party_id == party.id
+    remaining_rows = (
+        await db.execute(
+            select(
+                PartyMember.seat_holder_id,
+                Booking.owner_user_id,
+                Booking.owner_anon_id,
+            )
+            .join(SeatHolder, SeatHolder.id == PartyMember.seat_holder_id)
+            .join(Booking, Booking.id == SeatHolder.booking_id)
+            .where(PartyMember.party_id == party.id)
+            .order_by(PartyMember.joined_at.asc(), SeatHolder.pax_seq.asc())
         )
-    )
-    if int(remaining_res.scalar_one() or 0) == 0:
+    ).all()
+    if not remaining_rows:
         await db.execute(delete(Party).where(Party.id == party.id))
     else:
+        leader_still_present = any(
+            (party.leader_user_id is not None and row_uid == party.leader_user_id)
+            or (party.leader_anon_id is not None and row_aid == party.leader_anon_id)
+            for _, row_uid, row_aid in remaining_rows
+        )
+        if not leader_still_present:
+            _, next_uid, next_aid = remaining_rows[0]
+            party.leader_user_id = next_uid
+            party.leader_anon_id = next_aid
+        await _prune_goal_movers(
+            db=db, party_id=party.id, removed_seat_holder_ids=deleted_sh_ids
+        )
         ji.match_version += 1
 
     await db.commit()

@@ -30,6 +30,7 @@ class AircraftLayoutSpec:
     exit_rows: frozenset[int]
     premium_rows: frozenset[int]
     total_seats: int
+    excluded_seats: frozenset[str] = frozenset()
 
 
 _SEAT_RE = re.compile(r"^0*([1-9][0-9]{0,2})([A-K])$")
@@ -60,6 +61,7 @@ def _build_layout(
         exit_rows=exit_rows,
         premium_rows=premium_rows,
         total_seats=total,
+        excluded_seats=excluded_seats,
     )
 
 
@@ -284,6 +286,9 @@ _LAYOUT_ALIASES: dict[str, str] = {
     "1-2": "generic:1-2",
 }
 
+_LOWER_LAYOUT_KEYS: dict[str, str] = {k.lower(): k for k in AIRCRAFT_LAYOUTS}
+_LOWER_ALIASES: dict[str, str] = {k.lower(): v for k, v in _LAYOUT_ALIASES.items()}
+
 CARRIER_DEFAULT_LAYOUT: dict[str, str] = {
     "6E": "6E:A320neo",
     "QP": "QP:737-MAX-8",
@@ -295,9 +300,9 @@ CARRIER_DEFAULT_LAYOUT: dict[str, str] = {
 
 def resolve_aircraft_layout(layout_ref: str | None, carrier_code: str = "") -> AircraftLayoutSpec:
     if layout_ref:
-        trimmed = layout_ref.strip()
-        canonical = _LAYOUT_ALIASES.get(trimmed, trimmed)
-        if canonical in AIRCRAFT_LAYOUTS:
+        lowered = layout_ref.strip().lower()
+        canonical = _LOWER_ALIASES.get(lowered) or _LOWER_LAYOUT_KEYS.get(lowered)
+        if canonical and canonical in AIRCRAFT_LAYOUTS:
             return AIRCRAFT_LAYOUTS[canonical]
     carrier_default = CARRIER_DEFAULT_LAYOUT.get(carrier_code.strip().upper())
     if carrier_default and carrier_default in AIRCRAFT_LAYOUTS:
@@ -336,6 +341,10 @@ def validate_and_classify_flight_seat(
     if letter not in spec.columns:
         raise ValueError(
             f"Seat letter {letter} does not exist on aircraft layout {spec.layout_ref}"
+        )
+    if normalized in spec.excluded_seats:
+        raise ValueError(
+            f"Seat {normalized} does not exist on aircraft layout {spec.layout_ref}"
         )
 
     col_idx = spec.columns.index(letter)

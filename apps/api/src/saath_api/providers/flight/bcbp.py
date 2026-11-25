@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import re
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -185,6 +185,7 @@ def parse_bcbp(
     reference_date: date | None = None,
 ) -> BcbpParseResult:
     """Parse an IATA Resolution 792 single- or multi-leg BCBP barcode string."""
+    raw = raw.strip() if raw else ""
     if not raw or len(raw) < 60:
         raise BcbpParseError(
             "malformed_bcbp",

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -7,22 +7,61 @@ import { AuthProvider } from "../src/components/AuthProvider";
 import { HomeTabs } from "../src/components/HomeTabs";
 import { runAxe } from "../vitest.setup";
 
+const pushMock = vi.fn();
+
+vi.mock("@/i18n/navigation", () => ({
+  useRouter: () => ({ push: pushMock, replace: vi.fn() }),
+  usePathname: () => "/",
+  Link: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 describe("HomeTabs", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
     window.localStorage.clear();
+    pushMock.mockReset();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url.endsWith("/v1/journeys/verify")) {
+          return new Response(
+            JSON.stringify({
+              journey: {
+                id: "0193632e-0000-7000-8000-000000000101",
+                mode: "train",
+                carrier_code: "IR",
+                service_no: "12951",
+                service_date: "2026-11-27",
+                chart_state: "pending",
+                match_version: 0,
+              },
+              booking: {
+                id: "0193632e-0000-7000-8000-000000000102",
+                trust_tier: "verified_provider",
+                claim_conflict_flagged: false,
+              },
+              seat_holders: [],
+              party_id: "0193632e-0000-7000-8000-000000000103",
+              trust_tier: "verified_provider",
+              chart: { state: "pending" },
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+        return new Response(
           JSON.stringify({ access: "anon.jwt", token_type: "bearer", expires_in: 7200 }),
           { status: 200, headers: { "content-type": "application/json" } }
-        )
-      )
+        );
+      })
     );
   });
 
-  it("extracts 10-digit PNR from IRCTC SMS, switches tabs via keyboard, and passes axe", async () => {
+  it("extracts 10-digit PNR from IRCTC SMS, verifies journey, switches tabs via keyboard, and passes axe", async () => {
     const user = userEvent.setup();
     const { container } = render(
       <NextIntlClientProvider locale="en" messages={enMessages}>
@@ -42,7 +81,11 @@ describe("HomeTabs", () => {
     expect(screen.getByText(/Extracted 10-digit PNR 4512890341/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Verify →" }));
-    expect(await screen.findByText(/PNR 4512890341 looks valid/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(pushMock).toHaveBeenCalledWith(
+        "/journeys/0193632e-0000-7000-8000-000000000101"
+      )
+    );
 
     const trainTab = screen.getByRole("tab", { name: "Train" });
     trainTab.focus();

@@ -22,6 +22,22 @@ def test_offline_openapi_export_contains_auth_and_problem_detail(tmp_path: Path)
         "/v1/auth/refresh",
         "/v1/auth/logout",
         "/v1/me",
+        "/v1/flights/layouts",
+        "/v1/journeys/verify",
+        "/v1/journeys",
+        "/v1/journeys/{journey_id}",
+        "/v1/journeys/{journey_id}/reverify",
+        "/v1/journeys/{journey_id}/party/invite",
+        "/v1/party/join",
+        "/v1/party/{party_id}/members/{seat_holder_id}",
+        "/v1/parties/{party_id}/goal",
+        "/v1/parties/{party_id}/organiser-summary",
+        "/v1/pricing/plans",
+        "/v1/me/entitlements",
+        "/v1/billing/checkout",
+        "/v1/webhooks/payments",
+        "/v1/b2b/keys",
+        "/v1/b2b/stats",
     ):
         assert expected in paths
 
