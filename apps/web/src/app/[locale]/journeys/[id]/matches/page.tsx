@@ -11,6 +11,7 @@ import {
 } from "@saath/contracts";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { subscribeBrowserWebPush } from "@/lib/notifications/pushClient";
 import { MatchCard } from "@/components/MatchCard";
 import { CoachMap } from "@/components/CoachMap";
 import { CabinMap } from "@/components/CabinMap";
@@ -38,6 +39,8 @@ export default function JourneyMatchesPage({
   const [requestCard, setRequestCard] = useState<MatchCardDTO | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [selectedMapSeat, setSelectedMapSeat] = useState<CoachMapSeatDTO | null>(null);
+  const [notifySheetOpen, setNotifySheetOpen] = useState(false);
+  const [subscribingPush, setSubscribingPush] = useState(false);
 
   useEffect(() => {
     if (authKind === "uninitialized") {
@@ -185,6 +188,48 @@ export default function JourneyMatchesPage({
     setRequestCard(card);
   };
 
+  const handleSayHi = async (card: MatchCardDTO) => {
+    if (authKind !== "user") {
+      openOtpModal();
+      return;
+    }
+    const { data, error } = await apiClient.POST("/v1/conversations", {
+      body: { card_id: card.card_id },
+    });
+    if (error || !data) {
+      showToast({
+        variant: "error",
+        message: parseProblemDetail(error)?.detail || tCommon("errorBody"),
+      });
+      return;
+    }
+    router.push(`/inbox/${data.id}`);
+  };
+
+  const handleEnableMatchAlerts = async () => {
+    if (authKind !== "user") {
+      setNotifySheetOpen(false);
+      openOtpModal();
+      return;
+    }
+    setSubscribingPush(true);
+    try {
+      await subscribeBrowserWebPush(apiClient);
+      await apiClient.PATCH("/v1/me", {
+        body: { notification_channels: { push: true, whatsapp: true } },
+      });
+      setNotifySheetOpen(false);
+      showToast({ variant: "success", message: t("notifyEnabledToast") });
+    } catch (err) {
+      showToast({
+        variant: "error",
+        message: err instanceof Error ? err.message : tCommon("errorBody"),
+      });
+    } finally {
+      setSubscribingPush(false);
+    }
+  };
+
   const seatLinkedCard = selectedMapSeat?.card_id
     ? items.find((c) => c.card_id === selectedMapSeat.card_id) ?? null
     : null;
@@ -296,9 +341,7 @@ export default function JourneyMatchesPage({
                   </Link>
                   <Button
                     variant="secondary"
-                    onClick={() =>
-                      showToast({ variant: "info", message: t("notifyEnabledToast") })
-                    }
+                    onClick={() => setNotifySheetOpen(true)}
                   >
                     {t("emptyNotifyCta")}
                   </Button>
@@ -312,6 +355,7 @@ export default function JourneyMatchesPage({
                   key={card.card_id}
                   card={card}
                   mode={hub.journey.mode}
+                  onSayHi={(c) => void handleSayHi(c)}
                   onRequestSwap={handleOpenRequest}
                   requesting={createSwapMutation.isPending && requestCard?.card_id === card.card_id}
                 />
@@ -382,6 +426,26 @@ export default function JourneyMatchesPage({
           await createSwapMutation.mutateAsync({ cardId, note });
         }}
       />
+
+      <BottomSheet
+        open={notifySheetOpen}
+        onClose={() => setNotifySheetOpen(false)}
+        title={t("notifySheetTitle")}
+        description={t("notifySheetBody")}
+      >
+        <div className="flex flex-wrap gap-2 pt-2">
+          <Button
+            variant="primary"
+            loading={subscribingPush}
+            onClick={() => void handleEnableMatchAlerts()}
+          >
+            {t("notifyConfirmCta")}
+          </Button>
+          <Button variant="ghost" onClick={() => setNotifySheetOpen(false)}>
+            {tCommon("close")}
+          </Button>
+        </div>
+      </BottomSheet>
     </div>
   );
 }

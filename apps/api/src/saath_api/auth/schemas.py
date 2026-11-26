@@ -40,6 +40,24 @@ class OtpVerifyRequest(BaseModel):
     code: str = Field(pattern=r"^[0-9]{6}$")
 
 
+class NotificationChannelsDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    push: bool = True
+    whatsapp: bool = True
+    sms: bool = True
+    quiet_hours_enabled: bool = True
+
+
+class NotificationChannelsPatchDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    push: bool | None = None
+    whatsapp: bool | None = None
+    sms: bool | None = None
+    quiet_hours_enabled: bool | None = None
+
+
 class UserProfile(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,6 +69,9 @@ class UserProfile(BaseModel):
     reliability_accepted: int
     reliability_completed: int
     status: Literal["active", "restricted", "banned", "deleted"]
+    notification_channels: NotificationChannelsDTO = Field(
+        default_factory=NotificationChannelsDTO
+    )
     created_at: datetime
 
 
@@ -84,3 +105,4 @@ class UpdateMeRequest(BaseModel):
     women_only_default: bool | None = None
     display_alias: str | None = Field(default=None, max_length=40)
     gender_self: Literal["female", "male", "other", "undisclosed"] | None = None
+    notification_channels: NotificationChannelsPatchDTO | None = None

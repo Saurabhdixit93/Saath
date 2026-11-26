@@ -13,7 +13,10 @@ export interface ProblemDetail {
   [key: string]: unknown;
 }
 
+export type NotificationChannelsDTO = components["schemas"]["NotificationChannelsDTO"];
+export type NotificationChannelsPatchDTO = components["schemas"]["NotificationChannelsPatchDTO"];
 export type UserProfile = components["schemas"]["UserProfile"];
+export type UpdateMeRequest = components["schemas"]["UpdateMeRequest"];
 export type VerifyJourneyRequest = components["schemas"]["VerifyJourneyRequest"];
 export type VerifyJourneyResponse = components["schemas"]["VerifyJourneyResponse"];
 export type JourneySummaryDTO = components["schemas"]["JourneySummaryDTO"];
@@ -61,6 +64,24 @@ export type SwapCardJsonResponse = components["schemas"]["SwapCardJsonResponse"]
 export type SwapCardDTO = SwapCardJsonResponse;
 export type PublicSwapCardVerifyResponse = components["schemas"]["PublicSwapCardVerifyResponse"];
 export type PublicSwapCardResponse = PublicSwapCardVerifyResponse;
+export type ConversationParticipantDTO = components["schemas"]["ConversationParticipantDTO"];
+export type MessageDTO = components["schemas"]["MessageDTO"];
+export type ConversationDTO = components["schemas"]["ConversationDTO"];
+export type ConversationListResponse = components["schemas"]["ConversationListResponse"];
+export type CreateConversationRequest = components["schemas"]["CreateConversationRequest"];
+export type MessagesResponse = components["schemas"]["MessagesResponse"];
+export type SendMessageRequest = components["schemas"]["SendMessageRequest"];
+export type TranslateMessageRequest = components["schemas"]["TranslateMessageRequest"];
+export type TranslateMessageResponse = components["schemas"]["TranslateMessageResponse"];
+export type BlockUserRequest = components["schemas"]["BlockUserRequest"];
+export type BlockUserResponse = components["schemas"]["BlockUserResponse"];
+export type CreateReportRequest = components["schemas"]["CreateReportRequest"];
+export type CreateReportResponse = components["schemas"]["CreateReportResponse"];
+export type PushSubscriptionKeysDTO = components["schemas"]["PushSubscriptionKeysDTO"];
+export type PushSubscriptionRequest = components["schemas"]["PushSubscriptionRequest"];
+export type PushSubscriptionResponse = components["schemas"]["PushSubscriptionResponse"];
+export type WhatsAppWebhookResponse = components["schemas"]["WhatsAppWebhookResponse"];
+export type PublicChartTimeResponse = components["schemas"]["PublicChartTimeResponse"];
 
 export interface SaathClientOptions {
   baseUrl: string;

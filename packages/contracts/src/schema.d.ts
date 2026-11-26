@@ -113,6 +113,40 @@ export interface paths {
   "/v1/b2b/stats": {
     get: operations["get_v1_b2b_stats_v1_b2b_stats_get"];
   };
+  "/v1/events/stream": {
+    get: operations["sse_events_stream_v1_events_stream_get"];
+  };
+  "/v1/conversations": {
+    get: operations["get_v1_conversations_v1_conversations_get"];
+    post: operations["post_v1_conversations_v1_conversations_post"];
+  };
+  "/v1/conversations/{conversation_id}/messages": {
+    get: operations["get_v1_conversation_messages_v1_conversations__conversation_id__messages_get"];
+    post: operations["post_v1_conversation_messages_v1_conversations__conversation_id__messages_post"];
+  };
+  "/v1/conversations/{conversation_id}/translate": {
+    post: operations["post_v1_conversation_translate_v1_conversations__conversation_id__translate_post"];
+  };
+  "/v1/users/block": {
+    post: operations["post_v1_users_block_v1_users_block_post"];
+  };
+  "/v1/reports": {
+    post: operations["post_v1_reports_v1_reports_post"];
+  };
+  "/v1/me/push-subscriptions": {
+    post: operations["post_v1_me_push_subscriptions_v1_me_push_subscriptions_post"];
+  };
+  "/v1/me/notification-prefs": {
+    get: operations["get_v1_me_notification_prefs_v1_me_notification_prefs_get"];
+    patch: operations["patch_v1_me_notification_prefs_v1_me_notification_prefs_patch"];
+  };
+  "/v1/webhooks/whatsapp": {
+    get: operations["get_v1_webhooks_whatsapp_v1_webhooks_whatsapp_get"];
+    post: operations["post_v1_webhooks_whatsapp_v1_webhooks_whatsapp_post"];
+  };
+  "/v1/public/train/{train_no}/chart-time": {
+    get: operations["get_v1_public_train_chart_time_v1_public_train__train_no__chart_time_get"];
+  };
 }
 
 export interface components {
@@ -139,6 +173,18 @@ export interface components {
       request_id: string;
       code: string;
     };
+    NotificationChannelsDTO: {
+      push?: boolean;
+      whatsapp?: boolean;
+      sms?: boolean;
+      quiet_hours_enabled?: boolean;
+    };
+    NotificationChannelsPatchDTO: {
+      push?: boolean | null;
+      whatsapp?: boolean | null;
+      sms?: boolean | null;
+      quiet_hours_enabled?: boolean | null;
+    };
     UserProfile: {
       id: string;
       display_alias?: string | null;
@@ -148,6 +194,7 @@ export interface components {
       reliability_accepted: number;
       reliability_completed: number;
       status: "active" | "restricted" | "banned" | "deleted";
+      notification_channels?: components["schemas"]["NotificationChannelsDTO"];
       created_at: string;
     };
     OtpVerifyResponse: {
@@ -172,6 +219,7 @@ export interface components {
       women_only_default?: boolean | null;
       display_alias?: string | null;
       gender_self?: "female" | "male" | "other" | "undisclosed" | null;
+      notification_channels?: components["schemas"]["NotificationChannelsPatchDTO"] | null;
     };
     ProblemFieldError: {
       field: string;
@@ -661,6 +709,101 @@ export interface components {
       signature_verified: boolean;
       tte_note?: string;
     };
+    ConversationParticipantDTO: {
+      alias: string;
+      alias_ref: string;
+      is_me: boolean;
+      seat_revealed?: string | null;
+    };
+    MessageDTO: {
+      id: string;
+      conversation_id: string;
+      sender_alias: string;
+      is_me: boolean;
+      client_id: string;
+      body: string;
+      lang?: string | null;
+      moderation: "ok" | "redacted" | "hidden";
+      redacted_hint?: string | null;
+      created_at: string;
+    };
+    ConversationDTO: {
+      id: string;
+      journey_instance_id: string;
+      service: string;
+      date: string;
+      partner_alias: string;
+      partner_alias_ref: string;
+      unmasked: boolean;
+      blocked?: boolean;
+      participants: components["schemas"]["ConversationParticipantDTO"][];
+      last_message?: components["schemas"]["MessageDTO"] | null;
+      created_at: string;
+      updated_at: string;
+    };
+    ConversationListResponse: {
+      items: components["schemas"]["ConversationDTO"][];
+    };
+    CreateConversationRequest: {
+      card_id: string;
+    };
+    MessagesResponse: {
+      conversation: components["schemas"]["ConversationDTO"];
+      items: components["schemas"]["MessageDTO"][];
+      next_before?: string | null;
+    };
+    SendMessageRequest: {
+      body: string;
+      client_id: string;
+      lang?: "en" | "hi" | null;
+    };
+    TranslateMessageRequest: {
+      message_id: string;
+      to: "en" | "hi";
+    };
+    TranslateMessageResponse: {
+      message_id: string;
+      translated_text: string;
+      to: "en" | "hi";
+    };
+    BlockUserRequest: {
+      alias_ref: string;
+    };
+    BlockUserResponse: {
+      blocked?: boolean;
+    };
+    CreateReportRequest: {
+      conversation_id: string;
+      message_id?: string | null;
+      reason: string;
+    };
+    CreateReportResponse: {
+      report_id: string;
+      status?: "open" | "reviewed" | "dismissed" | "actioned";
+      auto_restricted?: boolean;
+    };
+    PushSubscriptionKeysDTO: {
+      p256dh: string;
+      auth: string;
+    };
+    PushSubscriptionRequest: {
+      endpoint: string;
+      keys: components["schemas"]["PushSubscriptionKeysDTO"];
+    };
+    PushSubscriptionResponse: {
+      subscribed?: boolean;
+    };
+    WhatsAppWebhookResponse: {
+      ok?: boolean;
+      processed?: number;
+      deduped?: number;
+    };
+    PublicChartTimeResponse: {
+      train_no: string;
+      date: string;
+      chart_due_at: string;
+      rule: string;
+    };
   };
 }
 
@@ -1036,6 +1179,143 @@ export interface operations {
         content: { "application/json": components["schemas"]["PublicSwapCardVerifyResponse"] };
       };
       404: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  sse_events_stream_v1_events_stream_get: {
+    responses: {
+      200: { content: { "text/event-stream": string } };
+      401: ProblemResp;
+      403: ProblemResp;
+    };
+  };
+  get_v1_conversations_v1_conversations_get: {
+    responses: {
+      200: { content: { "application/json": components["schemas"]["ConversationListResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+    };
+  };
+  post_v1_conversations_v1_conversations_post: {
+    requestBody: { content: { "application/json": components["schemas"]["CreateConversationRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["ConversationDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+      422: ProblemResp;
+      429: ProblemResp;
+    };
+  };
+  get_v1_conversation_messages_v1_conversations__conversation_id__messages_get: {
+    parameters: {
+      path: { conversation_id: string };
+      query?: { before?: string | null; limit?: number };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["MessagesResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+    };
+  };
+  post_v1_conversation_messages_v1_conversations__conversation_id__messages_post: {
+    parameters: { path: { conversation_id: string } };
+    requestBody: { content: { "application/json": components["schemas"]["SendMessageRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["MessageDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  post_v1_conversation_translate_v1_conversations__conversation_id__translate_post: {
+    parameters: { path: { conversation_id: string } };
+    requestBody: { content: { "application/json": components["schemas"]["TranslateMessageRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["TranslateMessageResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  post_v1_users_block_v1_users_block_post: {
+    requestBody: { content: { "application/json": components["schemas"]["BlockUserRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["BlockUserResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  post_v1_reports_v1_reports_post: {
+    requestBody: { content: { "application/json": components["schemas"]["CreateReportRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["CreateReportResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  post_v1_me_push_subscriptions_v1_me_push_subscriptions_post: {
+    requestBody: { content: { "application/json": components["schemas"]["PushSubscriptionRequest"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PushSubscriptionResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  get_v1_me_notification_prefs_v1_me_notification_prefs_get: {
+    responses: {
+      200: { content: { "application/json": components["schemas"]["NotificationChannelsDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+    };
+  };
+  patch_v1_me_notification_prefs_v1_me_notification_prefs_patch: {
+    requestBody: {
+      content: { "application/json": components["schemas"]["NotificationChannelsPatchDTO"] };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["NotificationChannelsDTO"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  get_v1_webhooks_whatsapp_v1_webhooks_whatsapp_get: {
+    parameters: {
+      query?: {
+        "hub.mode"?: string | null;
+        "hub.verify_token"?: string | null;
+        "hub.challenge"?: string;
+      };
+    };
+    responses: {
+      200: { content: { "text/plain": string } };
+      403: ProblemResp;
+    };
+  };
+  post_v1_webhooks_whatsapp_v1_webhooks_whatsapp_post: {
+    responses: {
+      200: { content: { "application/json": components["schemas"]["WhatsAppWebhookResponse"] } };
+      400: ProblemResp;
+      403: ProblemResp;
+    };
+  };
+  get_v1_public_train_chart_time_v1_public_train__train_no__chart_time_get: {
+    parameters: {
+      path: { train_no: string };
+      query?: { date?: string | null };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PublicChartTimeResponse"] } };
       422: ProblemResp;
     };
   };

@@ -21,4 +21,6 @@ def build_payment_provider(settings: Settings) -> PaymentGatewayProvider:
             key_secret=settings.razorpay_key_secret,
             webhook_secret=settings.razorpay_webhook_secret,
         )
+    if settings.is_production:
+        raise RuntimeError("SandboxPaymentAdapter cannot be used when ENV=production")
     return SandboxPaymentAdapter(webhook_secret=settings.razorpay_webhook_secret)

@@ -7,6 +7,10 @@ import { Button, EmptyState, useToast } from "@saath/ui";
 import { parseProblemDetail, type UserProfile } from "@saath/contracts";
 import { usePathname, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import {
+  isIosNonStandalone,
+  subscribeBrowserWebPush,
+} from "@/lib/notifications/pushClient";
 
 export default function ProfilePage() {
   const t = useTranslations("profile");
@@ -33,6 +37,17 @@ export default function ProfilePage() {
   const [locale, setLocale] = useState<"en" | "hi">("en");
   const [genderSelf, setGenderSelf] = useState<UserProfile["gender_self"]>("undisclosed");
   const [womenOnlyDefault, setWomenOnlyDefault] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(true);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(true);
+  const [smsEnabled, setSmsEnabled] = useState(true);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(true);
+  const [pushSubscribing, setPushSubscribing] = useState(false);
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [iosHint, setIosHint] = useState(false);
+
+  useEffect(() => {
+    setIosHint(isIosNonStandalone());
+  }, []);
 
   useEffect(() => {
     if (meQuery.data) {
@@ -41,6 +56,14 @@ export default function ProfilePage() {
       setLocale(meQuery.data.locale);
       setGenderSelf(meQuery.data.gender_self);
       setWomenOnlyDefault(meQuery.data.women_only_default);
+      if (meQuery.data.notification_channels) {
+        setPushEnabled(meQuery.data.notification_channels.push ?? true);
+        setWhatsappEnabled(meQuery.data.notification_channels.whatsapp ?? true);
+        setSmsEnabled(meQuery.data.notification_channels.sms ?? true);
+        setQuietHoursEnabled(
+          meQuery.data.notification_channels.quiet_hours_enabled ?? true
+        );
+      }
     }
   }, [meQuery.data, setUser]);
 
@@ -52,6 +75,12 @@ export default function ProfilePage() {
           locale,
           gender_self: genderSelf,
           women_only_default: womenOnlyDefault,
+          notification_channels: {
+            push: pushEnabled,
+            whatsapp: whatsappEnabled,
+            sms: smsEnabled,
+            quiet_hours_enabled: quietHoursEnabled,
+          },
         },
       });
       if (error || !data) {
@@ -73,6 +102,27 @@ export default function ProfilePage() {
   const handleSave = (ev: FormEvent) => {
     ev.preventDefault();
     updateMutation.mutate();
+  };
+
+  const handleEnablePush = async () => {
+    setPushSubscribing(true);
+    try {
+      const res = await subscribeBrowserWebPush(apiClient);
+      if (res.subscribed) {
+        setPushSubscribed(true);
+        setPushEnabled(true);
+        showToast({ variant: "success", message: t("pushEnabledToast") });
+      } else {
+        showToast({ variant: "info", message: t("pushPermissionDeniedToast") });
+      }
+    } catch (err) {
+      showToast({
+        variant: "error",
+        message: err instanceof Error ? err.message : tCommon("errorBody"),
+      });
+    } finally {
+      setPushSubscribing(false);
+    }
   };
 
   return (
@@ -207,6 +257,87 @@ export default function ProfilePage() {
                 </span>
               </div>
             </label>
+
+            <section className="space-y-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--text)]">
+                    {t("notificationsTitle")}
+                  </h2>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {t("notificationsSubtitle")}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  loading={pushSubscribing}
+                  onClick={() => void handleEnablePush()}
+                  className="min-h-[48px]"
+                >
+                  {pushSubscribed ? t("pushEnabledCta") : t("enablePushCta")}
+                </Button>
+              </div>
+
+              {iosHint ? (
+                <p className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--text)]">
+                  {t("iosA2hsHint")}
+                </p>
+              ) : null}
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3">
+                  <input
+                    type="checkbox"
+                    checked={pushEnabled}
+                    onChange={(ev) => setPushEnabled(ev.target.checked)}
+                    className="h-5 w-5 accent-[var(--secondary)]"
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    {t("channelPushLabel")}
+                  </span>
+                </label>
+
+                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3">
+                  <input
+                    type="checkbox"
+                    checked={whatsappEnabled}
+                    onChange={(ev) => setWhatsappEnabled(ev.target.checked)}
+                    className="h-5 w-5 accent-[var(--secondary)]"
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    {t("channelWhatsappLabel")}
+                  </span>
+                </label>
+
+                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3">
+                  <input
+                    type="checkbox"
+                    checked={smsEnabled}
+                    onChange={(ev) => setSmsEnabled(ev.target.checked)}
+                    className="h-5 w-5 accent-[var(--secondary)]"
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    {t("channelSmsLabel")}
+                  </span>
+                </label>
+
+                <label className="flex min-h-[48px] cursor-pointer items-center gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-3">
+                  <input
+                    type="checkbox"
+                    checked={quietHoursEnabled}
+                    onChange={(ev) => setQuietHoursEnabled(ev.target.checked)}
+                    className="h-5 w-5 accent-[var(--secondary)]"
+                  />
+                  <span className="text-sm font-medium text-[var(--text)]">
+                    {t("quietHoursLabel")}
+                  </span>
+                </label>
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                {t("quietHoursHint")}
+              </p>
+            </section>
 
             <div className="flex flex-wrap gap-3 pt-1">
               <Button type="submit" loading={updateMutation.isPending}>

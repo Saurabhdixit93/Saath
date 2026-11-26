@@ -56,10 +56,29 @@ class User(Base):
         Integer, nullable=False, server_default=text("0")
     )
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
+    notification_prefs: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text(
+            "'{\"push\":true,\"whatsapp\":true,\"sms\":true,\"quiet_hours_enabled\":true}'::jsonb"
+        ),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def notification_channels(self) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "push": True,
+            "whatsapp": True,
+            "sms": True,
+            "quiet_hours_enabled": True,
+        }
+        if isinstance(self.notification_prefs, dict):
+            base.update(self.notification_prefs)
+        return base
 
 
 class Device(Base):

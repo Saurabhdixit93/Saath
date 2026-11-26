@@ -581,6 +581,18 @@ async def update_me(*, db: AsyncSession, actor: Actor, req: UpdateMeRequest) -> 
         user.display_alias = cleaned_alias or None
     if req.gender_self is not None:
         user.gender_self = req.gender_self
+    if req.notification_channels is not None:
+        merged = dict(user.notification_channels)
+        patch = req.notification_channels
+        if patch.push is not None:
+            merged["push"] = patch.push
+        if patch.whatsapp is not None:
+            merged["whatsapp"] = patch.whatsapp
+        if patch.sms is not None:
+            merged["sms"] = patch.sms
+        if patch.quiet_hours_enabled is not None:
+            merged["quiet_hours_enabled"] = patch.quiet_hours_enabled
+        user.notification_prefs = merged
 
     await db.commit()
     await db.refresh(user)

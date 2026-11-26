@@ -237,9 +237,16 @@ class Settings(BaseSettings):
     msg91_auth_key: str = ""
     msg91_sender_id: str = "SAATHI"
     msg91_dlt_te_id_otp: str = ""
+    msg91_dlt_te_id_notify: str = ""
+
+    push_mode: Literal["fake", "vapid"] = "fake"
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:privacy@saath.example"
 
     ai_mode: Literal["fake", "anthropic"] = "fake"
     anthropic_api_key: str = ""
+    anthropic_concierge_model: str = "claude-sonnet-5-5"
     anthropic_fast_model: str = "claude-haiku-5-5"
 
     payment_provider: Literal["sandbox", "razorpay"] = "sandbox"
@@ -297,6 +304,19 @@ class Settings(BaseSettings):
                 raise ValueError("RAIL_PROVIDER_MODE=fake is forbidden when ENV=production")
             if self.flight_provider_mode == "fake":
                 raise ValueError("FLIGHT_PROVIDER_MODE=fake is forbidden when ENV=production")
+            if not self.provider_flight_base_url.strip():
+                raise ValueError("PROVIDER_FLIGHT_BASE_URL is mandatory when ENV=production")
+            if self.push_mode == "fake":
+                raise ValueError("PUSH_MODE=fake is forbidden when ENV=production")
+            if self.push_mode == "vapid" and (
+                not self.vapid_private_key.strip()
+                or not self.vapid_public_key.strip()
+                or not self.vapid_subject.strip()
+            ):
+                raise ValueError(
+                    "VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT are mandatory "
+                    "when ENV=production and PUSH_MODE=vapid"
+                )
             if self.ai_mode == "fake":
                 raise ValueError("AI_MODE=fake is forbidden when ENV=production")
             if self.payment_provider == "sandbox":

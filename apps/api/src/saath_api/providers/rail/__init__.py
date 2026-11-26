@@ -41,25 +41,31 @@ def build_rail_router(settings: Settings, redis: Redis) -> ProviderRouter:
     timeout_seconds = max(0.5, settings.provider_rail_timeout_ms / 1000.0)
     providers: list[RailDataProvider] = []
     if settings.rail_provider_mode == "live":
-        if settings.provider_rail_a_base_url:
+        if settings.provider_rail_a_base_url.strip():
             providers.append(
                 RailProviderA(
-                    base_url=settings.provider_rail_a_base_url,
+                    base_url=settings.provider_rail_a_base_url.strip(),
                     api_key=settings.provider_rail_a_api_key,
                     timeout_seconds=timeout_seconds,
                 )
             )
-        if settings.provider_rail_b_base_url:
+        if settings.provider_rail_b_base_url.strip():
             providers.append(
                 RailProviderB(
-                    base_url=settings.provider_rail_b_base_url,
+                    base_url=settings.provider_rail_b_base_url.strip(),
                     api_key=settings.provider_rail_b_api_key,
                     timeout_seconds=timeout_seconds,
                 )
             )
         if not settings.is_production:
             providers.append(FakeRailProvider())
+        elif not providers:
+            raise RuntimeError(
+                "At least one live rail provider URL is required when ENV=production"
+            )
     else:
+        if settings.is_production:
+            raise RuntimeError("FakeRailProvider cannot be used when ENV=production")
         providers.append(FakeRailProvider())
 
     return ProviderRouter(

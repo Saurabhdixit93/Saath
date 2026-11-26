@@ -48,6 +48,16 @@ def test_offline_openapi_export_contains_auth_and_problem_detail(tmp_path: Path)
         "/v1/webhooks/payments",
         "/v1/b2b/keys",
         "/v1/b2b/stats",
+        "/v1/events/stream",
+        "/v1/conversations",
+        "/v1/conversations/{conversation_id}/messages",
+        "/v1/conversations/{conversation_id}/translate",
+        "/v1/users/block",
+        "/v1/reports",
+        "/v1/me/push-subscriptions",
+        "/v1/me/notification-prefs",
+        "/v1/webhooks/whatsapp",
+        "/v1/public/train/{train_no}/chart-time",
     ):
         assert expected in paths
 

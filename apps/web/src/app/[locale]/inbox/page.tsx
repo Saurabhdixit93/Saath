@@ -36,6 +36,18 @@ export default function InboxPage() {
     },
   });
 
+  const conversationsQuery = useQuery({
+    queryKey: ["conversations"],
+    enabled: authKind === "user",
+    queryFn: async () => {
+      const { data, error } = await apiClient.GET("/v1/conversations");
+      if (error || !data) {
+        throw new Error(parseProblemDetail(error)?.detail || tCommon("errorBody"));
+      }
+      return data;
+    },
+  });
+
   const confirmMutation = useMutation({
     mutationFn: async (args: {
       swapId: string;
@@ -65,11 +77,16 @@ export default function InboxPage() {
     },
   });
 
-  if (swapsQuery.isLoading || authKind === "uninitialized") {
+  if (
+    swapsQuery.isLoading ||
+    (authKind === "user" && conversationsQuery.isLoading) ||
+    authKind === "uninitialized"
+  ) {
     return <div className="h-48 animate-pulse rounded-[var(--radius)] bg-[var(--surface-2)]" />;
   }
 
   const allSwaps = swapsQuery.data?.items ?? [];
+  const conversations = conversationsQuery.data?.items ?? [];
   const confirmable = allSwaps.filter((s) => s.can_confirm_completion);
   const activeSwaps = allSwaps.filter((s) =>
     ["pending", "confirmed", "awaiting_confirmation"].includes(s.status)
@@ -78,7 +95,7 @@ export default function InboxPage() {
     (s) => !["pending", "confirmed", "awaiting_confirmation"].includes(s.status)
   );
 
-  if (allSwaps.length === 0) {
+  if (allSwaps.length === 0 && conversations.length === 0) {
     return (
       <EmptyState
         title={t("emptyTitle")}
@@ -199,6 +216,50 @@ export default function InboxPage() {
               </div>
             );
           })}
+        </section>
+      ) : null}
+
+      {conversations.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-base font-bold text-[var(--text)]">
+            {t("conversationsTitle")}
+          </h2>
+          <ul className="space-y-3">
+            {conversations.map((convo) => (
+              <li
+                key={convo.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)]"
+              >
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-bold text-[var(--text)]">
+                      {convo.partner_alias}
+                    </p>
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--secondary)]">
+                      {convo.unmasked ? t("unmaskedPill") : t("maskedPill")}
+                    </span>
+                  </div>
+                  <p
+                    className="text-xs text-[var(--text-muted)]"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {convo.service} · {convo.date}
+                  </p>
+                  {convo.last_message ? (
+                    <p className="line-clamp-1 text-xs text-[var(--text-muted)]">
+                      {convo.last_message.body}
+                    </p>
+                  ) : null}
+                </div>
+                <Link
+                  href={`/inbox/${convo.id}`}
+                  className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] bg-[var(--primary-btn-bg)] px-4 text-xs font-bold text-[var(--primary-ink)]"
+                >
+                  {t("openChatCta")}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 

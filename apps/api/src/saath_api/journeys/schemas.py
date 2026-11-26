@@ -190,3 +190,10 @@ class AircraftLayoutSummaryDTO(BaseModel):
 
 class FlightLayoutsResponse(BaseModel):
     layouts: list[AircraftLayoutSummaryDTO]
+
+
+class PublicChartTimeResponse(BaseModel):
+    train_no: str
+    date: date
+    chart_due_at: datetime
+    rule: str

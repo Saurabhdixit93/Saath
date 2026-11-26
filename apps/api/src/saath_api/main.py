@@ -18,15 +18,20 @@ from saath_api.core.redis import create_redis_client
 from saath_api.core.telemetry import configure_telemetry
 from saath_api.journeys.router import router as journeys_router
 from saath_api.matching.router import router as matching_router
+from saath_api.messaging.router import router as messaging_router
+from saath_api.notifications.router import router as notifications_router
 from saath_api.parties.router import router as parties_router
 from saath_api.pricing.router import build_pricing_router
+from saath_api.realtime.router import router as realtime_router
 from saath_api.swaps.router import router as swaps_router
 from saath_api.providers.flight.schedule import (
     FlightScheduleProvider,
     build_flight_schedule_provider,
 )
+from saath_api.providers.llm import LLMProvider, build_llm_provider
 from saath_api.providers.messaging import MessagingProvider, build_messaging_provider
 from saath_api.providers.payment import PaymentGatewayProvider, build_payment_provider
+from saath_api.providers.push import WebPushProvider, build_web_push_provider
 from saath_api.providers.rail import ProviderRouter, build_rail_router
 from saath_api.providers.turnstile import TurnstileVerifier, build_turnstile_verifier
 
@@ -40,6 +45,8 @@ def create_app(
     rail_router: ProviderRouter | None = None,
     flight_schedule_provider: FlightScheduleProvider | None = None,
     payment_provider: PaymentGatewayProvider | None = None,
+    llm_provider: LLMProvider | None = None,
+    web_push_provider: WebPushProvider | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     resolved_yaml = yaml_configs or load_yaml_configs(resolved_settings.config_dir)
@@ -100,6 +107,10 @@ def create_app(
     app.state.payment_provider = payment_provider or build_payment_provider(
         resolved_settings
     )
+    app.state.llm_provider = llm_provider or build_llm_provider(resolved_settings)
+    app.state.web_push_provider = web_push_provider or build_web_push_provider(
+        resolved_settings
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -132,6 +143,9 @@ def create_app(
     app.include_router(parties_router)
     app.include_router(matching_router)
     app.include_router(swaps_router)
+    app.include_router(realtime_router)
+    app.include_router(messaging_router)
+    app.include_router(notifications_router)
     app.include_router(build_pricing_router(resolved_settings))
 
     def custom_openapi() -> dict[str, object]:

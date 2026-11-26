@@ -60,6 +60,7 @@ async def client(
             await session.execute(
                 text(
                     "TRUNCATE TABLE "
+                    "reports, messages, conversation_members, conversations, "
                     "blocks, swap_cards, seat_locks, swap_participants, swap_proposals, "
                     "match_candidates, "
                     "b2b_api_keys, entitlements, payment_webhook_events, payment_orders, "

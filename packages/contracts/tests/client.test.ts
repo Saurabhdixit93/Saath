@@ -173,4 +173,92 @@ describe("createSaathClient 401 single-flight refresh & retry", () => {
     expect(problem?.status).toBe(409);
     expect(problem?.code).toBe("seat_locked");
   });
+
+  it("supports M4 conversations, messages, push-subscriptions, public chart-time, and 403/429 ProblemDetail", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(req.url);
+      if (url.pathname === "/v1/conversations" && req.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            id: "c1",
+            journey_instance_id: "j1",
+            service: "IR 12951",
+            date: "2026-12-01",
+            partner_alias: "Passenger B5-L",
+            partner_alias_ref: "ar_1234",
+            unmasked: false,
+            blocked: false,
+            participants: [],
+            last_message: null,
+            created_at: "2026-11-26T00:00:00Z",
+            updated_at: "2026-11-26T00:00:00Z",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.pathname === "/v1/conversations/c1/messages" && req.method === "POST") {
+        return new Response(
+          JSON.stringify({
+            type: "https://saath.app/problems/user_blocked",
+            title: "User Blocked",
+            status: 403,
+            detail: "You cannot message a blocked traveller.",
+            code: "user_blocked",
+          }),
+          { status: 403, headers: { "content-type": "application/problem+json" } }
+        );
+      }
+      if (url.pathname === "/v1/me/push-subscriptions") {
+        return new Response(JSON.stringify({ subscribed: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.pathname === "/v1/public/train/12009/chart-time") {
+        return new Response(
+          JSON.stringify({
+            train_no: "12009",
+            date: "2026-12-01",
+            chart_due_at: "2026-11-30T14:30:00Z",
+            rule: "dec2025_morning_prev_20_ist",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+
+    const client = createSaathClient({
+      baseUrl: "http://localhost:8000",
+      getAccessToken: () => "valid-jwt",
+      fetch: fetchMock as typeof globalThis.fetch,
+    });
+
+    const convoRes = await client.POST("/v1/conversations", {
+      body: { card_id: "card-1" },
+    });
+    expect(convoRes.data?.partner_alias).toBe("Passenger B5-L");
+    expect(convoRes.data?.unmasked).toBe(false);
+
+    const msgRes = await client.POST("/v1/conversations/{conversation_id}/messages", {
+      params: { path: { conversation_id: "c1" } },
+      body: { body: "Hi", client_id: "cli-1" },
+    });
+    expect(parseProblemDetail(msgRes.error)?.status).toBe(403);
+    expect(parseProblemDetail(msgRes.error)?.code).toBe("user_blocked");
+
+    const pushRes = await client.POST("/v1/me/push-subscriptions", {
+      body: {
+        endpoint: "https://push.example/sub/1",
+        keys: { p256dh: "p256dh-key-val", auth: "auth-key" },
+      },
+    });
+    expect(pushRes.data?.subscribed).toBe(true);
+
+    const chartRes = await client.GET("/v1/public/train/{train_no}/chart-time", {
+      params: { path: { train_no: "12009" }, query: { date: "2026-12-01" } },
+    });
+    expect(chartRes.data?.rule).toBe("dec2025_morning_prev_20_ist");
+  });
 });

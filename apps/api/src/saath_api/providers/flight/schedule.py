@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Protocol
+from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel
 
 from saath_api.core.config import Settings
-from saath_api.providers.base import ProviderError
+from saath_api.providers.base import CircuitBreaker, ProviderError, call_with_retry_and_timeout
 from saath_api.providers.flight.layouts import CARRIER_DEFAULT_LAYOUT
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -92,12 +92,30 @@ class FakeFlightScheduleProvider:
         )
 
 
+def _parse_utc_datetime(raw_value: object) -> datetime:
+    dt = datetime.fromisoformat(str(raw_value))
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 class LiveFlightScheduleProvider:
     name = "live_flight_schedule"
 
-    def __init__(self, *, base_url: str, api_key: str) -> None:
-        self._base_url = base_url.rstrip("/")
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        timeout_seconds: float = 3.0,
+    ) -> None:
+        cleaned_url = base_url.strip().rstrip("/")
+        if not cleaned_url:
+            raise ValueError("PROVIDER_FLIGHT_BASE_URL is required for LiveFlightScheduleProvider")
+        self._base_url = cleaned_url
         self._api_key = api_key
+        self._timeout_seconds = timeout_seconds
+        self._breaker = CircuitBreaker(name="flight_schedule")
 
     async def lookup_flight(
         self,
@@ -113,24 +131,48 @@ class LiveFlightScheduleProvider:
         headers = {"Accept": "application/json"}
         if self._api_key:
             headers["X-API-Key"] = self._api_key
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(
-                f"{self._base_url}/flights/{service_no.strip().upper()}",
-                params={"date": service_date.isoformat(), "carrier": carrier_code},
-                headers=headers,
-            )
-        if resp.status_code >= 400:
-            raise ProviderError(f"Flight schedule provider returned {resp.status_code}")
-        data = resp.json()
+
+        async def _fetch() -> dict[str, Any]:
+            try:
+                async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+                    resp = await client.get(
+                        f"{self._base_url}/flights/{service_no.strip().upper()}",
+                        params={"date": service_date.isoformat(), "carrier": carrier_code},
+                        headers=headers,
+                    )
+                if resp.status_code >= 400:
+                    raise ProviderError(f"Flight schedule provider returned {resp.status_code}")
+                payload = resp.json()
+            except ProviderError:
+                raise
+            except (httpx.HTTPError, ValueError) as exc:
+                raise ProviderError(f"Flight schedule lookup failed: {exc}") from exc
+
+            if not isinstance(payload, dict):
+                raise ProviderError("Flight schedule provider returned invalid JSON payload")
+            return payload
+
+        data = await call_with_retry_and_timeout(
+            _fetch,
+            timeout_seconds=self._timeout_seconds,
+            retries=1,
+            breaker=self._breaker,
+        )
         # TODO: adjust field mapping to live flight schedule provider contract.
+        try:
+            departure_at = _parse_utc_datetime(data["departure_at"])
+            arrival_at = _parse_utc_datetime(data["arrival_at"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ProviderError(f"Invalid flight schedule response payload: {exc}") from exc
+
         return FlightScheduleDTO(
             carrier_code=str(data.get("carrier_code") or carrier_code).upper(),
             service_no=str(data.get("service_no") or service_no).upper(),
             service_date=service_date,
             from_code=str(data.get("from_code") or from_code or "DEL").upper(),
             to_code=str(data.get("to_code") or to_code or "BOM").upper(),
-            departure_at=datetime.fromisoformat(str(data["departure_at"])),
-            arrival_at=datetime.fromisoformat(str(data["arrival_at"])),
+            departure_at=departure_at,
+            arrival_at=arrival_at,
             layout_ref=str(
                 data.get("layout_ref")
                 or CARRIER_DEFAULT_LAYOUT.get(carrier_code.upper(), "generic:3-3")
@@ -139,9 +181,17 @@ class LiveFlightScheduleProvider:
 
 
 def build_flight_schedule_provider(settings: Settings) -> FlightScheduleProvider:
-    if settings.flight_provider_mode == "live" and settings.provider_flight_base_url:
-        return LiveFlightScheduleProvider(
-            base_url=settings.provider_flight_base_url,
-            api_key=settings.provider_flight_api_key,
-        )
+    if settings.flight_provider_mode == "live":
+        base_url = settings.provider_flight_base_url.strip()
+        if base_url:
+            return LiveFlightScheduleProvider(
+                base_url=base_url,
+                api_key=settings.provider_flight_api_key,
+            )
+        if settings.is_production:
+            raise RuntimeError(
+                "PROVIDER_FLIGHT_BASE_URL is required when ENV=production and FLIGHT_PROVIDER_MODE=live"
+            )
+    elif settings.is_production:
+        raise RuntimeError("FakeFlightScheduleProvider cannot be used when ENV=production")
     return FakeFlightScheduleProvider()

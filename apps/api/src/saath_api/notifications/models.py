@@ -15,6 +15,12 @@ class NotificationsOutbox(Base):
     __tablename__ = "notifications_outbox"
     __table_args__ = (
         Index("ix_notifications_outbox_status_created", "status", "created_at"),
+        Index(
+            "ix_notifications_outbox_status_next_attempt",
+            "status",
+            "next_attempt_at",
+            "created_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -33,6 +39,10 @@ class NotificationsOutbox(Base):
     attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

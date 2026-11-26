@@ -67,6 +67,11 @@ services:
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+asyncpg://saath:saath@postgres:5432/saath}
       REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
       ENV: ${ENV:-development}
+      RAIL_PROVIDER_MODE: ${RAIL_PROVIDER_MODE:-fake}
+      WHATSAPP_MODE: ${WHATSAPP_MODE:-fake}
+      SMS_MODE: ${SMS_MODE:-fake}
+      PUSH_MODE: ${PUSH_MODE:-fake}
+      AI_MODE: ${AI_MODE:-fake}
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +90,11 @@ services:
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+asyncpg://saath:saath@postgres:5432/saath}
       REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
       ENV: ${ENV:-development}
+      RAIL_PROVIDER_MODE: ${RAIL_PROVIDER_MODE:-fake}
+      WHATSAPP_MODE: ${WHATSAPP_MODE:-fake}
+      SMS_MODE: ${SMS_MODE:-fake}
+      PUSH_MODE: ${PUSH_MODE:-fake}
+      AI_MODE: ${AI_MODE:-fake}
     depends_on:
       postgres:
         condition: service_healthy

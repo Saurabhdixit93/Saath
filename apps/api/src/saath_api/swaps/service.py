@@ -1373,6 +1373,18 @@ async def expire_pending_swaps(
             )
 
     await db.commit()
+
+    by_prop: dict[UUID, set[UUID]] = {}
+    for p in parts:
+        if p.user_id is not None:
+            by_prop.setdefault(p.proposal_id, set()).add(p.user_id)
+    for prop in expired:
+        await _publish_swap_updated(
+            redis,
+            proposal=prop,
+            user_ids=by_prop.get(prop.id, set()),
+        )
+
     from saath_api.matching.service import schedule_or_run_match_recompute
 
     for ji_id in ji_ids:

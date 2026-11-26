@@ -52,6 +52,7 @@ from saath_api.journeys.sms_parser import (
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.parties.models import Goal, Party, PartyMember
 from saath_api.pricing.models import Entitlement
+from saath_api.providers.base import ProviderError
 from saath_api.providers.flight.bcbp import BcbpParseError, parse_bcbp
 from saath_api.providers.flight.layouts import (
     AIRCRAFT_LAYOUTS,
@@ -665,13 +666,21 @@ async def _verify_flight(
 
         leg = parsed_bcbp.legs[req.leg_index]
         # Immediately drop passenger_name_hint after parsing (never stored/logged)
-        schedule = await flight_provider.lookup_flight(
-            carrier_code=leg.carrier_code,
-            service_no=leg.flight_no,
-            service_date=leg.service_date,
-            from_code=leg.from_iata,
-            to_code=leg.to_iata,
-        )
+        try:
+            schedule = await flight_provider.lookup_flight(
+                carrier_code=leg.carrier_code,
+                service_no=leg.flight_no,
+                service_date=leg.service_date,
+                from_code=leg.from_iata,
+                to_code=leg.to_iata,
+            )
+        except ProviderError as exc:
+            raise ProblemDetailError(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                code="flight_provider_unavailable",
+                title="Flight Schedule Unavailable",
+                detail="Flight schedule provider is temporarily unavailable.",
+            ) from exc
         resolved_layout = resolve_aircraft_layout(
             req.layout_ref or schedule.layout_ref, leg.carrier_code
         )
@@ -792,11 +801,19 @@ async def _verify_flight(
         carrier = match.group(1)
         svc_no = f"{carrier}{int(match.group(2))}" if match.group(2).isdigit() else f"{carrier}{match.group(2)}"
 
-        schedule = await flight_provider.lookup_flight(
-            carrier_code=carrier,
-            service_no=svc_no,
-            service_date=req.declared.date,
-        )
+        try:
+            schedule = await flight_provider.lookup_flight(
+                carrier_code=carrier,
+                service_no=svc_no,
+                service_date=req.declared.date,
+            )
+        except ProviderError as exc:
+            raise ProblemDetailError(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                code="flight_provider_unavailable",
+                title="Flight Schedule Unavailable",
+                detail="Flight schedule provider is temporarily unavailable.",
+            ) from exc
         resolved_layout = resolve_aircraft_layout(
             req.declared.layout_ref or req.layout_ref or schedule.layout_ref, carrier
         )
@@ -1260,8 +1277,8 @@ async def reverify_journey(
 
     now = datetime.now(UTC)
     booking.last_verified_at = now
-    changed = False
-    berth_changed_ids: list[UUID] = []
+    berth_changes: list[tuple[SeatHolder, str | None, str | None, UUID | None]] = []
+    new_chart_state: str | None = None
 
     if simulate_chart_change and not settings.is_production:
         sh_res = await db.execute(
@@ -1289,53 +1306,30 @@ async def reverify_journey(
                 target.seat_no = "15A" if target.seat_no != "15A" else "16A"
                 target.seat_type = "WS"
                 target.bay = 15 if target.seat_no == "15A" else 16
-            ji.chart_state = "final"
-            ji.match_version += 1
-            changed = True
-            berth_changed_ids.append(target.id)
-            db.add(
-                NotificationsOutbox(
-                    user_id=actor.user_id,
-                    event="BerthChanged",
-                    payload={
-                        "journey_instance_id": str(ji.id),
-                        "booking_id": str(booking.id),
-                        "seat_holder_id": str(target.id),
-                        "old_coach": old_coach,
-                        "old_seat": old_seat,
-                        "new_coach": target.coach,
-                        "new_seat": target.seat_no,
-                        "chart_state": ji.chart_state,
-                    },
-                    idempotency_key=f"berth_changed:{booking.id}:{ji.match_version}",
-                )
-            )
-            from saath_api.swaps.service import invalidate_swaps_for_berth_change
-
-            await invalidate_swaps_for_berth_change(
-                db=db,
-                journey_instance_id=ji.id,
-                affected_seat_holder_ids=berth_changed_ids,
-                reason="chart_berth_changed",
-            )
+            new_chart_state = "final"
+            berth_changes.append((target, old_coach, old_seat, actor.user_id))
     elif ji.mode == "train" and ji.chart_due_at is not None and now >= ji.chart_due_at:
         if ji.chart_state == "pending":
-            ji.chart_state = "final"
-            ji.match_version += 1
-            changed = True
+            new_chart_state = "final"
 
-    if changed or booking.last_verified_at == now:
+    if berth_changes or new_chart_state is not None:
+        from saath_api.journeys.chart_watcher import apply_journey_chart_update
+
+        await apply_journey_chart_update(
+            settings=settings,
+            db=db,
+            redis=redis,
+            journey_instance=ji,
+            new_chart_state=new_chart_state,
+            berth_changes=berth_changes,
+            commit=True,
+        )
+        await db.refresh(ji)
+        await db.refresh(booking)
+    else:
         await db.commit()
         await db.refresh(ji)
         await db.refresh(booking)
-
-    if changed:
-        from saath_api.matching.service import schedule_or_run_match_recompute
-
-        # Run inline (arq_pool=None) so chart/berth changes refresh matches immediately.
-        await schedule_or_run_match_recompute(
-            db=db, redis=redis, journey_instance_id=ji.id, settings=settings
-        )
 
     return await _build_journey_hub(
         db=db, yaml_configs=yaml_configs, actor=actor, ji=ji, booking=booking, party=party

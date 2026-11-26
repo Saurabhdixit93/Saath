@@ -17,6 +17,7 @@ import type { UserProfile } from "@saath/contracts";
 import { createBrowserApiClient } from "@/lib/api";
 import { publicEnv } from "@/lib/env";
 import { makeQueryClient } from "@/lib/query-client";
+import { RealtimeProvider } from "@/lib/realtime/RealtimeProvider";
 import { PhoneOtpSheet } from "./PhoneOtpSheet";
 
 export type AuthKind = "uninitialized" | "anon" | "user";
@@ -324,7 +325,9 @@ function InnerAuthProvider({ children }: { children: ReactNode }) {
         logout,
       }}
     >
-      {children}
+      <RealtimeProvider accessToken={accessToken}>
+        {children}
+      </RealtimeProvider>
       <PhoneOtpSheet open={otpOpen} onClose={() => setOtpOpen(false)} />
     </AuthContext.Provider>
   );

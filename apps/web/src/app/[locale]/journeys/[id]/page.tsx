@@ -7,6 +7,7 @@ import { Button, EmptyState, useToast } from "@saath/ui";
 import { parseProblemDetail, type PutGoalRequest } from "@saath/contracts";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/components/AuthProvider";
+import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { ChartStatusPill } from "@/components/ChartStatusPill";
 import { PartyAvatarRow } from "@/components/PartyAvatarRow";
 import { GoalCard } from "@/components/GoalCard";
@@ -26,6 +27,7 @@ export default function JourneyHubPage({
   const queryClient = useQueryClient();
   const { authKind, ensureAuth, apiClient } = useAuth();
   const { showToast } = useToast();
+  const { lastChartEventByJourney } = useRealtime();
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [presetGoalType, setPresetGoalType] = useState<string | undefined>(undefined);
@@ -181,6 +183,11 @@ export default function JourneyHubPage({
   }
 
   const hub = hubQuery.data;
+  const chartEvent = lastChartEventByJourney[journeyId];
+  const showLiveChartBanner =
+    hub.chart.state === "final" ||
+    hub.chart.state === "first" ||
+    Boolean(chartEvent);
   const primaryCoach = hub.party.members.find((m) => m.coach)?.coach ?? null;
   const mySeatNos = hub.party.members
     .map((m) => m.seat_no)
@@ -257,6 +264,18 @@ export default function JourneyHubPage({
           >
             {t("conflictFlagged")}
           </p>
+        ) : null}
+
+        {showLiveChartBanner ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-[var(--radius-sm)] border border-[var(--secondary)] bg-[var(--surface-2)] px-3 py-2 text-xs font-semibold text-[var(--text)]"
+          >
+            {chartEvent?.changed || hub.chart.state === "final"
+              ? t("chartLiveFinalBanner")
+              : t("chartLiveFirstBanner")}
+          </div>
         ) : null}
       </section>
 

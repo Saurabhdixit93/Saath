@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date
 from typing import Any
 
+import httpx
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
 from saath_api.auth.models import AuditLog
 from saath_api.journeys.models import Booking
+from saath_api.providers.base import ProviderError
+from saath_api.providers.flight import schedule as flight_schedule_mod
 from saath_api.providers.flight.bcbp import (
     BcbpParseError,
     parse_bcbp,
@@ -19,6 +22,7 @@ from saath_api.providers.flight.layouts import (
     resolve_aircraft_layout,
     validate_and_classify_flight_seat,
 )
+from saath_api.providers.flight.schedule import FlightScheduleDTO, LiveFlightScheduleProvider
 
 
 def _make_bcbp(
@@ -262,3 +266,150 @@ async def test_flight_bcbp_duplicate_claim_409_and_declared_fallback(
     assert declared_resp.status_code == 200
     assert declared_resp.json()["trust_tier"] == "declared"
     assert declared_resp.json()["chart"]["state"] == "na"
+
+
+class _FailingFlightProvider:
+    name = "failing_flight"
+
+    async def lookup_flight(
+        self,
+        *,
+        carrier_code: str,
+        service_no: str,
+        service_date: date,
+        from_code: str | None = None,
+        to_code: str | None = None,
+    ) -> FlightScheduleDTO:
+        _ = (carrier_code, service_no, service_date, from_code, to_code)
+        raise ProviderError("Upstream flight schedule service unavailable")
+
+
+async def test_live_flight_schedule_provider_validation_errors_and_utc_normalization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(ValueError, match="PROVIDER_FLIGHT_BASE_URL"):
+        LiveFlightScheduleProvider(base_url="   ", api_key="")
+
+    class _FakeResponse:
+        def __init__(self, status_code: int, payload: object) -> None:
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self) -> object:
+            return self._payload
+
+    def _patch_client(handler: Any) -> None:
+        class _FakeAsyncClient:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                _ = (args, kwargs)
+
+            async def __aenter__(self) -> _FakeAsyncClient:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                _ = args
+
+            async def get(self, url: str, **kwargs: Any) -> _FakeResponse:
+                return handler(url, **kwargs)  # type: ignore[no-any-return]
+
+        monkeypatch.setattr(flight_schedule_mod.httpx, "AsyncClient", _FakeAsyncClient)
+
+    provider = LiveFlightScheduleProvider(base_url="https://flight.api.example/", api_key="k")
+
+    # 1. Naive timestamps normalized to UTC
+    _patch_client(
+        lambda *_a, **_kw: _FakeResponse(
+            200,
+            {
+                "carrier_code": "6e",
+                "service_no": "6e215",
+                "from_code": "del",
+                "to_code": "bom",
+                "departure_at": "2026-12-01T10:30:00",
+                "arrival_at": "2026-12-01T12:45:00+05:30",
+            },
+        )
+    )
+    dto = await provider.lookup_flight(
+        carrier_code="6E",
+        service_no="6E215",
+        service_date=date(2026, 12, 1),
+    )
+    assert dto.departure_at.tzinfo == UTC
+    assert dto.arrival_at.tzinfo == UTC
+    assert dto.from_code == "DEL"
+
+    # 2. HTTP >= 400 -> ProviderError
+    _patch_client(lambda *_a, **_kw: _FakeResponse(503, {"error": "down"}))
+    with pytest.raises(ProviderError):
+        await provider.lookup_flight(
+            carrier_code="6E",
+            service_no="6E215",
+            service_date=date(2026, 12, 1),
+        )
+
+    # 3. httpx.HTTPError -> ProviderError
+    def _raise_connect(*_a: Any, **_kw: Any) -> Any:
+        raise httpx.ConnectError("connection refused")
+
+    _patch_client(_raise_connect)
+    with pytest.raises(ProviderError):
+        await provider.lookup_flight(
+            carrier_code="6E",
+            service_no="6E215",
+            service_date=date(2026, 12, 1),
+        )
+
+    # 4. Non-dict JSON & missing required timestamps -> ProviderError
+    _patch_client(lambda *_a, **_kw: _FakeResponse(200, ["not-a-dict"]))
+    with pytest.raises(ProviderError):
+        await provider.lookup_flight(
+            carrier_code="6E",
+            service_no="6E215",
+            service_date=date(2026, 12, 1),
+        )
+
+    _patch_client(lambda *_a, **_kw: _FakeResponse(200, {"carrier_code": "6E"}))
+    with pytest.raises(ProviderError):
+        await provider.lookup_flight(
+            carrier_code="6E",
+            service_no="6E215",
+            service_date=date(2026, 12, 1),
+        )
+
+
+async def test_verify_flight_maps_provider_error_to_503_unavailable(
+    client: AsyncClient,
+) -> None:
+    anon = (await client.post("/v1/auth/anonymous", json={"turnstile": "ok"})).json()["access"]
+    today_julian = f"{date.today().timetuple().tm_yday:03d}"
+    bcbp_raw = _make_bcbp(pnr="ERR999", julian=today_julian, seat="014C")
+
+    app: Any = client.app  # type: ignore[attr-defined]
+    orig_provider = app.state.flight_schedule_provider
+    app.state.flight_schedule_provider = _FailingFlightProvider()
+    try:
+        bcbp_resp = await client.post(
+            "/v1/journeys/verify",
+            headers={"Authorization": f"Bearer {anon}"},
+            json={"mode": "flight", "bcbp": bcbp_raw},
+        )
+        assert bcbp_resp.status_code == 503
+        assert bcbp_resp.json()["code"] == "flight_provider_unavailable"
+
+        declared_resp = await client.post(
+            "/v1/journeys/verify",
+            headers={"Authorization": f"Bearer {anon}"},
+            json={
+                "mode": "flight",
+                "declared": {
+                    "flight_no": "6E215",
+                    "date": date.today().isoformat(),
+                    "seat": "14C",
+                },
+            },
+        )
+        assert declared_resp.status_code == 503
+        assert declared_resp.json()["code"] == "flight_provider_unavailable"
+    finally:
+        app.state.flight_schedule_provider = orig_provider
