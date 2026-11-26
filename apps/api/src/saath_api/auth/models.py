@@ -56,12 +56,21 @@ class User(Base):
         Integer, nullable=False, server_default=text("0")
     )
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
+    leaderboard_opt_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     notification_prefs: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=text(
             "'{\"push\":true,\"whatsapp\":true,\"sms\":true,\"quiet_hours_enabled\":true}'::jsonb"
         ),
+    )
+    erasure_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    erased_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

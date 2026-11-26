@@ -8,13 +8,13 @@ from zoneinfo import ZoneInfo
 
 from fastapi import status
 from redis.asyncio import Redis
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.dependencies import Actor, authorize_resource_owner
 from saath_api.auth.models import AuditLog
 from saath_api.core.config import Settings, YamlConfigBundle
-from saath_api.core.crypto import hash_pnr
+from saath_api.core.crypto import hash_invite_token, hash_pnr
 from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import uuid7
 from saath_api.core.redis import SlidingWindowRateLimiter
@@ -996,6 +996,68 @@ async def verify_journey(
             idempotency_key=f"journey_verified:{booking.id}:{uuid7().hex[:12]}",
         )
     )
+
+    now = datetime.now(UTC)
+    if req.invite_token:
+        from saath_api.public.models import SeatInvite
+
+        invite_hash = hash_invite_token(req.invite_token, settings.invite_token_secret)
+        invite_res = await db.execute(
+            select(SeatInvite)
+            .where(
+                SeatInvite.token_hash == invite_hash,
+                SeatInvite.journey_instance_id == ji.id,
+                SeatInvite.expires_at > now,
+            )
+            .with_for_update()
+        )
+        invite_row = invite_res.scalar_one_or_none()
+        if invite_row is not None:
+            invite_row.conversions_count += 1
+            actor_label = (
+                f"user:{actor.user_id}"
+                if actor.kind == "user" and actor.user_id is not None
+                else f"anon:{actor.anon_id or 'unknown'}"
+            )
+            db.add(
+                AuditLog(
+                    actor=actor_label,
+                    action="seat_invite.converted",
+                    resource=f"seat_invite:{invite_row.id}",
+                    meta={
+                        "journey_instance_id": str(ji.id),
+                        "booking_id": str(booking.id),
+                        "open_to_help": req.open_to_help,
+                    },
+                )
+            )
+
+    if req.open_to_help and seat_holders:
+        await db.execute(
+            update(Goal)
+            .where(Goal.party_id == party.id, Goal.active.is_(True))
+            .values(active=False, updated_at=now)
+        )
+        db.add(
+            Goal(
+                id=uuid7(),
+                party_id=party.id,
+                goal_type="open_to_help",
+                movers=[sh.id for sh in seat_holders],
+                preferred_seats=[],
+                constraints={
+                    "women_only": False,
+                    "no_middle": False,
+                    "same_coach_only": False,
+                    "verified_only": False,
+                },
+                standing_offer={"give_to": "anyone"},
+                active=True,
+                updated_at=now,
+            )
+        )
+        ji.match_version += 1
+
     await db.commit()
     await db.refresh(ji)
     await db.refresh(booking)

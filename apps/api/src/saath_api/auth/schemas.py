@@ -69,6 +69,7 @@ class UserProfile(BaseModel):
     reliability_accepted: int
     reliability_completed: int
     status: Literal["active", "restricted", "banned", "deleted"]
+    leaderboard_opt_in: bool = False
     notification_channels: NotificationChannelsDTO = Field(
         default_factory=NotificationChannelsDTO
     )
@@ -105,4 +106,5 @@ class UpdateMeRequest(BaseModel):
     women_only_default: bool | None = None
     display_alias: str | None = Field(default=None, max_length=40)
     gender_self: Literal["female", "male", "other", "undisclosed"] | None = None
+    leaderboard_opt_in: bool | None = None
     notification_channels: NotificationChannelsPatchDTO | None = None

@@ -183,6 +183,8 @@ class ProviderRouter:
                 )
                 await self._cb.record_success(provider.name)
                 return res
+            except (RailPnrInvalidError, RailPnrFlushedError, RailPnrNotFoundError):
+                raise
             except Exception:
                 await self._cb.record_failure(provider.name)
         raise RailProviderError("Unable to fetch train composition.")
@@ -198,6 +200,8 @@ class ProviderRouter:
                 )
                 await self._cb.record_success(provider.name)
                 return res
+            except (RailPnrInvalidError, RailPnrFlushedError, RailPnrNotFoundError):
+                raise
             except Exception:
                 await self._cb.record_failure(provider.name)
         raise RailProviderError("Unable to fetch live train status.")

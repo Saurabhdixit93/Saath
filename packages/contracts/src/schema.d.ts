@@ -147,6 +147,27 @@ export interface paths {
   "/v1/public/train/{train_no}/chart-time": {
     get: operations["get_v1_public_train_chart_time_v1_public_train__train_no__chart_time_get"];
   };
+  "/v1/journeys/{journey_id}/invite-seat": {
+    post: operations["post_v1_journey_invite_seat_v1_journeys__journey_id__invite_seat_post"];
+  };
+  "/v1/public/invites/{token}": {
+    get: operations["get_v1_public_invite_v1_public_invites__token__get"];
+  };
+  "/v1/public/pnr-status/{pnr}": {
+    get: operations["get_v1_public_pnr_status_v1_public_pnr_status__pnr__get"];
+  };
+  "/v1/public/train/{train_no}/live": {
+    get: operations["get_v1_public_train_live_v1_public_train__train_no__live_get"];
+  };
+  "/v1/public/train/{train_no}/composition": {
+    get: operations["get_v1_public_train_composition_v1_public_train__train_no__composition_get"];
+  };
+  "/v1/public/flight-layouts": {
+    get: operations["get_v1_public_flight_layouts_v1_public_flight_layouts_get"];
+  };
+  "/v1/public/stats": {
+    get: operations["get_v1_public_stats_v1_public_stats_get"];
+  };
 }
 
 export interface components {
@@ -194,6 +215,7 @@ export interface components {
       reliability_accepted: number;
       reliability_completed: number;
       status: "active" | "restricted" | "banned" | "deleted";
+      leaderboard_opt_in?: boolean;
       notification_channels?: components["schemas"]["NotificationChannelsDTO"];
       created_at: string;
     };
@@ -219,6 +241,7 @@ export interface components {
       women_only_default?: boolean | null;
       display_alias?: string | null;
       gender_self?: "female" | "male" | "other" | "undisclosed" | null;
+      leaderboard_opt_in?: boolean | null;
       notification_channels?: components["schemas"]["NotificationChannelsPatchDTO"] | null;
     };
     ProblemFieldError: {
@@ -259,6 +282,8 @@ export interface components {
       leg_index?: number;
       declared?: components["schemas"]["FlightDeclaredInput"] | null;
       layout_ref?: string | null;
+      invite_token?: string | null;
+      open_to_help?: boolean;
     };
     SeatHolderOwnDTO: {
       id: string;
@@ -416,6 +441,8 @@ export interface components {
       leg_index?: number;
       declared?: components["schemas"]["FlightDeclaredInput"] | null;
       layout_ref?: string | null;
+      invite_token?: string | null;
+      open_to_help?: boolean;
     };
     PutGoalRequest: {
       goal_type:
@@ -803,6 +830,92 @@ export interface components {
       date: string;
       chart_due_at: string;
       rule: string;
+    };
+    CreateSeatInviteRequest: {
+      coach?: string | null;
+      seat_no?: string | null;
+    };
+    SeatInviteResponse: {
+      invite_url: string;
+      token: string;
+      expires_at: string;
+      message_en: string;
+      message_hi: string;
+      target_coach?: string | null;
+      target_seat_no?: string | null;
+      conversions_count?: number;
+    };
+    PublicSeatInviteResponse: {
+      valid?: boolean;
+      mode: "train" | "flight" | "bus";
+      carrier_code: string;
+      service_no: string;
+      service_date: string;
+      target_coach?: string | null;
+      target_seat_no?: string | null;
+      expires_at: string;
+      conversions_count?: number;
+    };
+    PublicPnrStatusItemDTO: {
+      pax_seq: number;
+      booking_status: string;
+      current_status: string;
+      coach?: string | null;
+      seat_type?: string | null;
+      bay?: number | null;
+    };
+    PublicPnrStatusResponse: {
+      train_no: string;
+      train_name: string;
+      service_date: string;
+      travel_class: string;
+      from_code: string;
+      to_code: string;
+      departure_at: string;
+      arrival_at: string;
+      chart_state: "pending" | "first" | "final" | "na";
+      chart_due_at?: string | null;
+      passenger_count: number;
+      confirmed_count: number;
+      rac_count: number;
+      wl_count: number;
+      coaches: string[];
+      berth_types: string[];
+      status_summary: components["schemas"]["PublicPnrStatusItemDTO"][];
+    };
+    PublicTrainLiveResponse: {
+      train_no: string;
+      train_name: string;
+      from_code?: string | null;
+      to_code?: string | null;
+      service_date: string;
+      current_station?: string | null;
+      delay_minutes: number;
+      chart_state: "pending" | "first" | "final" | "na";
+      chart_due_at?: string | null;
+    };
+    PublicTrainCoachDTO: {
+      coach: string;
+      travel_class: string;
+      position: number;
+      capacity: number;
+    };
+    PublicTrainCompositionResponse: {
+      train_no: string;
+      train_name: string;
+      from_code?: string | null;
+      to_code?: string | null;
+      service_date: string;
+      coaches: components["schemas"]["PublicTrainCoachDTO"][];
+    };
+    PublicFlightLayoutsResponse: {
+      items: components["schemas"]["AircraftLayoutSummaryDTO"][];
+    };
+    PublicStatsResponse: {
+      verified_journeys_count: number;
+      completed_swaps_count: number;
+      active_trains_catalog_count: number;
+      flight_layouts_count: number;
     };
   };
 }
@@ -1317,7 +1430,73 @@ export interface operations {
     };
     responses: {
       200: { content: { "application/json": components["schemas"]["PublicChartTimeResponse"] } };
+      404: ProblemResp;
       422: ProblemResp;
+    };
+  };
+  post_v1_journey_invite_seat_v1_journeys__journey_id__invite_seat_post: {
+    parameters: { path: { journey_id: string } };
+    requestBody: { content: { "application/json": components["schemas"]["CreateSeatInviteRequest"] } };
+    responses: {
+      201: { content: { "application/json": components["schemas"]["SeatInviteResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+    };
+  };
+  get_v1_public_invite_v1_public_invites__token__get: {
+    parameters: { path: { token: string } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PublicSeatInviteResponse"] } };
+      404: ProblemResp;
+      410: ProblemResp;
+    };
+  };
+  get_v1_public_pnr_status_v1_public_pnr_status__pnr__get: {
+    parameters: { path: { pnr: string } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PublicPnrStatusResponse"] } };
+      404: ProblemResp;
+      422: ProblemResp;
+      503: ProblemResp;
+    };
+  };
+  get_v1_public_train_live_v1_public_train__train_no__live_get: {
+    parameters: {
+      path: { train_no: string };
+      query?: { date?: string | null };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PublicTrainLiveResponse"] } };
+      404: ProblemResp;
+      422: ProblemResp;
+      503: ProblemResp;
+    };
+  };
+  get_v1_public_train_composition_v1_public_train__train_no__composition_get: {
+    parameters: {
+      path: { train_no: string };
+      query?: { date?: string | null };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PublicTrainCompositionResponse"] } };
+      404: ProblemResp;
+      422: ProblemResp;
+      503: ProblemResp;
+    };
+  };
+  get_v1_public_flight_layouts_v1_public_flight_layouts_get: {
+    parameters: {
+      query?: { airline?: string | null; aircraft?: string | null };
+    };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PublicFlightLayoutsResponse"] } };
+    };
+  };
+  get_v1_public_stats_v1_public_stats_get: {
+    responses: {
+      200: { content: { "application/json": components["schemas"]["PublicStatsResponse"] } };
     };
   };
 }

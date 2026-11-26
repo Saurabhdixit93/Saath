@@ -1,13 +1,14 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BottomSheet, Button, EmptyState, useToast } from "@saath/ui";
 import {
   parseProblemDetail,
   type CoachMapSeatDTO,
   type MatchCardDTO,
+  type SeatInviteResponse,
 } from "@saath/contracts";
 import { Link, useRouter } from "@/i18n/navigation";
 import { useAuth } from "@/components/AuthProvider";
@@ -26,6 +27,7 @@ export default function JourneyMatchesPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: journeyId } = use(params);
+  const locale = useLocale();
   const t = useTranslations("matches");
   const tCommon = useTranslations("common");
   const router = useRouter();
@@ -41,6 +43,7 @@ export default function JourneyMatchesPage({
   const [selectedMapSeat, setSelectedMapSeat] = useState<CoachMapSeatDTO | null>(null);
   const [notifySheetOpen, setNotifySheetOpen] = useState(false);
   const [subscribingPush, setSubscribingPush] = useState(false);
+  const [seatInvite, setSeatInvite] = useState<SeatInviteResponse | null>(null);
 
   useEffect(() => {
     if (authKind === "uninitialized") {
@@ -154,6 +157,26 @@ export default function JourneyMatchesPage({
     },
   });
 
+  const createSeatInviteMutation = useMutation({
+    mutationFn: async (target: { coach?: string; seat_no?: string }) => {
+      const { data, error } = await apiClient.POST("/v1/journeys/{journey_id}/invite-seat", {
+        params: { path: { journey_id: journeyId } },
+        body: target,
+      });
+      if (error || !data) {
+        throw new Error(parseProblemDetail(error)?.detail || t("inviteErrorToast"));
+      }
+      return data;
+    },
+    onSuccess: (created) => {
+      setSelectedMapSeat(null);
+      setSeatInvite(created);
+    },
+    onError: (err) => {
+      showToast({ variant: "error", message: err.message });
+    },
+  });
+
   if (hubQuery.isLoading || authKind === "uninitialized") {
     return (
       <div className="space-y-4" role="status">
@@ -233,6 +256,40 @@ export default function JourneyMatchesPage({
   const seatLinkedCard = selectedMapSeat?.card_id
     ? items.find((c) => c.card_id === selectedMapSeat.card_id) ?? null
     : null;
+  const activeCoach =
+    selectedCoach ||
+    coachMapQuery.data?.coach ||
+    hub.seat_holders.find((s) => s.coach)?.coach ||
+    undefined;
+
+  const shareMessage = seatInvite
+    ? locale === "hi"
+      ? seatInvite.message_hi
+      : seatInvite.message_en
+    : "";
+
+  const handleCopySeatInvite = async () => {
+    if (!seatInvite) return;
+    try {
+      await navigator.clipboard.writeText(shareMessage);
+      showToast({ variant: "success", message: t("inviteCopiedToast") });
+    } catch {
+      showToast({ variant: "info", message: seatInvite.invite_url });
+    }
+  };
+
+  const handleNativeShareInvite = async () => {
+    if (!seatInvite || typeof navigator.share !== "function") return;
+    try {
+      await navigator.share({
+        title: t("inviteSheetTitle"),
+        text: shareMessage,
+        url: seatInvite.invite_url,
+      });
+    } catch {
+      // User dismissed share sheet
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -248,12 +305,25 @@ export default function JourneyMatchesPage({
           <p className="text-sm text-[var(--text-muted)]">{t("subtitle")}</p>
         </div>
 
-        <Link
-          href={`/journeys/${journeyId}`}
-          className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
-        >
-          ← {tCommon("back")}
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            loading={createSeatInviteMutation.isPending}
+            onClick={() =>
+              createSeatInviteMutation.mutate(activeCoach ? { coach: activeCoach } : {})
+            }
+          >
+            {activeCoach
+              ? t("inviteCoachCta", { coach: activeCoach })
+              : t("emptyInviteCta")}
+          </Button>
+          <Link
+            href={`/journeys/${journeyId}`}
+            className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
+          >
+            ← {tCommon("back")}
+          </Link>
+        </div>
       </div>
 
       <div
@@ -333,12 +403,17 @@ export default function JourneyMatchesPage({
               }
               secondaryAction={
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/journeys/${journeyId}`}
-                    className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--text)]"
+                  <Button
+                    variant="secondary"
+                    loading={createSeatInviteMutation.isPending}
+                    onClick={() =>
+                      createSeatInviteMutation.mutate(
+                        activeCoach ? { coach: activeCoach } : {}
+                      )
+                    }
                   >
                     {t("emptyInviteCta")}
-                  </Link>
+                  </Button>
                   <Button
                     variant="secondary"
                     onClick={() => setNotifySheetOpen(true)}
@@ -411,7 +486,58 @@ export default function JourneyMatchesPage({
               >
                 {t("requestSwapCta")}
               </Button>
+            ) : selectedMapSeat.state === "unknown" || selectedMapSeat.state === "occupied" ? (
+              <Button
+                variant="secondary"
+                className="w-full"
+                loading={createSeatInviteMutation.isPending}
+                onClick={() =>
+                  createSeatInviteMutation.mutate({
+                    coach: coachMapQuery.data?.coach || activeCoach,
+                    seat_no: selectedMapSeat.seat_no,
+                  })
+                }
+              >
+                {t("inviteSeatCta", { seat: selectedMapSeat.seat_no })}
+              </Button>
             ) : null}
+          </div>
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        open={Boolean(seatInvite)}
+        onClose={() => setSeatInvite(null)}
+        title={t("inviteSheetTitle")}
+        description={t("inviteSheetBody")}
+        closeLabel={tCommon("close")}
+      >
+        {seatInvite ? (
+          <div className="space-y-4">
+            <div className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] p-3 text-xs text-[var(--text)]">
+              <p className="break-all font-semibold" style={{ fontFamily: "var(--font-mono)" }}>
+                {seatInvite.invite_url}
+              </p>
+              <p className="mt-2 leading-relaxed text-[var(--text-muted)]">{shareMessage}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(shareMessage)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-[48px] flex-1 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--primary-btn-bg)] px-4 text-sm font-bold text-[var(--primary-ink)]"
+              >
+                {t("inviteWhatsappCta")}
+              </a>
+              <Button variant="secondary" onClick={() => void handleCopySeatInvite()}>
+                {t("inviteCopyCta")}
+              </Button>
+              {typeof navigator !== "undefined" && typeof navigator.share === "function" ? (
+                <Button variant="ghost" onClick={() => void handleNativeShareInvite()}>
+                  {t("inviteNativeShareCta")}
+                </Button>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </BottomSheet>

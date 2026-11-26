@@ -10,7 +10,7 @@ import {
 import { useTranslations } from "next-intl";
 import { BottomSheet, Button, EmptyState, useToast } from "@saath/ui";
 import { parseProblemDetail } from "@saath/contracts";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { parsePnrInput } from "@/lib/pnr";
 import { useAuth } from "./AuthProvider";
 import {
@@ -25,6 +25,7 @@ const MODES: ModeTab[] = ["train", "flight", "bus"];
 
 export function HomeTabs() {
   const t = useTranslations("home");
+  const tSeo = useTranslations("seo");
   const tCommon = useTranslations("common");
   const router = useRouter();
   const { ensureAuth, apiClient } = useAuth();
@@ -356,9 +357,43 @@ export function HomeTabs() {
         title={sheetCopy?.title ?? ""}
         closeLabel={tCommon("close")}
       >
-        <p className="text-sm leading-relaxed text-[var(--text-muted)]">
-          {sheetCopy?.body}
-        </p>
+        <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-[var(--text-muted)]">
+            {sheetCopy?.body}
+          </p>
+          {infoSheet === "tools" ? (
+            <nav className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
+              <Link
+                href="/pnr-status"
+                onClick={() => setInfoSheet(null)}
+                className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm font-semibold text-[var(--text)]"
+              >
+                {tSeo("toolsLinkPnr")}
+              </Link>
+              <Link
+                href="/train/12951/live"
+                onClick={() => setInfoSheet(null)}
+                className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm font-semibold text-[var(--text)]"
+              >
+                {tSeo("toolsLinkTrain")}
+              </Link>
+              <Link
+                href="/flights/6E/A320neo/seat-map"
+                onClick={() => setInfoSheet(null)}
+                className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm font-semibold text-[var(--text)]"
+              >
+                {tSeo("toolsLinkFlight")}
+              </Link>
+              <Link
+                href="/blog/how-seat-swapping-works-in-indian-railways"
+                onClick={() => setInfoSheet(null)}
+                className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm font-semibold text-[var(--text)]"
+              >
+                {tSeo("toolsLinkBlog")}
+              </Link>
+            </nav>
+          ) : null}
+        </div>
       </BottomSheet>
     </div>
   );

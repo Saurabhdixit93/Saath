@@ -15,6 +15,7 @@ from saath_api.providers.rail.protocol import (
     RailPnrInvalidError,
     RailPnrNotFoundError,
 )
+from saath_api.public.train_catalog import get_train_entry, is_valid_train_no
 
 IST = ZoneInfo("Asia/Kolkata")
 _PNR_RE = re.compile(r"^[0-9]{10}$")
@@ -289,7 +290,7 @@ class FakeRailProvider:
         cleaned = pnr.strip()
         if not _PNR_RE.fullmatch(cleaned):
             raise RailPnrInvalidError("Enter a valid 10-digit Indian Railways PNR.")
-        if cleaned in {"0000000000", "9999999999"}:
+        if cleaned in {"0000000000", "9999999999", "9999999991", "9999999992"}:
             raise RailPnrFlushedError(
                 "This PNR looks flushed or cancelled. Double-check the 10 digits from your SMS."
             )
@@ -477,6 +478,8 @@ class FakeRailProvider:
     async def get_composition(self, train_no: str, service_date: date) -> list[CoachDTO]:
         _ = service_date
         tno = train_no.strip()
+        if not is_valid_train_no(tno):
+            raise RailPnrNotFoundError(f"Train {tno} was not found.")
         if tno == "12627":
             cap = default_capacity_for_class("SL")
             return [
@@ -489,6 +492,36 @@ class FakeRailProvider:
                 CoachDTO(coach=f"C{i}", travel_class="CC", position=i, capacity=cap)
                 for i in range(1, 5)
             ]
+        entry = get_train_entry(tno)
+        if entry and entry.classes:
+            coaches: list[CoachDTO] = []
+            pos = 1
+            for cls in entry.classes:
+                normalized = cls if cls in ("1A", "2A", "3A", "3E", "SL", "CC", "EC", "2S") else "3A"
+                cap = default_capacity_for_class(normalized)  # type: ignore[arg-type]
+                prefix = {
+                    "1A": "H",
+                    "2A": "A",
+                    "3A": "B",
+                    "3E": "M",
+                    "SL": "S",
+                    "CC": "C",
+                    "EC": "E",
+                    "2S": "D",
+                }[normalized]
+                count = 1 if normalized in ("1A", "EC") else (2 if normalized == "2A" else 4)
+                for idx in range(1, count + 1):
+                    coaches.append(
+                        CoachDTO(
+                            coach=f"{prefix}{idx}",
+                            travel_class=normalized,
+                            position=pos,
+                            capacity=cap,
+                        )
+                    )
+                    pos += 1
+            if coaches:
+                return coaches
         cap = default_capacity_for_class("3A")
         return [
             CoachDTO(coach=f"B{i}", travel_class="3A", position=i, capacity=cap)
@@ -496,10 +529,16 @@ class FakeRailProvider:
         ]
 
     async def get_live_status(self, train_no: str, service_date: date) -> LiveStatusDTO:
+        tno = train_no.strip()
+        if not is_valid_train_no(tno):
+            raise RailPnrNotFoundError(f"Train {tno} was not found.")
+        entry = get_train_entry(tno)
+        current_station = entry.from_code if entry else "NDLS"
+        delay = (int(tno) % 15) if tno != "12951" else 0
         return LiveStatusDTO(
-            train_no=train_no.strip(),
+            train_no=tno,
             service_date=service_date,
-            current_station="NDLS",
-            delay_minutes=0,
+            current_station=current_station,
+            delay_minutes=delay,
             chart_state="pending",
         )

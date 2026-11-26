@@ -22,6 +22,7 @@ from saath_api.messaging.router import router as messaging_router
 from saath_api.notifications.router import router as notifications_router
 from saath_api.parties.router import router as parties_router
 from saath_api.pricing.router import build_pricing_router
+from saath_api.public.router import router as public_router
 from saath_api.realtime.router import router as realtime_router
 from saath_api.swaps.router import router as swaps_router
 from saath_api.providers.flight.schedule import (
@@ -147,6 +148,7 @@ def create_app(
     app.include_router(messaging_router)
     app.include_router(notifications_router)
     app.include_router(build_pricing_router(resolved_settings))
+    app.include_router(public_router)
 
     def custom_openapi() -> dict[str, object]:
         if app.openapi_schema is not None:

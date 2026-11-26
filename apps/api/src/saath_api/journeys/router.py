@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, Request, status
+from fastapi import APIRouter, Depends, Header, Request, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,13 +12,11 @@ from saath_api.core.config import YamlConfigBundle
 from saath_api.core.db import get_db
 from saath_api.core.errors import openapi_error_responses
 from saath_api.core.redis import get_redis
-from saath_api.journeys.chart_watcher import compute_public_train_chart_time
 from saath_api.journeys.schemas import (
     DeleteJourneyResponse,
     FlightLayoutsResponse,
     JourneyHubResponse,
     JourneyListResponse,
-    PublicChartTimeResponse,
     VerifyJourneyRequest,
     VerifyJourneyResponse,
 )
@@ -55,25 +52,6 @@ def _get_flight_provider(request: Request) -> FlightScheduleProvider:
 )
 async def get_v1_flight_layouts() -> FlightLayoutsResponse:
     return FlightLayoutsResponse(layouts=list_flight_layouts())
-
-
-@router.get(
-    "/public/train/{train_no}/chart-time",
-    response_model=PublicChartTimeResponse,
-    tags=["public"],
-    responses=openapi_error_responses(status.HTTP_422_UNPROCESSABLE_ENTITY),
-)
-async def get_v1_public_train_chart_time(
-    train_no: str,
-    request: Request,
-    date_param: date | None = Query(default=None, alias="date"),
-) -> PublicChartTimeResponse:
-    target_date = date_param or date.today()
-    return compute_public_train_chart_time(
-        train_no=train_no,
-        service_date=target_date,
-        yaml_configs=_get_yaml_configs(request),
-    )
 
 
 @router.post(

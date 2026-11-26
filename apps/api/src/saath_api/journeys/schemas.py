@@ -26,6 +26,8 @@ class VerifyJourneyRequest(BaseModel):
     leg_index: int = Field(default=0, ge=0, le=3)
     declared: FlightDeclaredInput | None = None
     layout_ref: str | None = Field(default=None, max_length=40)
+    invite_token: str | None = Field(default=None, min_length=8, max_length=128)
+    open_to_help: bool = False
 
 
 class SeatHolderOwnDTO(BaseModel):

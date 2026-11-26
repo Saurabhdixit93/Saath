@@ -82,6 +82,16 @@ export type PushSubscriptionRequest = components["schemas"]["PushSubscriptionReq
 export type PushSubscriptionResponse = components["schemas"]["PushSubscriptionResponse"];
 export type WhatsAppWebhookResponse = components["schemas"]["WhatsAppWebhookResponse"];
 export type PublicChartTimeResponse = components["schemas"]["PublicChartTimeResponse"];
+export type CreateSeatInviteRequest = components["schemas"]["CreateSeatInviteRequest"];
+export type SeatInviteResponse = components["schemas"]["SeatInviteResponse"];
+export type PublicSeatInviteResponse = components["schemas"]["PublicSeatInviteResponse"];
+export type PublicPnrStatusItemDTO = components["schemas"]["PublicPnrStatusItemDTO"];
+export type PublicPnrStatusResponse = components["schemas"]["PublicPnrStatusResponse"];
+export type PublicTrainLiveResponse = components["schemas"]["PublicTrainLiveResponse"];
+export type PublicTrainCoachDTO = components["schemas"]["PublicTrainCoachDTO"];
+export type PublicTrainCompositionResponse = components["schemas"]["PublicTrainCompositionResponse"];
+export type PublicFlightLayoutsResponse = components["schemas"]["PublicFlightLayoutsResponse"];
+export type PublicStatsResponse = components["schemas"]["PublicStatsResponse"];
 
 export interface SaathClientOptions {
   baseUrl: string;

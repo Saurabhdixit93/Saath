@@ -16,6 +16,7 @@ from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
 from saath_api.journeys.schemas import PublicChartTimeResponse
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.providers.rail.router import ProviderRouter
+from saath_api.public.train_catalog import get_train_entry
 from saath_api.realtime.pubsub import publish_user_event
 from saath_api.swaps.models import SwapParticipant, SwapProposal
 
@@ -41,8 +42,12 @@ def compute_public_train_chart_time(
     yaml_configs: YamlConfigBundle,
 ) -> PublicChartTimeResponse:
     cleaned = train_no.strip().upper()
+    entry = get_train_entry(cleaned)
     if cleaned in _KNOWN_TRAIN_DEPARTURE_IST:
         dep_clock = _KNOWN_TRAIN_DEPARTURE_IST[cleaned]
+    elif entry is not None:
+        hh, mm = entry.departure_ist.split(":", 1)
+        dep_clock = time(int(hh), int(mm))
     elif cleaned.startswith(("120", "224", "20")):
         dep_clock = time(7, 30)
     else:

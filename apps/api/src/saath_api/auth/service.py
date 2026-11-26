@@ -20,6 +20,7 @@ from saath_api.auth.dependencies import Actor, authorize
 from saath_api.auth.models import AuditLog, Device, RefreshToken, User
 from saath_api.journeys.models import Booking, SeatHolder
 from saath_api.parties.models import Party
+from saath_api.public.models import SeatInvite
 from saath_api.auth.schemas import (
     AnonymousAuthResponse,
     OtpStartRequest,
@@ -275,6 +276,11 @@ async def merge_anonymous_identity(
         update(Party)
         .where(Party.leader_anon_id == anon_id)
         .values(leader_user_id=user_id, leader_anon_id=None)
+    )
+    await db.execute(
+        update(SeatInvite)
+        .where(SeatInvite.inviter_anon_id == anon_id)
+        .values(inviter_user_id=user_id, inviter_anon_id=None)
     )
 
     await redis.set(f"anon:merged:{anon_id}", str(user_id), ex=86400)
@@ -581,6 +587,8 @@ async def update_me(*, db: AsyncSession, actor: Actor, req: UpdateMeRequest) -> 
         user.display_alias = cleaned_alias or None
     if req.gender_self is not None:
         user.gender_self = req.gender_self
+    if req.leaderboard_opt_in is not None:
+        user.leaderboard_opt_in = req.leaderboard_opt_in
     if req.notification_channels is not None:
         merged = dict(user.notification_channels)
         patch = req.notification_channels
