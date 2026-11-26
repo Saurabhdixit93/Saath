@@ -9,7 +9,7 @@ from uuid import UUID
 import structlog
 from fastapi import status
 from redis.asyncio import Redis
-from sqlalchemy import bindparam, delete, select, text, update
+from sqlalchemy import bindparam, delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -17,11 +17,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.dependencies import Actor
 from saath_api.auth.models import User
-from saath_api.core.config import Settings, YamlConfigBundle
+from saath_api.core.config import Settings, YamlConfigBundle, load_yaml_configs
 from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import uuid7
 from saath_api.core.redis import SlidingWindowRateLimiter
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
+from saath_api.karma.service import (
+    credit_for_completed_proposal,
+    evaluate_and_award_badges,
+    record_pending_for_proposal,
+    reverse_for_proposal,
+)
 from saath_api.matching.graph import make_pseudonymous_alias
 from saath_api.matching.models import Block, MatchCandidate
 from saath_api.notifications.models import NotificationsOutbox
@@ -223,7 +229,7 @@ async def _build_swap_detail_dto(
     )
     my_post_confirm = next((p.post_confirm for p in my_parts if p.post_confirm), None)
     can_confirm = (
-        proposal.status in ("confirmed", "awaiting_confirmation")
+        proposal.status in ("confirmed", "awaiting_confirmation", "completed")
         and bool(my_parts)
         and my_post_confirm is None
     )
@@ -570,6 +576,7 @@ async def accept_swap(
     actor: Actor,
     swap_id: UUID,
     req: AcceptSwapRequest,
+    yaml_configs: YamlConfigBundle | None = None,
 ) -> SwapDetailDTO:
     if actor.kind != "user" or actor.user_id is None:
         raise ProblemDetailError(
@@ -731,6 +738,14 @@ async def accept_swap(
                     )
                 )
             ).scalar_one()
+
+            await record_pending_for_proposal(
+                db=db,
+                proposal=proposal,
+                parts=parts,
+                ji=ji,
+                yaml_configs=yaml_configs or load_yaml_configs(settings.config_dir),
+            )
 
             public_code = generate_public_code()
             card_participants = [
@@ -1056,6 +1071,7 @@ async def confirm_completion(
     actor: Actor,
     swap_id: UUID,
     req: ConfirmCompletionRequest,
+    yaml_configs: YamlConfigBundle | None = None,
 ) -> SwapDetailDTO:
     if actor.kind != "user" or actor.user_id is None:
         raise ProblemDetailError(
@@ -1065,6 +1081,7 @@ async def confirm_completion(
             detail="Verify your phone number to confirm swap completion.",
         )
 
+    participant_user_ids: set[UUID] = set()
     try:
         await _begin_serializable(db)
         proposal, parts = await _require_proposal_access(db, swap_id, actor)
@@ -1077,7 +1094,7 @@ async def confirm_completion(
                 detail="Only swap participants can confirm completion.",
             )
 
-        if proposal.status not in ("confirmed", "awaiting_confirmation"):
+        if proposal.status not in ("confirmed", "awaiting_confirmation", "completed"):
             raise ProblemDetailError(
                 status_code=status.HTTP_409_CONFLICT,
                 code="invalid_swap_state",
@@ -1094,13 +1111,22 @@ async def confirm_completion(
                     detail="You have already submitted a different completion answer.",
                 )
 
+        if proposal.status == "completed" and all(
+            p.post_confirm == req.answer for p in my_parts
+        ):
+            await db.rollback()
+            return await _build_swap_detail_dto(db, proposal, actor)
+
+        was_already_completed = proposal.status == "completed"
         expected_version = proposal.version
         upd = await db.execute(
             update(SwapProposal)
             .where(
                 SwapProposal.id == proposal.id,
                 SwapProposal.version == expected_version,
-                SwapProposal.status.in_(("confirmed", "awaiting_confirmation")),
+                SwapProposal.status.in_(
+                    ("confirmed", "awaiting_confirmation", "completed")
+                ),
             )
             .values(version=expected_version + 1)
         )
@@ -1122,6 +1148,21 @@ async def confirm_completion(
 
         if req.answer in ("no", "did_not_board"):
             proposal.status = "not_completed"
+            if was_already_completed and participant_user_ids:
+                await db.execute(
+                    update(User)
+                    .where(User.id.in_(participant_user_ids))
+                    .values(
+                        reliability_completed=func.greatest(
+                            0, User.reliability_completed - 1
+                        )
+                    )
+                )
+            await reverse_for_proposal(
+                db=db,
+                proposal_id=proposal.id,
+                reason=f"dispute:{req.answer}",
+            )
             for uid in participant_user_ids:
                 db.add(
                     NotificationsOutbox(
@@ -1131,28 +1172,56 @@ async def confirm_completion(
                         idempotency_key=f"swap_not_completed:{proposal.id}:{uid}",
                     )
                 )
-        elif all(p.post_confirm == "yes" for p in parts):
+        elif was_already_completed:
             proposal.status = "completed"
-            if participant_user_ids:
+        else:
+            ji = (
                 await db.execute(
-                    update(User)
-                    .where(User.id.in_(participant_user_ids))
-                    .values(reliability_completed=User.reliability_completed + 1)
-                )
-            for uid in participant_user_ids:
-                db.add(
-                    NotificationsOutbox(
-                        user_id=uid,
-                        event="SwapCompleted",
-                        payload={
-                            "swap_id": str(proposal.id),
-                            "journey_instance_id": str(proposal.journey_instance_id),
-                        },
-                        idempotency_key=f"swap_completed:{proposal.id}:{uid}",
+                    select(JourneyInstance).where(
+                        JourneyInstance.id == proposal.journey_instance_id
                     )
                 )
-        else:
-            proposal.status = "awaiting_confirmation"
+            ).scalar_one()
+            all_yes = all(p.post_confirm == "yes" for p in parts)
+            one_yes = any(p.post_confirm == "yes" for p in parts)
+            chart_corroborates = ji.chart_state == "final" and not any(
+                p.post_confirm in ("no", "did_not_board") for p in parts
+            )
+            if all_yes or (one_yes and chart_corroborates):
+                proposal.status = "completed"
+                if participant_user_ids:
+                    await db.execute(
+                        update(User)
+                        .where(User.id.in_(participant_user_ids))
+                        .values(reliability_completed=User.reliability_completed + 1)
+                    )
+                await credit_for_completed_proposal(
+                    db=db,
+                    proposal=proposal,
+                    parts=parts,
+                    ji=ji,
+                    yaml_configs=yaml_configs,
+                )
+                await evaluate_and_award_badges(
+                    db=db,
+                    proposal=proposal,
+                    parts=parts,
+                    ji=ji,
+                )
+                for uid in participant_user_ids:
+                    db.add(
+                        NotificationsOutbox(
+                            user_id=uid,
+                            event="SwapCompleted",
+                            payload={
+                                "swap_id": str(proposal.id),
+                                "journey_instance_id": str(proposal.journey_instance_id),
+                            },
+                            idempotency_key=f"swap_completed:{proposal.id}:{uid}",
+                        )
+                    )
+            else:
+                proposal.status = "awaiting_confirmation"
 
         await db.commit()
     except ProblemDetailError:

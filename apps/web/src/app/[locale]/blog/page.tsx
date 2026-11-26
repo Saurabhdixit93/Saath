@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { routing } from "@/i18n/routing";
 import { Link } from "@/i18n/navigation";
 import { JsonLd } from "@/components/JsonLd";
 import { BLOG_ARTICLES } from "@/lib/blogArticles";
@@ -18,9 +20,10 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "seo.blog" });
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  const t = await getTranslations({ locale: appLocale, namespace: "seo.blog" });
   return buildMetadata({
-    locale,
+    locale: appLocale,
     path: "/blog",
     title: t("indexMetaTitle"),
     description: t("indexMetaDescription"),
@@ -33,15 +36,16 @@ export default async function BlogIndexPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  setRequestLocale(locale);
-  const t = await getTranslations({ locale, namespace: "seo.blog" });
-  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  setRequestLocale(appLocale);
+  const t = await getTranslations({ locale: appLocale, namespace: "seo.blog" });
+  const tCommon = await getTranslations({ locale: appLocale, namespace: "common" });
 
   const baseUrl = getAppBaseUrl();
-  const isHi = locale === "hi";
+  const isHi = appLocale === "hi";
   const jsonLd = buildBreadcrumbJsonLd([
-    { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(locale, "/")}` },
-    { name: t("indexTitle"), url: `${baseUrl}${buildLocalizedPath(locale, "/blog")}` },
+    { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(appLocale, "/")}` },
+    { name: t("indexTitle"), url: `${baseUrl}${buildLocalizedPath(appLocale, "/blog")}` },
   ]);
 
   return (

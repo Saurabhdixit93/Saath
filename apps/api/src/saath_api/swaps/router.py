@@ -121,6 +121,7 @@ async def post_v1_swap_accept(
 ) -> SwapDetailDTO:
     return await accept_swap(
         settings=get_request_settings(request),
+        yaml_configs=_get_yaml_configs(request),
         db=db,
         redis=redis,
         actor=actor,
@@ -199,11 +200,13 @@ async def post_v1_swap_cancel(
 async def post_v1_swap_confirm_completion(
     swap_id: UUID,
     body: ConfirmCompletionRequest,
+    request: Request,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> SwapDetailDTO:
     return await confirm_completion(
+        yaml_configs=_get_yaml_configs(request),
         db=db,
         redis=redis,
         actor=actor,

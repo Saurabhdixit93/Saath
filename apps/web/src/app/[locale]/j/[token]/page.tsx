@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import type { PublicSeatInviteResponse } from "@saath/contracts";
+import { routing } from "@/i18n/routing";
 import { fetchPublicJson } from "@/lib/serverApi";
 import { buildMetadata } from "@/lib/seo";
 import { InviteLandingClient } from "./InviteLandingClient";
@@ -31,7 +33,8 @@ export default async function SeatInviteLandingPage({
   params: Promise<{ locale: string; token: string }>;
 }) {
   const { locale, token } = await params;
-  setRequestLocale(locale);
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  setRequestLocale(appLocale);
 
   const res = await fetchPublicJson<PublicSeatInviteResponse>(
     `/v1/public/invites/${encodeURIComponent(token)}`,

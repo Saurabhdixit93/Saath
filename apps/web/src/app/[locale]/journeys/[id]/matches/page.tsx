@@ -259,7 +259,7 @@ export default function JourneyMatchesPage({
   const activeCoach =
     selectedCoach ||
     coachMapQuery.data?.coach ||
-    hub.seat_holders.find((s) => s.coach)?.coach ||
+    hub.seat_holders?.find((s) => s.coach)?.coach ||
     undefined;
 
   const shareMessage = seatInvite

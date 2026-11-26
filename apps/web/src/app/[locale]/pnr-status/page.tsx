@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { routing } from "@/i18n/routing";
 import { Link } from "@/i18n/navigation";
 import { JsonLd } from "@/components/JsonLd";
 import {
@@ -19,9 +21,10 @@ export async function generateMetadata({
   params: Promise<{ locale: string }>;
 }): Promise<Metadata> {
   const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "seo.pnrStatus" });
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  const t = await getTranslations({ locale: appLocale, namespace: "seo.pnrStatus" });
   return buildMetadata({
-    locale,
+    locale: appLocale,
     path: "/pnr-status",
     title: t("metaTitle"),
     description: t("metaDescription"),
@@ -34,10 +37,11 @@ export default async function PublicPnrStatusPage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  setRequestLocale(locale);
-  const t = await getTranslations({ locale, namespace: "seo.pnrStatus" });
-  const tSeo = await getTranslations({ locale, namespace: "seo" });
-  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  setRequestLocale(appLocale);
+  const t = await getTranslations({ locale: appLocale, namespace: "seo.pnrStatus" });
+  const tSeo = await getTranslations({ locale: appLocale, namespace: "seo" });
+  const tCommon = await getTranslations({ locale: appLocale, namespace: "common" });
 
   const baseUrl = getAppBaseUrl();
   const faqs = [
@@ -46,8 +50,8 @@ export default async function PublicPnrStatusPage({
   ];
   const jsonLd = [
     buildBreadcrumbJsonLd([
-      { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(locale, "/")}` },
-      { name: t("title"), url: `${baseUrl}${buildLocalizedPath(locale, "/pnr-status")}` },
+      { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(appLocale, "/")}` },
+      { name: t("title"), url: `${baseUrl}${buildLocalizedPath(appLocale, "/pnr-status")}` },
     ]),
     buildFaqJsonLd(faqs),
   ];

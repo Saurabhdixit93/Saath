@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, EmptyState, useToast } from "@saath/ui";
 import { parseProblemDetail, type UserProfile } from "@saath/contracts";
-import { usePathname, useRouter } from "@/i18n/navigation";
+import { usePathname, useRouter, Link } from "@/i18n/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import {
   isIosNonStandalone,
@@ -37,6 +37,7 @@ export default function ProfilePage() {
   const [locale, setLocale] = useState<"en" | "hi">("en");
   const [genderSelf, setGenderSelf] = useState<UserProfile["gender_self"]>("undisclosed");
   const [womenOnlyDefault, setWomenOnlyDefault] = useState(false);
+  const [leaderboardOptIn, setLeaderboardOptIn] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(true);
   const [whatsappEnabled, setWhatsappEnabled] = useState(true);
   const [smsEnabled, setSmsEnabled] = useState(true);
@@ -56,6 +57,7 @@ export default function ProfilePage() {
       setLocale(meQuery.data.locale);
       setGenderSelf(meQuery.data.gender_self);
       setWomenOnlyDefault(meQuery.data.women_only_default);
+      setLeaderboardOptIn(meQuery.data.leaderboard_opt_in ?? false);
       if (meQuery.data.notification_channels) {
         setPushEnabled(meQuery.data.notification_channels.push ?? true);
         setWhatsappEnabled(meQuery.data.notification_channels.whatsapp ?? true);
@@ -75,6 +77,7 @@ export default function ProfilePage() {
           locale,
           gender_self: genderSelf,
           women_only_default: womenOnlyDefault,
+          leaderboard_opt_in: leaderboardOptIn,
           notification_channels: {
             push: pushEnabled,
             whatsapp: whatsappEnabled,
@@ -91,6 +94,7 @@ export default function ProfilePage() {
     onSuccess: async (updated) => {
       setUser(updated);
       await queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries({ queryKey: ["karma"] });
       showToast({ variant: "success", message: t("savedToast") });
       router.replace(pathname, { locale: updated.locale });
     },
@@ -167,16 +171,24 @@ export default function ProfilePage() {
         />
       ) : (
         <div className="space-y-5">
-          <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow)]">
-            <h2 className="text-sm font-semibold text-[var(--text-muted)]">
-              {t("reliabilityTitle")}
-            </h2>
-            <p className="mt-1 text-lg font-bold text-[var(--secondary)]">
-              {t("reliabilityBadge", {
-                completed: meQuery.data?.reliability_completed ?? 0,
-                accepted: meQuery.data?.reliability_accepted ?? 0,
-              })}
-            </p>
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow)]">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--text-muted)]">
+                {t("reliabilityTitle")}
+              </h2>
+              <p className="mt-1 text-lg font-bold text-[var(--secondary)]">
+                {t("reliabilityBadge", {
+                  completed: meQuery.data?.reliability_completed ?? 0,
+                  accepted: meQuery.data?.reliability_accepted ?? 0,
+                })}
+              </p>
+            </div>
+            <Link
+              href="/karma"
+              className="inline-flex min-h-[48px] items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-4 text-sm font-bold text-[var(--text)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+            >
+              {t("viewKarmaCta")}
+            </Link>
           </section>
 
           <form
@@ -257,6 +269,32 @@ export default function ProfilePage() {
                 </span>
               </div>
             </label>
+
+            <div className="flex min-h-[48px] flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] p-3.5">
+              <div className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-[var(--text)]">
+                  {t("leaderboardOptInLabel")}
+                </span>
+                <span className="block text-xs text-[var(--text-muted)]">
+                  {t("leaderboardOptInHint")}
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={leaderboardOptIn}
+                aria-label={t("leaderboardOptInLabel")}
+                onClick={() => setLeaderboardOptIn((prev) => !prev)}
+                className={`inline-flex min-h-[48px] min-w-[64px] items-center justify-center rounded-[var(--radius-sm)] border px-3 text-xs font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] ${
+                  leaderboardOptIn
+                    ? "border-[var(--success)] bg-[var(--success-btn-bg)] text-[var(--success-ink)]"
+                    : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]"
+                }`}
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                {leaderboardOptIn ? "ON" : "OFF"}
+              </button>
+            </div>
 
             <section className="space-y-3 rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">

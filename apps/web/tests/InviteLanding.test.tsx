@@ -36,7 +36,11 @@ describe("InviteLandingClient", () => {
         const url =
           typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         if (url.endsWith("/v1/journeys/verify")) {
-          verifyBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+          const rawBody =
+            input instanceof Request
+              ? await input.clone().text()
+              : String(init?.body ?? "{}");
+          verifyBody = JSON.parse(rawBody || "{}") as Record<string, unknown>;
           return new Response(
             JSON.stringify({
               journey: {

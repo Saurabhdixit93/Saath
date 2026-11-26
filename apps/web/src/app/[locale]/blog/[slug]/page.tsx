@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { routing } from "@/i18n/routing";
 import { Link } from "@/i18n/navigation";
 import { JsonLd } from "@/components/JsonLd";
 import { BLOG_ARTICLES, getBlogArticle } from "@/lib/blogArticles";
@@ -25,19 +27,20 @@ export async function generateMetadata({
   params: Promise<{ locale: string; slug: string }>;
 }): Promise<Metadata> {
   const { locale, slug } = await params;
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
   const article = getBlogArticle(slug);
   if (!article) {
     return buildMetadata({
-      locale,
+      locale: appLocale,
       path: `/blog/${slug}`,
       title: "Guide not found — Saath",
       description: "Saath travel and seat-swap guides.",
       noIndex: true,
     });
   }
-  const content = locale === "hi" ? article.hi : article.en;
+  const content = appLocale === "hi" ? article.hi : article.en;
   return buildMetadata({
-    locale,
+    locale: appLocale,
     path: `/blog/${slug}`,
     title: `${content.title} — Saath`,
     description: content.description,
@@ -51,21 +54,22 @@ export default async function BlogArticlePage({
   params: Promise<{ locale: string; slug: string }>;
 }) {
   const { locale, slug } = await params;
-  setRequestLocale(locale);
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  setRequestLocale(appLocale);
 
   const article = getBlogArticle(slug);
   if (!article) {
     notFound();
   }
 
-  const tSeo = await getTranslations({ locale, namespace: "seo" });
-  const tBlog = await getTranslations({ locale, namespace: "seo.blog" });
-  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const tSeo = await getTranslations({ locale: appLocale, namespace: "seo" });
+  const tBlog = await getTranslations({ locale: appLocale, namespace: "seo.blog" });
+  const tCommon = await getTranslations({ locale: appLocale, namespace: "common" });
 
-  const isHi = locale === "hi";
+  const isHi = appLocale === "hi";
   const content = isHi ? article.hi : article.en;
   const baseUrl = getAppBaseUrl();
-  const pageUrl = `${baseUrl}${buildLocalizedPath(locale, `/blog/${slug}`)}`;
+  const pageUrl = `${baseUrl}${buildLocalizedPath(appLocale, `/blog/${slug}`)}`;
 
   const jsonLd: Array<Record<string, unknown>> = [
     buildArticleJsonLd({
@@ -74,11 +78,11 @@ export default async function BlogArticlePage({
       url: pageUrl,
       datePublished: article.publishedAt,
       dateModified: article.updatedAt,
-      locale,
+      locale: appLocale,
     }),
     buildBreadcrumbJsonLd([
-      { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(locale, "/")}` },
-      { name: tBlog("allGuidesLink"), url: `${baseUrl}${buildLocalizedPath(locale, "/blog")}` },
+      { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(appLocale, "/")}` },
+      { name: tBlog("allGuidesLink"), url: `${baseUrl}${buildLocalizedPath(appLocale, "/blog")}` },
       { name: content.title, url: pageUrl },
     ]),
   ];

@@ -17,6 +17,7 @@ from saath_api.core.logging import configure_logging, request_id_ctx
 from saath_api.core.redis import create_redis_client
 from saath_api.core.telemetry import configure_telemetry
 from saath_api.journeys.router import router as journeys_router
+from saath_api.karma.router import router as karma_router
 from saath_api.matching.router import router as matching_router
 from saath_api.messaging.router import router as messaging_router
 from saath_api.notifications.router import router as notifications_router
@@ -144,6 +145,7 @@ def create_app(
     app.include_router(parties_router)
     app.include_router(matching_router)
     app.include_router(swaps_router)
+    app.include_router(karma_router)
     app.include_router(realtime_router)
     app.include_router(messaging_router)
     app.include_router(notifications_router)

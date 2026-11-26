@@ -63,9 +63,15 @@ export function AppHeader() {
             </Link>
             <Link
               href="/pricing"
-              className="inline-flex min-h-[44px] items-center rounded-[var(--radius-sm)] px-2.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
+              className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] px-2.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
             >
               {tCommon("navPricing")}
+            </Link>
+            <Link
+              href="/karma"
+              className="inline-flex min-h-[48px] items-center rounded-[var(--radius-sm)] px-2.5 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-2)]"
+            >
+              {tCommon("navKarma")}
             </Link>
           </nav>
           <LanguageSwitcher

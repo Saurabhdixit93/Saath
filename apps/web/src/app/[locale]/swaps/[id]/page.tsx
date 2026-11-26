@@ -120,8 +120,10 @@ export default function SwapDetailPage({
       }
       return { updated: data, answer };
     },
-    onSuccess: ({ updated, answer }) => {
+    onSuccess: async ({ updated, answer }) => {
       queryClient.setQueryData(["swap", swapId], updated);
+      await queryClient.invalidateQueries({ queryKey: ["karma"] });
+      await queryClient.invalidateQueries({ queryKey: ["me"] });
       showToast({
         variant: answer === "yes" ? "success" : "info",
         message: answer === "yes" ? t("confirmThanks") : t("confirmDisputed"),

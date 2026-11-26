@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { hasLocale } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import type { PublicTrainLiveResponse } from "@saath/contracts";
 import { EmptyState } from "@saath/ui";
+import { routing } from "@/i18n/routing";
 import { Link } from "@/i18n/navigation";
 import { JsonLd } from "@/components/JsonLd";
 import { fetchPublicJson } from "@/lib/serverApi";
@@ -22,10 +24,11 @@ export async function generateMetadata({
   params: Promise<{ locale: string; no: string }>;
 }): Promise<Metadata> {
   const { locale, no } = await params;
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
   const meta = getTrainMeta(no);
-  const t = await getTranslations({ locale, namespace: "seo.trainLive" });
+  const t = await getTranslations({ locale: appLocale, namespace: "seo.trainLive" });
   return buildMetadata({
-    locale,
+    locale: appLocale,
     path: `/train/${no}/live`,
     title: t("metaTitle", { trainNo: no }),
     description: t("metaDescription", {
@@ -41,11 +44,12 @@ export default async function PublicTrainLivePage({
   params: Promise<{ locale: string; no: string }>;
 }) {
   const { locale, no } = await params;
-  setRequestLocale(locale);
-  const t = await getTranslations({ locale, namespace: "seo.trainLive" });
-  const tSeo = await getTranslations({ locale, namespace: "seo" });
-  const tNotFound = await getTranslations({ locale, namespace: "seo.notFound" });
-  const tCommon = await getTranslations({ locale, namespace: "common" });
+  const appLocale = hasLocale(routing.locales, locale) ? locale : routing.defaultLocale;
+  setRequestLocale(appLocale);
+  const t = await getTranslations({ locale: appLocale, namespace: "seo.trainLive" });
+  const tSeo = await getTranslations({ locale: appLocale, namespace: "seo" });
+  const tNotFound = await getTranslations({ locale: appLocale, namespace: "seo.notFound" });
+  const tCommon = await getTranslations({ locale: appLocale, namespace: "common" });
 
   if (!isValidTrainNo(no)) {
     return (
@@ -104,8 +108,8 @@ export default async function PublicTrainLivePage({
   const faqs = [{ question: t("faq1Q", { trainNo: no }), answer: t("faq1A") }];
   const jsonLd = [
     buildBreadcrumbJsonLd([
-      { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(locale, "/")}` },
-      { name: t("title", { trainNo: no }), url: `${baseUrl}${buildLocalizedPath(locale, `/train/${no}/live`)}` },
+      { name: tCommon("brand"), url: `${baseUrl}${buildLocalizedPath(appLocale, "/")}` },
+      { name: t("title", { trainNo: no }), url: `${baseUrl}${buildLocalizedPath(appLocale, `/train/${no}/live`)}` },
     ]),
     buildFaqJsonLd(faqs),
   ];

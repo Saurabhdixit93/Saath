@@ -168,6 +168,15 @@ export interface paths {
   "/v1/public/stats": {
     get: operations["get_v1_public_stats_v1_public_stats_get"];
   };
+  "/v1/karma": {
+    get: operations["get_v1_karma_v1_karma_get"];
+  };
+  "/v1/karma/rewards": {
+    get: operations["get_v1_karma_rewards_v1_karma_rewards_get"];
+  };
+  "/v1/karma/rewards/redeem": {
+    post: operations["post_v1_karma_rewards_redeem_v1_karma_rewards_redeem_post"];
+  };
 }
 
 export interface components {
@@ -917,6 +926,67 @@ export interface components {
       active_trains_catalog_count: number;
       flight_layouts_count: number;
     };
+    KarmaLedgerEntryDTO: {
+      id: number;
+      proposal_id?: string | null;
+      delta: number;
+      points: number;
+      state: "pending" | "credited" | "reversed";
+      reason: string;
+      created_at: string;
+    };
+    KarmaBadgeDTO: {
+      code: string;
+      title: string;
+      description: string;
+      earned_at: string;
+    };
+    LeaderboardEntryDTO: {
+      rank: number;
+      display_alias: string;
+      points: number;
+      swaps_completed: number;
+    };
+    KarmaWalletResponse: {
+      balance: number;
+      pending: number;
+      redeemed_points: number;
+      available_balance: number;
+      history: components["schemas"]["KarmaLedgerEntryDTO"][];
+      badges: components["schemas"]["KarmaBadgeDTO"][];
+      leaderboard: components["schemas"]["LeaderboardEntryDTO"][];
+    };
+    RewardItemDTO: {
+      code: string;
+      title_en: string;
+      title_hi: string;
+      description_en?: string | null;
+      description_hi?: string | null;
+      cost_points: number;
+      stock?: number | null;
+    };
+    RewardRedemptionDTO: {
+      id: string;
+      reward_code: string;
+      points_spent: number;
+      status: string;
+      created_at: string;
+    };
+    RewardsCatalogueResponse: {
+      enabled: boolean;
+      items: components["schemas"]["RewardItemDTO"][];
+      redemptions: components["schemas"]["RewardRedemptionDTO"][];
+    };
+    RedeemRewardRequest: {
+      reward_code: string;
+    };
+    RedeemRewardResponse: {
+      id: string;
+      reward_code: string;
+      points_spent: number;
+      status: string;
+      created_at: string;
+    };
   };
 }
 
@@ -1497,6 +1567,31 @@ export interface operations {
   get_v1_public_stats_v1_public_stats_get: {
     responses: {
       200: { content: { "application/json": components["schemas"]["PublicStatsResponse"] } };
+    };
+  };
+  get_v1_karma_v1_karma_get: {
+    responses: {
+      200: { content: { "application/json": components["schemas"]["KarmaWalletResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+    };
+  };
+  get_v1_karma_rewards_v1_karma_rewards_get: {
+    responses: {
+      200: { content: { "application/json": components["schemas"]["RewardsCatalogueResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+    };
+  };
+  post_v1_karma_rewards_redeem_v1_karma_rewards_redeem_post: {
+    requestBody: { content: { "application/json": components["schemas"]["RedeemRewardRequest"] } };
+    responses: {
+      201: { content: { "application/json": components["schemas"]["RedeemRewardResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      409: ProblemResp;
+      422: ProblemResp;
     };
   };
 }

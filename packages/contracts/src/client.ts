@@ -92,6 +92,15 @@ export type PublicTrainCoachDTO = components["schemas"]["PublicTrainCoachDTO"];
 export type PublicTrainCompositionResponse = components["schemas"]["PublicTrainCompositionResponse"];
 export type PublicFlightLayoutsResponse = components["schemas"]["PublicFlightLayoutsResponse"];
 export type PublicStatsResponse = components["schemas"]["PublicStatsResponse"];
+export type KarmaLedgerEntryDTO = components["schemas"]["KarmaLedgerEntryDTO"];
+export type KarmaBadgeDTO = components["schemas"]["KarmaBadgeDTO"];
+export type LeaderboardEntryDTO = components["schemas"]["LeaderboardEntryDTO"];
+export type KarmaWalletResponse = components["schemas"]["KarmaWalletResponse"];
+export type RewardItemDTO = components["schemas"]["RewardItemDTO"];
+export type RewardRedemptionDTO = components["schemas"]["RewardRedemptionDTO"];
+export type RewardsCatalogueResponse = components["schemas"]["RewardsCatalogueResponse"];
+export type RedeemRewardRequest = components["schemas"]["RedeemRewardRequest"];
+export type RedeemRewardResponse = components["schemas"]["RedeemRewardResponse"];
 
 export interface SaathClientOptions {
   baseUrl: string;

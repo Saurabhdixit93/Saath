@@ -67,6 +67,8 @@ export default function InboxPage() {
     },
     onSuccess: async ({ answer }) => {
       await queryClient.invalidateQueries({ queryKey: ["swaps"] });
+      await queryClient.invalidateQueries({ queryKey: ["karma"] });
+      await queryClient.invalidateQueries({ queryKey: ["me"] });
       showToast({
         variant: answer === "yes" ? "success" : "info",
         message: answer === "yes" ? tSwaps("confirmThanks") : tSwaps("confirmDisputed"),

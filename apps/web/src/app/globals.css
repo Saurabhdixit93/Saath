@@ -25,3 +25,24 @@ body {
   color: var(--text);
   font-family: var(--font-body);
 }
+
+@keyframes karma-badge-pop {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.7;
+  }
+  65% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .karma-badge-unlock {
+    animation: karma-badge-pop 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}

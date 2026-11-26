@@ -36,6 +36,10 @@ INTERNAL_ONLY_EVENTS: frozenset[str] = frozenset(
         "SwapNotCompleted",
         "SwapCompleted",
         "SwapExpired",
+        "KarmaCredited",
+        "KarmaReversed",
+        "BadgeUnlocked",
+        "RewardRedemptionRequested",
     }
 )
 
@@ -189,6 +193,62 @@ def render_notification(
             body=preview or ("नया चैट संदेश" if is_hi else "New chat message"),
             url=url,
             params={"sender": sender_alias},
+        )
+
+    if event == "KarmaCredited":
+        pts = str(payload.get("points") or 0)
+        return RenderedNotification(
+            template_name="saath_karma_credited",
+            title="कर्म अंक जुड़े!" if is_hi else "Karma points credited!",
+            body=(
+                f"आपके खाते में +{pts} कर्म अंक जुड़ गए हैं।"
+                if is_hi
+                else f"+{pts} Karma points have been added to your wallet."
+            ),
+            url="/karma",
+            params={"points": pts},
+        )
+
+    if event == "KarmaReversed":
+        pts = str(payload.get("points") or 0)
+        return RenderedNotification(
+            template_name="saath_karma_reversed",
+            title="कर्म अंक वापस लिए गए" if is_hi else "Karma points reversed",
+            body=(
+                f"विवाद के कारण {pts} कर्म अंक वापस लिए गए हैं।"
+                if is_hi
+                else f"{pts} Karma points were reversed following a swap dispute."
+            ),
+            url="/karma",
+            params={"points": pts},
+        )
+
+    if event == "BadgeUnlocked":
+        badge_code = str(payload.get("badge_code") or "")
+        return RenderedNotification(
+            template_name="saath_badge_unlocked",
+            title="नया बैज अनलॉक हुआ!" if is_hi else "New badge unlocked!",
+            body=(
+                f"बधाई हो! आपने {badge_code} बैज अर्जित किया है।"
+                if is_hi
+                else f"Nice work! You unlocked the {badge_code} badge."
+            ),
+            url="/karma",
+            params={"badge_code": badge_code},
+        )
+
+    if event == "RewardRedemptionRequested":
+        reward_code = str(payload.get("reward_code") or "")
+        return RenderedNotification(
+            template_name="saath_reward_redemption",
+            title="इनाम अनुरोध प्राप्त हुआ" if is_hi else "Reward redemption requested",
+            body=(
+                f"{reward_code} के लिए आपका कर्म रिडेम्पशन अनुरोध दर्ज हो गया है।"
+                if is_hi
+                else f"Your Karma redemption request for {reward_code} is pending review."
+            ),
+            url="/karma",
+            params={"reward_code": reward_code},
         )
 
     return RenderedNotification(

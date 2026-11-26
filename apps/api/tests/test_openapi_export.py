@@ -65,6 +65,9 @@ def test_offline_openapi_export_contains_auth_and_problem_detail(tmp_path: Path)
         "/v1/public/train/{train_no}/composition",
         "/v1/public/flight-layouts",
         "/v1/public/stats",
+        "/v1/karma",
+        "/v1/karma/rewards",
+        "/v1/karma/rewards/redeem",
     ):
         assert expected in paths
 
