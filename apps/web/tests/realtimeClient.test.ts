@@ -168,4 +168,126 @@ describe("RealtimeProvider & sseFetch", () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["swap", "sw-1"] });
     });
   });
+
+  it("keeps 15s polling invalidations firing across SSE backoff retries during WS+SSE outage, then stops once SSE recovers", async () => {
+    vi.useFakeTimers();
+
+    class HangingWebSocket {
+      static OPEN = 1;
+      readyState = 1;
+      onopen: (() => void) | null = null;
+      onmessage: ((ev: { data: string }) => void) | null = null;
+      onclose: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      send() {}
+      close() {
+        this.readyState = 3;
+      }
+    }
+
+    vi.stubGlobal("WebSocket", HangingWebSocket);
+
+    let sseHealthy = false;
+    const encoder = new TextEncoder();
+    const fetchMock = vi.fn(async () => {
+      if (!sseHealthy) {
+        return new Response(null, { status: 503 });
+      }
+      const sseStream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(": connected\n\n"));
+        },
+      });
+      return new Response(sseStream, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const queryClient = new QueryClient();
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    let latestMode = "";
+    let latestConnected = false;
+
+    function Probe() {
+      const rt = useRealtime();
+      latestMode = rt.mode;
+      latestConnected = rt.connected;
+      return createElement("div", { "data-testid": "mode" }, `${rt.mode}:${rt.connected}`);
+    }
+
+    const { unmount } = render(
+      createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages: enMessages,
+        children: createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(
+            ToastProvider,
+            null,
+            createElement(RealtimeProvider, {
+              accessToken: "user-jwt",
+              children: createElement(Probe),
+            })
+          )
+        ),
+      })
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1250);
+    });
+    expect(latestMode).toBe("polling");
+    expect(latestConnected).toBe(false);
+    expect(invalidateSpy).toHaveBeenCalledTimes(0);
+
+    // SSE retries at 2s, 4s, 8s fail — polling timer must survive
+    for (const backoffMs of [2000, 4000, 8000]) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(backoffMs);
+      });
+      expect(latestMode).toBe("polling");
+      expect(latestConnected).toBe(false);
+      expect(invalidateSpy).toHaveBeenCalledTimes(0);
+    }
+
+    // 1st 15s polling tick fires (t = 16750ms > 1200 + 15000 = 16200ms)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(latestMode).toBe("polling");
+    expect(invalidateSpy).toHaveBeenCalledTimes(7);
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["matches"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["swaps"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["messages"] });
+
+    // 2nd 15s polling tick fires across the 16s SSE retry (t = 31750ms)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(latestMode).toBe("polling");
+    expect(invalidateSpy).toHaveBeenCalledTimes(14);
+
+    // SSE recovers on the next (30s) retry
+    sseHealthy = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(latestMode).toBe("sse");
+    expect(latestConnected).toBe(true);
+
+    const countAtRecovery = invalidateSpy.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20000);
+    });
+    expect(invalidateSpy).toHaveBeenCalledTimes(countAtRecovery);
+
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20000);
+    });
+    expect(invalidateSpy).toHaveBeenCalledTimes(countAtRecovery);
+  });
 });

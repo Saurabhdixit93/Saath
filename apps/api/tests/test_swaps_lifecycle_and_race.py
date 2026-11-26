@@ -9,10 +9,16 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from saath_api.auth.models import User
+from saath_api.matching.models import Block
+from saath_api.notifications.models import NotificationsOutbox
+from saath_api.notifications.templates import render_notification
 from saath_api.providers.messaging import FakeMessagingProvider
 from saath_api.swaps.cards import verify_swap_card_signature
 from saath_api.swaps.models import SeatLock, SwapCard, SwapProposal
-from saath_api.swaps.service import expire_pending_swaps
+from saath_api.swaps.service import (
+    expire_pending_swaps,
+    invalidate_pending_swaps_for_user_pair,
+)
 
 
 async def _otp_login(
@@ -277,3 +283,218 @@ async def test_delete_journey_booking_invalidates_active_swap_and_revokes_card(
     pub_after = (await client.get(f"/v1/public/swap-cards/{code}")).json()
     assert pub_after["revoked"] is True
     assert pub_after["valid"] is False
+
+
+async def test_block_invalidates_pending_swap_releases_locks_and_blocks_create_or_accept(
+    client: AsyncClient,
+    fake_messaging: FakeMessagingProvider,
+) -> None:
+    tok_a, uid_a = await _otp_login(client, fake_messaging, "9876543441")
+    tok_b, uid_b = await _otp_login(client, fake_messaging, "9876543442")
+    tok_c, uid_c = await _otp_login(client, fake_messaging, "9876543443")
+    h_a = {"Authorization": f"Bearer {tok_a}"}
+    h_b = {"Authorization": f"Bearer {tok_b}"}
+    h_c = {"Authorization": f"Bearer {tok_c}"}
+
+    v_a = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    v_b = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+    v_c = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_c, json={"mode": "train", "pnr": "4333333333"}
+        )
+    ).json()
+
+    await client.put(
+        f"/v1/parties/{v_b['party']['id']}/goal",
+        headers=h_b,
+        json={"goal_type": "open_to_help", "movers": [v_b["seat_holders"][0]["id"]], "constraints": {}},
+    )
+    await client.put(
+        f"/v1/parties/{v_c['party']['id']}/goal",
+        headers=h_c,
+        json={"goal_type": "open_to_help", "movers": [v_c["seat_holders"][0]["id"]], "constraints": {}},
+    )
+    await client.put(
+        f"/v1/parties/{v_a['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}},
+    )
+
+    matches = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    assert len(matches) >= 2
+    card_0 = matches[0]["card_id"]
+    alias_0 = matches[0]["others"][0]["alias"]
+
+    # 1. A proposes on matches[0] and accepts first (creates SeatLock for A's seat)
+    swap_0 = (await client.post("/v1/swaps", headers=h_a, json={"card_id": card_0})).json()
+    is_b_first = (await client.get(f"/v1/swaps/{swap_0['id']}", headers=h_b)).status_code == 200
+    h_p1, uid_p1 = (h_b, uid_b) if is_b_first else (h_c, uid_c)
+    h_p2, uid_p2 = (h_c, uid_c) if is_b_first else (h_b, uid_b)
+
+    acc_a = await client.post(
+        f"/v1/swaps/{swap_0['id']}/accept", headers=h_a, json={"version": swap_0["version"]}
+    )
+    assert acc_a.status_code == 200
+
+    app: Any = client.app  # type: ignore[attr-defined]
+    async with app.state.session_factory() as db:
+        locks_before = (
+            await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap_0["id"])))
+        ).scalars().all()
+        assert len(locks_before) == 1
+
+    # 2. A blocks partner 1 -> pending swap invalidated, SeatLock released, neutral SwapInvalidated outbox written
+    blk_res = await client.post("/v1/users/block", headers=h_a, json={"alias_ref": alias_0})
+    assert blk_res.status_code == 200
+    assert blk_res.json()["blocked"] is True
+
+    detail_p1 = (await client.get(f"/v1/swaps/{swap_0['id']}", headers=h_p1)).json()
+    assert detail_p1["status"] == "invalidated"
+
+    async with app.state.session_factory() as db:
+        locks_after = (
+            await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap_0["id"])))
+        ).scalars().all()
+        assert locks_after == []
+        outbox_rows = (
+            await db.execute(
+                select(NotificationsOutbox).where(
+                    NotificationsOutbox.event == "SwapInvalidated",
+                    NotificationsOutbox.user_id.in_([UUID(uid_a), UUID(uid_p1)]),
+                )
+            )
+        ).scalars().all()
+        assert len(outbox_rows) == 2
+        for row in outbox_rows:
+            assert row.payload.get("reason") == "user_blocked"
+            rendered_en = render_notification(event=row.event, payload=row.payload, locale="en")
+            rendered_hi = render_notification(event=row.event, payload=row.payload, locale="hi")
+            assert "Train chart updated" not in rendered_en.body
+            assert "Swap proposal closed" == rendered_en.title
+            assert "चार्ट" not in rendered_hi.body
+
+    # 3. Race-window guard: Block created after match card fetch rejects accept & create with 403 user_blocked
+    matches_after_p1 = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    assert len(matches_after_p1) >= 1
+    fresh_card_p2 = matches_after_p1[0]["card_id"]
+
+    swap_p2 = (await client.post("/v1/swaps", headers=h_a, json={"card_id": fresh_card_p2})).json()
+    async with app.state.session_factory() as db:
+        db.add(Block(blocker=UUID(uid_p2), blocked=UUID(uid_a)))
+        await db.commit()
+
+    # accept_swap detects block in SERIALIZABLE tx -> invalidates proposal & returns 403 user_blocked
+    acc_p2_blocked = await client.post(
+        f"/v1/swaps/{swap_p2['id']}/accept",
+        headers=h_p2,
+        json={"version": swap_p2["version"]},
+    )
+    assert acc_p2_blocked.status_code == 403
+    assert acc_p2_blocked.json()["code"] == "user_blocked"
+
+    detail_p2 = (await client.get(f"/v1/swaps/{swap_p2['id']}", headers=h_a)).json()
+    assert detail_p2["status"] == "invalidated"
+
+    # create_swap_proposal detects block -> returns 403 user_blocked
+    recreate_blocked = await client.post(
+        "/v1/swaps",
+        headers=h_a,
+        json={"card_id": fresh_card_p2},
+    )
+    assert recreate_blocked.status_code == 403
+    assert recreate_blocked.json()["code"] == "user_blocked"
+
+
+async def test_block_does_not_invalidate_confirmed_swap_or_release_locks(
+    client: AsyncClient,
+    fake_messaging: FakeMessagingProvider,
+) -> None:
+    tok_a, uid_a = await _otp_login(client, fake_messaging, "9876543451")
+    tok_b, uid_b = await _otp_login(client, fake_messaging, "9876543452")
+    h_a = {"Authorization": f"Bearer {tok_a}"}
+    h_b = {"Authorization": f"Bearer {tok_b}"}
+
+    v_a = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    v_b = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+
+    await client.put(
+        f"/v1/parties/{v_b['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_b["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{v_a['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}},
+    )
+
+    matches = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    assert len(matches) >= 1
+    card = matches[0]
+    partner_alias = card["others"][0]["alias"]
+
+    swap = (await client.post("/v1/swaps", headers=h_a, json={"card_id": card["card_id"]})).json()
+    acc1 = (
+        await client.post(
+            f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]}
+        )
+    ).json()
+    acc2 = (
+        await client.post(
+            f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": acc1["version"]}
+        )
+    ).json()
+    assert acc2["status"] == "confirmed"
+
+    code = (await client.get(f"/v1/swaps/{swap['id']}/card?format=json", headers=h_a)).json()[
+        "public_code"
+    ]
+
+    # Subsequent block must NOT invalidate an already-confirmed swap or release its SeatLocks
+    blk_res = await client.post("/v1/users/block", headers=h_a, json={"alias_ref": partner_alias})
+    assert blk_res.status_code == 200
+    assert blk_res.json()["blocked"] is True
+
+    detail_after = (await client.get(f"/v1/swaps/{swap['id']}", headers=h_a)).json()
+    assert detail_after["status"] == "confirmed"
+
+    pub_after = (await client.get(f"/v1/public/swap-cards/{code}")).json()
+    assert pub_after["revoked"] is False
+    assert pub_after["valid"] is True
+
+    app: Any = client.app  # type: ignore[attr-defined]
+    async with app.state.session_factory() as db:
+        locks = (
+            await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap["id"])))
+        ).scalars().all()
+        assert len(locks) == 2
+        res = await invalidate_pending_swaps_for_user_pair(
+            db=db, user_a=UUID(uid_a), user_b=UUID(uid_b)
+        )
+        assert res == []

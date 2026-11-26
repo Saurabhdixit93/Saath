@@ -8,6 +8,7 @@ import structlog
 from fastapi import status
 from redis.asyncio import Redis
 from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,8 +42,13 @@ from saath_api.messaging.schemas import (
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.parties.models import Party, PartyMember
 from saath_api.providers.llm import LLMProvider
-from saath_api.realtime.pubsub import publish_conversation_event, publish_subscribe_control
+from saath_api.realtime.pubsub import (
+    publish_conversation_event,
+    publish_subscribe_control,
+    publish_user_event,
+)
 from saath_api.swaps.models import SwapParticipant, SwapProposal
+from saath_api.swaps.service import invalidate_pending_swaps_for_user_pair
 
 logger = structlog.get_logger(__name__)
 
@@ -1053,16 +1059,24 @@ async def block_user_by_alias_ref(
             detail="Could not find that conversation participant.",
         )
 
-    existing_block = (
-        await db.execute(
-            select(Block).where(
-                Block.blocker == actor.user_id,
-                Block.blocked == target_user_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if existing_block is None:
-        db.add(Block(blocker=actor.user_id, blocked=target_user_id))
+    insert_stmt = (
+        pg_insert(Block)
+        .values(blocker=actor.user_id, blocked=target_user_id)
+        .on_conflict_do_nothing(index_elements=[Block.blocker, Block.blocked])
+        .returning(Block.blocker)
+    )
+    inserted = (await db.execute(insert_stmt)).scalar_one_or_none()
+    if inserted is None:
+        return BlockUserResponse(blocked=True)
+
+    invalidated_swaps = await invalidate_pending_swaps_for_user_pair(
+        db=db,
+        user_a=actor.user_id,
+        user_b=target_user_id,
+        reason="user_blocked",
+    )
+    for prop, _ in invalidated_swaps:
+        extra_shared_ji_ids.add(prop.journey_instance_id)
 
     actor_ji_ids = set(
         (
@@ -1134,6 +1148,17 @@ async def block_user_by_alias_ref(
         )
     )
     await db.commit()
+
+    for prop, participant_uids in invalidated_swaps:
+        event_payload = {
+            "type": "swap.updated",
+            "swap_id": str(prop.id),
+            "journey_instance_id": str(prop.journey_instance_id),
+            "status": prop.status,
+            "version": prop.version,
+        }
+        for uid in participant_uids:
+            await publish_user_event(redis, uid, event_payload)
 
     for ji_id in recompute_ji_ids:
         await schedule_or_run_match_recompute(

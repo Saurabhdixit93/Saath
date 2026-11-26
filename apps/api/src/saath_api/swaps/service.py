@@ -23,7 +23,7 @@ from saath_api.core.ids import uuid7
 from saath_api.core.redis import SlidingWindowRateLimiter
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
 from saath_api.matching.graph import make_pseudonymous_alias
-from saath_api.matching.models import MatchCandidate
+from saath_api.matching.models import Block, MatchCandidate
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.parties.models import PartyMember
 from saath_api.swaps.cards import (
@@ -87,6 +87,23 @@ async def _begin_serializable(db: AsyncSession) -> None:
     if db.in_transaction():
         await db.rollback()
     await db.connection(execution_options={"isolation_level": "SERIALIZABLE"})
+
+
+async def _has_block_among_users(db: AsyncSession, user_ids: set[UUID]) -> bool:
+    if len(user_ids) < 2:
+        return False
+    row = (
+        await db.execute(
+            select(Block.blocker)
+            .where(
+                Block.blocker.in_(user_ids),
+                Block.blocked.in_(user_ids),
+                Block.blocker != Block.blocked,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return row is not None
 
 
 async def _publish_swap_updated(
@@ -406,6 +423,19 @@ async def create_swap_proposal(
             detail="One of the seats in this match is no longer available.",
         )
 
+    all_involved_uids: set[UUID] = {actor.user_id}
+    for sh, bk in sh_map.values():
+        uid = sh.linked_user_id or bk.owner_user_id
+        if uid is not None:
+            all_involved_uids.add(uid)
+    if await _has_block_among_users(db, all_involved_uids):
+        raise ProblemDetailError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="user_blocked",
+            title="User Blocked",
+            detail="Cannot create a swap involving a blocked traveller.",
+        )
+
     now = datetime.now(UTC)
     six_hours = now + timedelta(hours=6)
     if ji.departure_at is not None:
@@ -581,6 +611,22 @@ async def accept_swap(
                 code="swap_expired",
                 title="Swap Expired",
                 detail="This swap proposal has expired.",
+            )
+
+        all_involved_uids = {p.user_id for p in parts if p.user_id is not None}
+        if proposal.initiator_user_id is not None:
+            all_involved_uids.add(proposal.initiator_user_id)
+        if await _has_block_among_users(db, all_involved_uids):
+            proposal.status = "invalidated"
+            proposal.version += 1
+            await db.execute(delete(SeatLock).where(SeatLock.proposal_id == proposal.id))
+            await db.commit()
+            await _publish_swap_updated(redis, proposal=proposal, user_ids=all_involved_uids)
+            raise ProblemDetailError(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="user_blocked",
+                title="User Blocked",
+                detail="This swap cannot proceed because a participant is blocked.",
             )
 
         if proposal.version != req.version:
@@ -1204,6 +1250,102 @@ async def invalidate_swaps_for_berth_change(
             )
 
     return prop_ids
+
+
+async def invalidate_pending_swaps_for_user_pair(
+    *,
+    db: AsyncSession,
+    user_a: UUID,
+    user_b: UUID,
+    reason: str = "user_blocked",
+) -> list[tuple[SwapProposal, set[UUID]]]:
+    """Atomically invalidate pending swap proposals shared between two users and release locks."""
+    if user_a == user_b:
+        return []
+
+    def _involves_user(uid: UUID) -> Any:
+        return (SwapProposal.initiator_user_id == uid) | SwapProposal.id.in_(
+            select(SwapParticipant.proposal_id).where(SwapParticipant.user_id == uid)
+        )
+
+    candidate_prop_ids = list(
+        (
+            await db.execute(
+                select(SwapProposal.id).where(
+                    SwapProposal.status == "pending",
+                    _involves_user(user_a),
+                    _involves_user(user_b),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not candidate_prop_ids:
+        return []
+
+    upd_stmt = (
+        update(SwapProposal)
+        .where(
+            SwapProposal.id.in_(candidate_prop_ids),
+            SwapProposal.status == "pending",
+        )
+        .values(status="invalidated", version=SwapProposal.version + 1)
+        .returning(SwapProposal.id)
+    )
+    actually_invalidated_ids = list((await db.execute(upd_stmt)).scalars().all())
+    if not actually_invalidated_ids:
+        return []
+
+    await db.execute(delete(SeatLock).where(SeatLock.proposal_id.in_(actually_invalidated_ids)))
+
+    proposals = list(
+        (
+            await db.execute(
+                select(SwapProposal)
+                .where(SwapProposal.id.in_(actually_invalidated_ids))
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    parts = list(
+        (
+            await db.execute(
+                select(SwapParticipant).where(
+                    SwapParticipant.proposal_id.in_(actually_invalidated_ids)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    uids_by_prop: dict[UUID, set[UUID]] = {prop.id: set() for prop in proposals}
+    for prop in proposals:
+        if prop.initiator_user_id is not None:
+            uids_by_prop[prop.id].add(prop.initiator_user_id)
+    for p in parts:
+        if p.user_id is not None:
+            uids_by_prop[p.proposal_id].add(p.user_id)
+
+    for prop in proposals:
+        for uid in uids_by_prop[prop.id]:
+            db.add(
+                NotificationsOutbox(
+                    user_id=uid,
+                    event="SwapInvalidated",
+                    payload={
+                        "swap_id": str(prop.id),
+                        "journey_instance_id": str(prop.journey_instance_id),
+                        "reason": reason,
+                    },
+                    idempotency_key=f"swap_invalidated:{prop.id}:{uid}",
+                )
+            )
+
+    return [(prop, uids_by_prop[prop.id]) for prop in proposals]
 
 
 async def get_swap_card_payload(

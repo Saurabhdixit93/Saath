@@ -70,3 +70,6 @@ def test_offline_openapi_export_contains_auth_and_problem_detail(tmp_path: Path)
     assert anon_403["application/problem+json"]["schema"] == {
         "$ref": "#/components/schemas/ProblemDetail"
     }
+    block_responses = paths["/v1/users/block"]["post"]["responses"]
+    assert "409" in block_responses
+    assert "application/problem+json" in block_responses["409"]["content"]

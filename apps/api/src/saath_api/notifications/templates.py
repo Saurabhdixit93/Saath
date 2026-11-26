@@ -134,6 +134,18 @@ def render_notification(
         url = f"/journeys/{journey_id}" if journey_id else "/journeys"
         if event == "SwapInvalidated" and swap_id:
             url = f"/swaps/{swap_id}"
+        if event == "SwapInvalidated" and payload.get("reason") == "user_blocked":
+            return RenderedNotification(
+                template_name="saath_swap_invalidated",
+                title="स्वैप प्रस्ताव बंद" if is_hi else "Swap proposal closed",
+                body=(
+                    "यह स्वैप प्रस्ताव अब उपलब्ध नहीं है। कृपया अपने अपडेटेड मिलान देखें।"
+                    if is_hi
+                    else "This swap proposal is no longer available. Check your updated matches."
+                ),
+                url=url,
+                params={"reason": "unavailable"},
+            )
         new_coach = str(payload.get("new_coach") or "")
         new_seat = str(payload.get("new_seat") or "")
         berth_info = f"{new_coach}-{new_seat}".strip("-")

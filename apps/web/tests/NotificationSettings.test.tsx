@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import enMessages from "../messages/en.json";
 import { AuthProvider } from "../src/components/AuthProvider";
 import ProfilePage from "../src/app/[locale]/profile/page";
+import { createBrowserApiClient } from "../src/lib/api";
+import { publicEnv } from "../src/lib/env";
+import { subscribeBrowserWebPush } from "../src/lib/notifications/pushClient";
 import { runAxe } from "../vitest.setup";
 
 vi.mock("@/i18n/navigation", () => ({
@@ -142,5 +145,73 @@ describe("Profile Notification Settings & Value-First Web Push Opt-In", () => {
 
     expect(await runAxe(container)).toHaveNoViolations();
     vi.unstubAllGlobals();
+  });
+
+  it("throws and never posts synthetic push.saath.local URL when VAPID key is set and PushManager fails or is unavailable", async () => {
+    const requestPermissionSpy = vi.fn(async () => "granted" as NotificationPermission);
+    vi.stubGlobal("Notification", {
+      permission: "default",
+      requestPermission: requestPermissionSpy,
+    });
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const apiClient = createBrowserApiClient({
+      getAccessToken: () => "user-jwt",
+      refreshTokens: async () => null,
+    });
+
+    const prevVapid = publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const prevServiceWorkerDesc = Object.getOwnPropertyDescriptor(navigator, "serviceWorker");
+    const prevPushManagerDesc = Object.getOwnPropertyDescriptor(window, "PushManager");
+
+    try {
+      // Valid base64url VAPID key (65-byte uncompressed P-256 key)
+      publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY =
+        "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8";
+
+      // Case 1: PushManager is unavailable in browser
+      await expect(subscribeBrowserWebPush(apiClient)).rejects.toThrow(
+        "Web Push subscription is unavailable in this browser"
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      // Case 2: PushManager exists but pushManager.subscribe rejects
+      Object.defineProperty(window, "PushManager", {
+        configurable: true,
+        value: function PushManager() {},
+      });
+      Object.defineProperty(navigator, "serviceWorker", {
+        configurable: true,
+        value: {
+          ready: Promise.resolve({
+            pushManager: {
+              getSubscription: vi.fn(async () => null),
+              subscribe: vi.fn(async () => {
+                throw new Error("Push service registration failed");
+              }),
+            },
+          }),
+        },
+      });
+
+      await expect(subscribeBrowserWebPush(apiClient)).rejects.toThrow(
+        "Push service registration failed"
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY = prevVapid;
+      if (prevServiceWorkerDesc) {
+        Object.defineProperty(navigator, "serviceWorker", prevServiceWorkerDesc);
+      } else {
+        delete (navigator as unknown as Record<string, unknown>).serviceWorker;
+      }
+      if (prevPushManagerDesc) {
+        Object.defineProperty(window, "PushManager", prevPushManagerDesc);
+      } else {
+        delete (window as unknown as Record<string, unknown>).PushManager;
+      }
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from typing import Any
+from uuid import UUID
 
 from httpx import AsyncClient
+from sqlalchemy import func, select
 
+from saath_api.auth.models import AuditLog
+from saath_api.journeys.models import JourneyInstance
 from saath_api.providers.messaging import FakeMessagingProvider
 
 
@@ -315,3 +321,56 @@ async def test_block_by_partner_alias_match_alias_and_rejects_foreign_or_raw_use
     )
     assert post_blk_send.status_code == 403
     assert len({uid_a, uid_b, uid_c}) == 3
+
+    # Repeat POST /v1/users/block is idempotent and does not bump match_version or duplicate AuditLog
+    app: Any = client.app  # type: ignore[attr-defined]
+    ji_id = UUID(va["journey"]["id"])
+    async with app.state.session_factory() as db:
+        ji_before = (
+            await db.execute(select(JourneyInstance).where(JourneyInstance.id == ji_id))
+        ).scalar_one()
+        mv_before = ji_before.match_version
+        audit_before = (
+            await db.execute(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(
+                    AuditLog.actor == f"user:{uid_a}",
+                    AuditLog.action == "user.blocked",
+                )
+            )
+        ).scalar_one()
+
+    blk_r1, blk_r2 = await asyncio.gather(
+        client.post(
+            "/v1/users/block",
+            headers=h_a,
+            json={"alias_ref": convo["partner_alias"]},
+        ),
+        client.post(
+            "/v1/users/block",
+            headers=h_a,
+            json={"alias_ref": convo["partner_alias"]},
+        ),
+    )
+    assert blk_r1.status_code == 200
+    assert blk_r2.status_code == 200
+    assert blk_r1.json()["blocked"] is True
+    assert blk_r2.json()["blocked"] is True
+
+    async with app.state.session_factory() as db:
+        ji_after = (
+            await db.execute(select(JourneyInstance).where(JourneyInstance.id == ji_id))
+        ).scalar_one()
+        audit_after = (
+            await db.execute(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(
+                    AuditLog.actor == f"user:{uid_a}",
+                    AuditLog.action == "user.blocked",
+                )
+            )
+        ).scalar_one()
+        assert ji_after.match_version == mv_before
+        assert audit_after == audit_before

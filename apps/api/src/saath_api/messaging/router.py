@@ -177,6 +177,7 @@ async def post_v1_conversation_translate(
         status.HTTP_401_UNAUTHORIZED,
         status.HTTP_403_FORBIDDEN,
         status.HTTP_404_NOT_FOUND,
+        status.HTTP_409_CONFLICT,
         status.HTTP_422_UNPROCESSABLE_ENTITY,
     ),
 )

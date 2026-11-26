@@ -37,6 +37,7 @@ _DIGIT_WORDS: dict[str, int] = {
     "ek": 1,
     "do": 1,
     "teen": 1,
+    "tin": 1,
     "char": 1,
     "chaar": 1,
     "paanch": 1,
@@ -44,11 +45,14 @@ _DIGIT_WORDS: dict[str, int] = {
     "chhe": 1,
     "che": 1,
     "chhah": 1,
+    "cheh": 1,
+    "chheh": 1,
     "saat": 1,
     "sat": 1,
     "aath": 1,
     "ath": 1,
     "nau": 1,
+    "sunna": 1,
     # Devanagari Hindi digit words
     "शून्य": 1,
     "सुन्ना": 1,
@@ -85,7 +89,11 @@ _BENIGN_FUSED_EXCLUSIONS: frozenset[str] = frozenset(
 # 1. URLs (http/https, www., known shorteners/messengers, bare domains, spaced URLs)
 _URL_TLDS = (
     r"(?:com|in|co\.in|co|ai|org|net|io|me|app|xyz|ly|gg|"
-    r"info|biz|site|online|link|dev|tech|cc|tv|to)"
+    r"info|biz|site|online|link|dev|tech|cc|tv|to|at)"
+)
+_BARE_SINGLE_LABEL_TLDS = (
+    r"(?:com|co\.in|co|ai|org|net|io|app|xyz|gg|"
+    r"info|biz|site|online|link|dev|tech|cc|tv)"
 )
 _UNAMBIGUOUS_WEB_TLDS = r"(?:com|org|net|io|app|xyz|dev|tech|site|online|link|co\.in)"
 _NON_NUMERIC_LABEL = r"(?=[a-z0-9-]*[a-z])[a-z0-9-]"
@@ -94,37 +102,41 @@ _URL_RE = re.compile(
     r"(?i)(?:"
     rf"https?://{_URL_PATH_CHARS}+"
     rf"|www\.{_URL_PATH_CHARS}+"
-    rf"|\b(?:wa\.me|t\.me|t\.co|bit\.ly|tinyurl\.com|goo\.gl|youtu\.be|x\.com|wa\.link|rb\.gy|is\.gd|cutt\.ly|instagram\.com|instagr\.am|fb\.com|facebook\.com|telegram\.me)\b(?:/{_URL_PATH_CHARS}*)?"
-    rf"|\b(?:{_NON_NUMERIC_LABEL}{{2,}}(?:\.[a-z0-9-]+)*|(?=[a-z0-9.-]*[a-z])[a-z0-9-]+(?:\.[a-z0-9-]+)+)\.{_URL_TLDS}\b(?:/{_URL_PATH_CHARS}*)?"
+    rf"|\b(?:wa\.me|t\.me|t\.co|bit\.ly|ow\.ly|cutt\.ly|adf\.ly|snip\.ly|rb\.gy|is\.gd|shorturl\.at|tinyurl\.com|goo\.gl|youtu\.be|x\.com|wa\.link|instagram\.com|instagr\.am|insta\.gram|fb\.com|facebook\.com|telegram\.me|tele\.gram|snap\.chat)\b(?:/{_URL_PATH_CHARS}*)?"
+    rf"|\b{_NON_NUMERIC_LABEL}{{2,}}\.{_BARE_SINGLE_LABEL_TLDS}\b(?:/{_URL_PATH_CHARS}*)?"
+    rf"|\b(?=[a-z0-9.-]*[a-z])[a-z0-9-]+(?:\.[a-z0-9-]+)+\.{_URL_TLDS}\b(?:/{_URL_PATH_CHARS}*)?"
     rf"|\b[0-9-]+(?:\.[0-9-]+)*\.{_UNAMBIGUOUS_WEB_TLDS}\b(?:/{_URL_PATH_CHARS}*)?"
     rf"|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.{_URL_TLDS}/{_URL_PATH_CHARS}+"
     r")"
 )
 _DOT_BRACKET = r"(?:\[dot\]|\(dot\)|\{dot\})"
 _DOT_OR_BRACKET = rf"(?:\s*\.\s*|\s*{_DOT_BRACKET}\s*)"
+_DOT_OR_WORD = rf"(?:{_DOT_OR_BRACKET}|\s+\bdot\b\s+)"
 _SPACED_URL_TLDS = (
     rf"(?:com|in|co{_DOT_OR_BRACKET}in|co|ai|org|net|io|me|app|xyz|ly|gg|"
-    r"info|biz|site|online|link|dev|tech|cc|tv|to)"
+    r"info|biz|site|online|link|dev|tech|cc|tv|to|at)"
 )
 _BRACKET_URL_TLDS = (
     rf"(?:com|in|co\s*{_DOT_BRACKET}\s*in|co|ai|org|net|io|me|app|xyz|ly|gg|"
-    r"info|biz|site|online|link|dev|tech|cc|tv|to)"
+    r"info|biz|site|online|link|dev|tech|cc|tv|to|at)"
 )
 _URL_SHORTENERS_SPACED = (
-    rf"(?:bit{_DOT_OR_BRACKET}ly|t{_DOT_OR_BRACKET}co|tinyurl{_DOT_OR_BRACKET}com|"
-    rf"goo{_DOT_OR_BRACKET}gl|youtu{_DOT_OR_BRACKET}be|x{_DOT_OR_BRACKET}com|"
-    rf"wa{_DOT_OR_BRACKET}link|rb{_DOT_OR_BRACKET}gy|is{_DOT_OR_BRACKET}gd|"
-    rf"cutt{_DOT_OR_BRACKET}ly|instagram{_DOT_OR_BRACKET}com|instagr{_DOT_OR_BRACKET}am|"
-    rf"fb{_DOT_OR_BRACKET}com|facebook{_DOT_OR_BRACKET}com|telegram{_DOT_OR_BRACKET}me)"
+    rf"(?:bit{_DOT_OR_WORD}ly|ow{_DOT_OR_WORD}ly|cutt{_DOT_OR_WORD}ly|adf{_DOT_OR_WORD}ly|snip{_DOT_OR_WORD}ly|"
+    rf"t{_DOT_OR_WORD}co|tinyurl{_DOT_OR_WORD}com|shorturl{_DOT_OR_WORD}at|"
+    rf"goo{_DOT_OR_WORD}gl|youtu{_DOT_OR_WORD}be|x{_DOT_OR_WORD}com|"
+    rf"wa{_DOT_OR_WORD}link|rb{_DOT_OR_WORD}gy|is{_DOT_OR_WORD}gd|"
+    rf"instagram{_DOT_OR_WORD}com|instagr{_DOT_OR_WORD}am|insta{_DOT_OR_WORD}gram|"
+    rf"fb{_DOT_OR_WORD}com|facebook{_DOT_OR_WORD}com|telegram{_DOT_OR_WORD}me|"
+    rf"tele{_DOT_OR_WORD}gram|snap{_DOT_OR_WORD}chat)"
 )
 _SPACED_URL_RE = re.compile(
     r"(?i)(?:"
-    rf"\b(?:wa|t){_DOT_OR_BRACKET}me\s*/\s*{_URL_PATH_CHARS}+"
+    rf"\b(?:wa|t){_DOT_OR_WORD}me(?:\s*/\s*{_URL_PATH_CHARS}+|\b)"
     rf"|\b{_URL_SHORTENERS_SPACED}\b(?:\s*/\s*{_URL_PATH_CHARS}*)?"
     rf"|\b[a-z0-9-]\s*(?:\.\s*|{_DOT_BRACKET}\s*){_SPACED_URL_TLDS}/{_URL_PATH_CHARS}+"
     rf"|\b(?:{_NON_NUMERIC_LABEL}{{2,}}(?:\s*\.\s*[a-z0-9-]+)*|(?=[a-z0-9.\s-]*[a-z])[a-z0-9-]+(?:\s*\.\s*[a-z0-9-]+)+){_DOT_OR_BRACKET}"
     rf"{_SPACED_URL_TLDS}\s*/\s*{_URL_PATH_CHARS}+"
-    rf"|\bwww{_DOT_OR_BRACKET}[a-z0-9-]+(?:{_DOT_OR_BRACKET}[a-z0-9-]+)+"
+    rf"|\bwww{_DOT_OR_WORD}[a-z0-9-]+(?:{_DOT_OR_WORD}[a-z0-9-]+)+"
     rf"(?:\s*/\s*{_URL_PATH_CHARS}*)?"
     rf"|\b[a-z0-9-]+(?:\s*{_DOT_BRACKET}\s*[a-z0-9-]+)*\s*{_DOT_BRACKET}\s*"
     rf"{_BRACKET_URL_TLDS}\b(?:\s*/\s*{_URL_PATH_CHARS}*)?"
@@ -136,24 +148,28 @@ _EMAIL_STD_RE = re.compile(
     r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b"
 )
 _EMAIL_OBFUSCATED_RE = re.compile(
-    r"(?i)\b[a-z0-9._%+-]+\s*(?:\[at\]|\(at\)|\{at\}|@)\s*[a-z0-9.-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,}(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})?(?!/)\b"
+    r"(?i)\b[a-z0-9._%+-]+\s*(?:\[at\]|\(at\)|\{at\}|@)\s*[a-z0-9.-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,}(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})*(?!/)\b"
 )
 _EMAIL_WORD_AT_RE = re.compile(
-    r"(?i)\b[a-z0-9._%+-]+\s+at\s+(?:[a-z0-9-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*(?:com|in|org|net|co|io|me|edu|gov|xyz|gmail|yahoo|outlook|hotmail|proton|icloud)(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})?|(?:gmail|yahoo|outlook|hotmail|proton|icloud)\s+(?:dot\s+)?(?:com|in|co\.in))(?!/)\b"
+    r"(?i)\b[a-z0-9._%+-]+\s+at\s+(?!\d+\s*\.\s*to\b)(?:(?:[a-z0-9-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*){1,5}(?:com|in|org|net|co|ai|io|me|app|dev|tech|edu|gov|xyz|info|biz|site|online|link|ly|gg|cc|tv|to|uk|au|ca|sg|ae|de|fr|us|gmail|yahoo|outlook|hotmail|proton|icloud)(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})?|(?:gmail|yahoo|outlook|hotmail|proton|icloud)\s+(?:dot\s+)?(?:com|in|co\.in))(?!/)\b"
 )
 
 # 3. UPI IDs (handle@psp, alphanumeric PSP handles, and obfuscated [at]/at PSP handles)
 # Plain-word "at" is restricted to unambiguous UPI-exclusive PSP handles so meetup phrases
 # like "Meet at SBI counter" or "Wait at Airtel kiosk" are never redacted.
-_UNAMBIGUOUS_UPI_PSPS = (
-    r"ok(?:axis|icici|sbi|hdfcbank|bizaxis)|ybl|ibl|axl|paytm|ptyes|ptaxis|pthdfc|ptsbi|"
-    r"upi|apl|yapl|rapl|barodampay|jiopay|fampay|waicici|wahdfcbank|wasbi|waaxis|pingpay|"
-    r"naviaxis|abfspay|ikwik|timecosmos|tapicici|payzapp|superyes|kotak811"
+_STRICT_UPI_PSPS = (
+    r"ok(?:axis|icici|sbi|hdfcbank|hdfc|bizaxis)|ybl|ibl|axl|axb|kmbl|yespay|"
+    r"paytm|ptyes|ptaxis|pthdfc|ptsbi|upi|apl|yapl|rapl|barodampay|jiopay|fampay|"
+    r"waicici|wahdfcbank|wasbi|waaxis|pingpay|naviaxis|abfspay|ikwik|timecosmos|"
+    r"tapicici|payzapp|superyes|freecharge|mobikwik|sib|jupiteraxis|yescred|yescurie|"
+    r"yestpz|yesfam|postbank|idbi|mahb"
 )
+_MEETUP_GUARDED_APP_UPI_PSPS = r"kotak811|phonepe|gpay"
+_UNAMBIGUOUS_UPI_PSPS = rf"{_STRICT_UPI_PSPS}|{_MEETUP_GUARDED_APP_UPI_PSPS}"
 _GENERIC_BANK_UPI_PSPS = (
     r"icici|hdfcbank|sbi|axisbank|kotak|indus|fbl|airtel|jio|"
     r"slice|jupiter|cred|fam|idfcbank|yesbank|hsbc|citi|scb|unionbank|pnb|bob|boi|canara|"
-    r"centralbank|freecharge|aubank|federal|kvb|rbl|dbs|bandhan"
+    r"centralbank|aubank|federal|kvb|rbl|dbs|bandhan"
 )
 _KNOWN_UPI_PSPS = rf"{_UNAMBIGUOUS_UPI_PSPS}|{_GENERIC_BANK_UPI_PSPS}"
 _MEETUP_PRE_AT_WORDS: frozenset[str] = frozenset(
@@ -203,12 +219,21 @@ _UPI_GENERIC_RE = re.compile(r"(?i)\b[a-z0-9._-]{2,}@[a-z][a-z0-9]{2,19}\b")
 _UPI_OBFUSCATED_BRACKET_KNOWN_RE = re.compile(
     rf"(?i)\b[a-z0-9._-]{{2,}}\s*(?:\[at\]|\(at\)|\{{at\}})\s*(?:{_UNAMBIGUOUS_UPI_PSPS})\b"
 )
-_UPI_OBFUSCATED_WORD_AT_KNOWN_RE = re.compile(
-    rf"(?i)\b([a-z0-9._-]{{2,}})\s+at\s+(?:{_UNAMBIGUOUS_UPI_PSPS})\b"
+_UPI_OBFUSCATED_WORD_AT_STRICT_RE = re.compile(
+    rf"(?i)\b([a-z0-9._-]{{2,}})\s+at\s+(?:{_STRICT_UPI_PSPS})\b"
     r"(?!\s+(?:desk|counter|kiosk|branch|atm|booth|office|gate|window|stall|shop|store)\b)"
 )
+_UPI_OBFUSCATED_WORD_AT_KNOWN_RE = re.compile(
+    rf"(?i)\b([a-z0-9._-]{{2,}})\s+at\s+(?:{_MEETUP_GUARDED_APP_UPI_PSPS})\b"
+    r"(?!\s+(?:desk|counter|kiosk|branch|atm|booth|office|gate|window|stall|shop|store)\b)"
+)
+_UPI_SPACED_AT_STRICT_RE = re.compile(
+    rf"(?i)\b([a-z0-9._-]{{2,}})(?:\s+@\s*|\s*@\s+)(?:{_STRICT_UPI_PSPS})\b"
+    r"(?!\s+(?:desk|counter|kiosk|branch|atm|booth|office|gate|window|stall|shop|store)\b)"
+    r"(?!\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z])"
+)
 _UPI_SPACED_AT_KNOWN_RE = re.compile(
-    rf"(?i)\b([a-z0-9._-]{{2,}})(?:\s+@\s*|\s*@\s+)(?:{_KNOWN_UPI_PSPS})\b"
+    rf"(?i)\b([a-z0-9._-]{{2,}})(?:\s+@\s*|\s*@\s+)(?:{_MEETUP_GUARDED_APP_UPI_PSPS}|{_GENERIC_BANK_UPI_PSPS})\b"
     r"(?!\s+(?:desk|counter|kiosk|branch|atm|booth|office|gate|window|stall|shop|store)\b)"
     r"(?!\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z])"
 )
@@ -216,14 +241,17 @@ _UPI_OBFUSCATED_BRACKET_RE = re.compile(
     r"(?i)\b[a-z0-9._-]{2,}\s*(?:\[at\]|\(at\)|\{at\})\s*[a-z][a-z0-9]{2,19}\b(?!/)(?!\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.))",
 )
 
-# 4. Numeric phone patterns (standard, +91, 0-prefixed, spaced/hyphenated/typographic dashes/:/ */~/;/bullet/middle-dot/dotted/parens)
-_PHONE_SEP = r"[\s.\-_()*~;:\u2010-\u2014\u2212\u00b7\u2022]"
-_PHONE_INTL_SEP = r"[\s.\-_()*~;:/,\u2010-\u2014\u2212\u00b7\u2022]"
+# 4. Numeric phone patterns (standard, +91, 0-prefixed, symbol/emoji/whitespace-separated)
+_PHONE_SEP = r"(?:[^\w,/]|_)"
+_PHONE_INTL_SEP = r"(?:[^\w]|_)"
 _PHONE_EXPLICIT_RE = re.compile(
     rf"(?<!\d)(?:\(\s*\+?91\s*\)|(?:\+?91|0)){_PHONE_SEP}*[6-9](?:{_PHONE_SEP}*\d){{9}}(?!\d)"
 )
 _PHONE_10_SEPARATED_RE = re.compile(
     rf"(?<!\d)[6-9](?:{_PHONE_SEP}*\d){{9}}(?!\d)"
+)
+_PHONE_DECOY_10_RE = re.compile(
+    r"(?<!\d)(?=\d{11,22}(?!\d))\d*[6-9]\d{9}\d*(?!\d)"
 )
 _PHONE_INTL_RE = re.compile(
     rf"(?<!\w)(?:\(\s*\+\d{{1,3}}\s*\)|\+\d{{1,3}}){_PHONE_INTL_SEP}*\d(?:{_PHONE_INTL_SEP}*\d){{7,13}}(?!\d)"
@@ -245,13 +273,17 @@ _DATE_EMBEDDED_RE = re.compile(rf"(?<![/\-\d]){_DATE_BODY}(?![/\-\d])")
 _SEAT_CONTEXT_RE = re.compile(
     r"(?i)(?:\b(?:seats?|berths?|coaches?|coach|bays?|bunks?)\b|सीटें?|बर्थ|कोच)"
 )
+_COACH_CODE_RE = re.compile(r"(?i)\b(?:[BSHAGMCEDF]|SL|CC|EC|AC|[BSA]E)\d{1,2}\b")
+_PHONE_CONTEXT_RE = re.compile(
+    r"(?i)\b(?:call|phone|mobile|mob|whatsapp|wa|contact|reach|ping|text|dial|ring|number|no\.?)\b"
+)
 _TRAIN_CONTEXT_RE = re.compile(
     r"(?i)(?:\btrains?\b|गाड़ी|ट्रेन)"
 )
 
 # Token pattern for mixed/word-digit sequences (Latin letters, Devanagari letters+matras, or digits)
 _WORD_OR_NUM_TOKEN_RE = re.compile(r"[0-9]+|(?:[^\W\d_]|[\u0900-\u097F])+", re.UNICODE)
-_SEPARATORS_ONLY_RE = re.compile(r"^[\s\-_.,/|()\[\]+*~;:\u2010-\u2014\u2212\u00b7\u2022]+$")
+_SEPARATORS_ONLY_RE = re.compile(r"^(?:[^\w]|_)+$")
 
 
 @dataclass(frozen=True)
@@ -270,8 +302,19 @@ def _strip_invisible(text: str) -> str:
     return "".join(ch for ch in text if not _is_invisible_format_char(ch))
 
 
+def _normalize_unicode_digits(text: str) -> str:
+    return "".join(
+        str(unicodedata.digit(ch))
+        if ord(ch) > 127 and unicodedata.category(ch) == "Nd"
+        else ch
+        for ch in text
+    )
+
+
 def _prepare_scan_views(raw: str) -> tuple[str, str, str, list[int]]:
-    nfkc = unicodedata.normalize("NFKC", raw).translate(_DEVANAGARI_DIGITS)
+    nfkc = _normalize_unicode_digits(unicodedata.normalize("NFKC", raw)).translate(
+        _DEVANAGARI_DIGITS
+    )
     stripped_chars: list[str] = []
     spaced_chars: list[str] = []
     stripped_to_nfkc: list[int] = []
@@ -299,27 +342,63 @@ def _extend_trailing_keycap_marks(nfkc: str, end: int) -> int:
     return end
 
 
-def _is_benign_comma_seat_list(
+def _is_benign_seat_list(
+    sub: str,
+    numeric_tokens: list[str],
+    prefix: str,
+    suffix: str = "",
+) -> bool:
+    if ("," not in sub and "-" not in sub) or len(numeric_tokens) < 3:
+        return False
+    if not all(t.isdigit() and t == str(int(t)) for t in numeric_tokens):
+        return False
+    if _PHONE_CONTEXT_RE.search(prefix):
+        return False
+    vals = [int(t) for t in numeric_tokens]
+    if not (all(1 <= v <= 120 for v in vals) and all(vals[i] > vals[i - 1] for i in range(1, len(vals)))):
+        return False
+    has_seat_or_coach = bool(
+        _SEAT_CONTEXT_RE.search(prefix)
+        or _SEAT_CONTEXT_RE.search(suffix)
+        or _COACH_CODE_RE.search(prefix)
+        or _COACH_CODE_RE.search(suffix)
+    )
+    if "," in sub:
+        # Exempt strictly consecutive ascending 1-2 digit seat lists like "61, 62, 63, 64, 65"
+        if all(1 <= v <= 99 for v in vals) and all(
+            vals[i] == vals[i - 1] + 1 for i in range(1, len(vals))
+        ):
+            return True
+        if has_seat_or_coach:
+            return True
+        # Exempt 4+ ascending 1-2 digit berth/seat numbers with small gaps (e.g. 61, 63, 65, 67)
+        if (
+            len(vals) >= 4
+            and all(1 <= v <= 99 for v in vals)
+            and all(1 <= vals[i] - vals[i - 1] <= 4 for i in range(1, len(vals)))
+        ):
+            return True
+        return False
+    # Hyphenated ascending seat/berth range/list when seat/coach context is nearby
+    return has_seat_or_coach
+
+
+def _is_benign_train_pair(
     sub: str,
     numeric_tokens: list[str],
     prefix: str,
 ) -> bool:
-    if "," not in sub or len(numeric_tokens) < 3:
-        return False
-    if not all(t.isdigit() and t == str(int(t)) for t in numeric_tokens):
-        return False
-    vals = [int(t) for t in numeric_tokens]
-    # Exempt strictly consecutive ascending 1-2 digit seat lists like "61, 62, 63, 64, 65"
-    if all(1 <= v <= 99 for v in vals) and all(
-        vals[i] == vals[i - 1] + 1 for i in range(1, len(vals))
+    if (
+        len(numeric_tokens) != 2
+        or not all(len(t) == 5 for t in numeric_tokens)
+        or "/" not in sub
+        or _PHONE_CONTEXT_RE.search(prefix)
     ):
+        return False
+    if _TRAIN_CONTEXT_RE.search(prefix):
         return True
-    # Exempt strictly ascending seat/berth/coach lists <= 120 preceded by seat context
-    return bool(
-        _SEAT_CONTEXT_RE.search(prefix)
-        and all(1 <= v <= 120 for v in vals)
-        and all(vals[i] > vals[i - 1] for i in range(1, len(vals)))
-    )
+    t0, t1 = int(numeric_tokens[0]), int(numeric_tokens[1])
+    return 1 <= abs(t1 - t0) <= 2
 
 
 def _has_plus91_prefix(sub: str, prefix: str) -> bool:
@@ -350,18 +429,13 @@ def _looks_like_pure_numeric_phone(
     sub: str,
     numeric_tokens: list[str],
     prefix: str = "",
+    suffix: str = "",
 ) -> bool:
     if _is_benign_date_span(sub, prefix=prefix):
         return False
-    # Exempt explicit "train"/"trains" 5-digit pairs like "Checking trains 62001 / 62002"
-    if (
-        len(numeric_tokens) == 2
-        and all(len(t) == 5 for t in numeric_tokens)
-        and "/" in sub
-        and _TRAIN_CONTEXT_RE.search(prefix)
-    ):
+    if _is_benign_train_pair(sub, numeric_tokens, prefix):
         return False
-    if _is_benign_comma_seat_list(sub, numeric_tokens, prefix):
+    if _is_benign_seat_list(sub, numeric_tokens, prefix, suffix):
         return False
     digits_only = "".join(numeric_tokens)
     if len(digits_only) < 10:
@@ -373,6 +447,12 @@ def _looks_like_pure_numeric_phone(
     if digits_only.startswith("0") and len(digits_only) == 11 and digits_only[1] in "6789":
         return True
     if digits_only.startswith("91") and len(digits_only) == 12 and digits_only[2] in "6789":
+        return True
+    if (
+        not _DATE_EMBEDDED_RE.search(sub)
+        and 11 <= len(digits_only) <= 22
+        and re.search(r"[6-9]\d{9}", digits_only)
+    ):
         return True
     return False
 
@@ -509,6 +589,24 @@ def _find_word_digit_spans(
             break
 
         if last_valid_j >= idx:
+            if (
+                word_digit_count == 0
+                and len(numeric_tokens) >= 2
+                and tokens[idx].text.isdigit()
+                and len(tokens[idx].text) <= 2
+                and tokens[idx].start > 0
+                and scan_text[tokens[idx].start - 1].isalpha()
+                and len("".join(numeric_tokens[1:])) >= 10
+            ):
+                k = tokens[idx].start
+                while k > 0 and scan_text[k - 1].isalpha():
+                    k -= 1
+                if (k == 0 or not scan_text[k - 1].isalnum()) and _COACH_CODE_RE.fullmatch(
+                    scan_text[k : tokens[idx].end]
+                ):
+                    idx += 1
+                    continue
+
             span_start = tokens[idx].start
             span_end = tokens[last_valid_j].end
             plus_match = _LEADING_PLUS_RE.search(scan_text[:span_start])
@@ -516,6 +614,7 @@ def _find_word_digit_spans(
                 span_start = plus_match.start()
             sub = scan_text[span_start:span_end].strip()
             prefix = scan_text[max(0, span_start - 32) : span_start]
+            suffix = scan_text[span_end : min(len(scan_text), span_end + 32)]
             # Match if:
             # - >= 7 digits with >= 3 digit words (at least 2 non-ambiguous)
             # - OR >= 10 total digits across mixed numeric/word tokens (excluding dates, seat lists, train pairs)
@@ -528,7 +627,9 @@ def _find_word_digit_spans(
                     used_multiplier=used_multiplier,
                 )
             else:
-                is_numeric_phone = _looks_like_pure_numeric_phone(sub, numeric_tokens, prefix)
+                is_numeric_phone = _looks_like_pure_numeric_phone(
+                    sub, numeric_tokens, prefix, suffix
+                )
             if is_word_phone or is_numeric_phone:
                 spans.append((span_start, span_end))
                 idx = last_valid_j + 1
@@ -558,6 +659,8 @@ def _collect_tagged_spans(
         _UPI_GENERIC_RE,
         _UPI_OBFUSCATED_BRACKET_KNOWN_RE,
         _UPI_OBFUSCATED_BRACKET_RE,
+        _UPI_OBFUSCATED_WORD_AT_STRICT_RE,
+        _UPI_SPACED_AT_STRICT_RE,
     ):
         for m in regex.finditer(scan):
             tagged.append((m.start(), m.end(), "upi"))
@@ -567,11 +670,22 @@ def _collect_tagged_spans(
             if m.group(1).lower() not in _MEETUP_PRE_AT_WORDS:
                 tagged.append((m.start(), m.end(), "upi"))
 
-    for regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE, _PHONE_INTL_RE):
+    for regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE, _PHONE_DECOY_10_RE, _PHONE_INTL_RE):
         for m in regex.finditer(scan):
             sub = scan[m.start() : m.end()].strip()
-            if not _DATE_LIKE_RE.fullmatch(sub):
-                tagged.append((m.start(), m.end(), "phone"))
+            if _DATE_LIKE_RE.fullmatch(sub):
+                continue
+            if regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE):
+                prefix = scan[max(0, m.start() - 32) : m.start()]
+                suffix = scan[m.end() : min(len(scan), m.end() + 32)]
+                num_tokens = re.findall(r"\d+", sub)
+                if (
+                    _is_benign_date_span(sub, prefix=prefix)
+                    or _is_benign_seat_list(sub, num_tokens, prefix, suffix)
+                    or _is_benign_train_pair(sub, num_tokens, prefix)
+                ):
+                    continue
+            tagged.append((m.start(), m.end(), "phone"))
 
     for start, end in _find_word_digit_spans(scan, stripped_to_nfkc=stripped_to_nfkc):
         tagged.append((start, end, "phone"))

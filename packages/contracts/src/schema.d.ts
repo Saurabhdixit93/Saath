@@ -1249,6 +1249,7 @@ export interface operations {
       401: ProblemResp;
       403: ProblemResp;
       404: ProblemResp;
+      409: ProblemResp;
       422: ProblemResp;
     };
   };
