@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -11,12 +12,26 @@ import { useTranslations } from "next-intl";
 import { BottomSheet, Button, EmptyState, useToast } from "@saath/ui";
 import { parseProblemDetail } from "@saath/contracts";
 import { Link, useRouter } from "@/i18n/navigation";
+import {
+  buildConsentItems,
+  clearPendingDpdpConsents,
+  DEFAULT_DPDP_SELECTIONS,
+  DPDP_NOTICE_VERSION,
+  getPendingDpdpConsents,
+  hasAcknowledgedDpdpConsent,
+  saveMyConsents,
+  selectionsFromConsents,
+  setAcknowledgedDpdpConsent,
+  setPendingDpdpConsents,
+  type DpdpPurpose,
+} from "@/lib/dpdp";
 import { parsePnrInput } from "@/lib/pnr";
 import { useAuth } from "./AuthProvider";
 import {
   BoardingPassScanner,
   type BoardingPassSubmitPayload,
 } from "./BoardingPassScanner";
+import { DpdpConsentNotice } from "./DpdpConsentNotice";
 
 type ModeTab = "train" | "flight" | "bus";
 type InfoSheetKey = "how" | "safety" | "tools" | "faq" | null;
@@ -28,7 +43,7 @@ export function HomeTabs() {
   const tSeo = useTranslations("seo");
   const tCommon = useTranslations("common");
   const router = useRouter();
-  const { ensureAuth, apiClient } = useAuth();
+  const { authKind, ensureAuth, apiClient, getDpdpAuth } = useAuth();
   const { showToast } = useToast();
 
   const [activeMode, setActiveMode] = useState<ModeTab>("train");
@@ -40,6 +55,39 @@ export function HomeTabs() {
   const [flightError, setFlightError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [infoSheet, setInfoSheet] = useState<InfoSheetKey>(null);
+  const [dpdpSelections, setDpdpSelections] = useState<Record<DpdpPurpose, boolean>>(() => ({
+    ...DEFAULT_DPDP_SELECTIONS,
+  }));
+  const [dpdpAcknowledged, setDpdpAcknowledged] = useState(false);
+
+  useEffect(() => {
+    const pending = getPendingDpdpConsents();
+    if (pending) {
+      setDpdpSelections(selectionsFromConsents(pending));
+    }
+    setDpdpAcknowledged(hasAcknowledgedDpdpConsent());
+  }, []);
+
+  const handleDpdpChange = (next: Record<DpdpPurpose, boolean>) => {
+    setDpdpSelections(next);
+    setPendingDpdpConsents(buildConsentItems(next, DPDP_NOTICE_VERSION));
+  };
+
+  const persistConsentOnVerify = async () => {
+    const items = buildConsentItems(dpdpSelections, DPDP_NOTICE_VERSION);
+    setAcknowledgedDpdpConsent(true);
+    setDpdpAcknowledged(true);
+    if (authKind === "user") {
+      try {
+        await saveMyConsents(getDpdpAuth(), items);
+        clearPendingDpdpConsents();
+        return;
+      } catch {
+        // Fall back to pending localStorage so verification is never blocked
+      }
+    }
+    setPendingDpdpConsents(items);
+  };
 
   const tabRefs = useRef<Record<ModeTab, HTMLButtonElement | null>>({
     train: null,
@@ -115,6 +163,7 @@ export function HomeTabs() {
     setSubmitting(true);
     try {
       await ensureAuth();
+      await persistConsentOnVerify();
       const { data, error } = await apiClient.POST("/v1/journeys/verify", {
         body: payload,
       });
@@ -137,6 +186,7 @@ export function HomeTabs() {
     setSubmitting(true);
     try {
       await ensureAuth();
+      await persistConsentOnVerify();
       const { data, error } = await apiClient.POST("/v1/journeys/verify", {
         body: payload,
       });
@@ -270,7 +320,7 @@ export function HomeTabs() {
                 setSmsMode((prev) => !prev);
                 setPnrError(null);
               }}
-              className="text-xs font-semibold text-[var(--secondary)] underline underline-offset-4 cursor-pointer"
+              className="inline-flex min-h-[48px] items-center text-xs font-semibold text-[var(--secondary)] underline underline-offset-4 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
             >
               {t("pnrSmsModeToggle")}
             </button>
@@ -283,6 +333,12 @@ export function HomeTabs() {
                 {pnrError}
               </p>
             ) : null}
+
+            <DpdpConsentNotice
+              selections={dpdpSelections}
+              onChange={handleDpdpChange}
+              savedBanner={dpdpAcknowledged}
+            />
           </form>
         </section>
       ) : null}
@@ -292,12 +348,17 @@ export function HomeTabs() {
           id="panel-flight"
           role="tabpanel"
           aria-labelledby="tab-flight"
-          className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow)]"
+          className="space-y-4 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow)]"
         >
           <BoardingPassScanner
             onSubmit={handleVerifyFlight}
             loading={submitting}
             error={flightError}
+          />
+          <DpdpConsentNotice
+            selections={dpdpSelections}
+            onChange={handleDpdpChange}
+            savedBanner={dpdpAcknowledged}
           />
         </section>
       ) : null}

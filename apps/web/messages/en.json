@@ -145,7 +145,7 @@
     "deleteSheetTitle": "Delete your account & data?",
     "deleteSheetDescription": "This permanently schedules erasure of your personal data within 24 hours.",
     "deleteSheetBody": "Your active sessions and refresh tokens will be revoked immediately, your Karma ledger entries will be anonymised without personal identifiers, and all personal data will be erased within 24 hours.",
-    "confirmDeleteCta": "Confirm erasure & delete my account",
+    "confirmDeleteCta": "Permanently delete & erase my account",
     "cancelDeleteCta": "Keep my account",
     "erasureScheduledToast": "Account erasure scheduled (within 24 hours). You have been signed out.",
     "erasureScheduledBanner": "Your account erasure is scheduled and will complete within 24 hours.",

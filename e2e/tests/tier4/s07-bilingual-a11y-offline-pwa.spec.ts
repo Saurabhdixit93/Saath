@@ -104,14 +104,17 @@ test.describe('S07: Mobile 360x800 Bilingual, Themes, WCAG 2.2 AA & Offline PWA 
       await expect(page.locator('html')).toHaveAttribute('lang', /^hi/i);
       await assertLocale(page, 'hi', { latinDigitTexts: ['12951'] });
       await assertWcagAA(page);
+      await assertTapTargets(page);
 
       // Visit Swap Card & Chat online first so PWA caches card
       await injectAuthSession(page, authA);
       await page.goto(`/swaps/${swapId}/card`, { waitUntil: 'domcontentloaded' });
       await expect(page.getByText(new RegExp(publicCode))).toBeVisible();
       await assertWcagAA(page);
+      await assertTapTargets(page);
 
       await page.goto(`/inbox/${convoId}`, { waitUntil: 'domcontentloaded' });
+      await assertTapTargets(page);
 
       // Go offline -> send queued message in IndexedDB + verify cached Swap Card
       await context.setOffline(true);

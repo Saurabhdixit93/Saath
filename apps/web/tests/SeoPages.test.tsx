@@ -48,6 +48,9 @@ describe("SEO utility pages, catalog, sitemap, and robots", () => {
     expect(Array.from(urls).some((u) => u.endsWith("/pnr-status"))).toBe(true);
     expect(Array.from(urls).some((u) => u.endsWith("/train/12951/live"))).toBe(true);
     expect(Array.from(urls).some((u) => u.endsWith("/flights/6E/A320neo/seat-map"))).toBe(true);
+    expect(Array.from(urls).some((u) => u.endsWith("/legal/privacy"))).toBe(true);
+    expect(Array.from(urls).some((u) => u.endsWith("/legal/terms"))).toBe(true);
+    expect(Array.from(urls).some((u) => u.endsWith("/grievance"))).toBe(true);
 
     const robotsConfig = robots();
     expect(String(robotsConfig.sitemap)).toContain("sitemap.xml");

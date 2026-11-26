@@ -29,13 +29,16 @@ Load testing suite for Prompt 16 non-functional & SLO verification using [Grafan
    - `Settings.trusted_proxies` defaults to `127.0.0.1,::1`, and `auth/router.py:_client_ip` parses `X-Forwarded-For` from right to left when the TCP peer is a trusted proxy.
    - `lib/auth.js` sends distinct `10.x.y.z` `X-Forwarded-For` headers per VU/iteration and `verify_200rps.js` pre-mints `500` distinct sessions in `setup()` (`500 * 29 = 14,500 > 12,000` calls), exercising genuine Redis sliding-window rate limits, Postgres writes, and cache/provider paths without tripping single-IP `429` self-DoS.
    - Note: Each user in `verify_200rps.js` owns its own warmed cached PNR (`7100000000 + idx`) because `journeys/service.py` returns `409 pnr_already_claimed` if a different user verifies an already-claimed PNR.
+5. **Inline OR-Tools Lock Serialization in `match_recompute_storm.js`**:
+   - When `parties/router.py` does not pass `arq_pool` to `schedule_or_run_match_recompute`, `PUT /v1/parties/{id}/goal` executes `recompute_journey_matches` inline under Redis distributed lock `lock:match:{ji.id}` (`matching/service.py`, polling up to 40 × 50ms = 2s).
+   - Ensure Redis and multiple Uvicorn workers are healthy so inline lock waits stay well below the `p(95) < 2000ms` threshold.
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `API_URL` | `http://127.0.0.1:8000` | Base HTTP URL for `saath_api` |
-| `WS_URL` | `ws://127.0.0.1:8000` | Base WebSocket URL for `saath_api` (`/v1/ws` appended automatically) |
+| `WS_URL` | `ws://127.0.0.1:8000` | Base WebSocket URL for `saath_api` (`/v1/ws` normalized/appended automatically) |
 | `ENV` / `E2E_ENV` | `development` | Must NOT be `production` (preflight aborts if production unless `ALLOW_PROD_LOAD_TEST=1`) |
 | `AUTH_MODE` | `auto` | `auto` (probes OTP, falls back to anonymous JWT if OTP code isn't echoed), `otp`, or `anon` |
 | `E2E_TEST_OTP` | `123456` | Test OTP code used when `AUTH_MODE=otp` or `auto` probe |
@@ -43,7 +46,8 @@ Load testing suite for Prompt 16 non-functional & SLO verification using [Grafan
 | `RATE` | `200` | Target req/s for `verify_200rps.js` |
 | `DURATION` | `60s` | Steady-state duration for `verify_200rps.js` |
 | `PREMINT_USERS` | `500` | Number of pre-minted sessions/warmed PNRs in `verify_200rps.js` |
-| `MAX_VUS` | `5000` | Peak concurrent WS connections in `ws_5000_concurrent.js` |
+| `VERIFY_MAX_VUS` | `500` | Max VUs allocated for `verify_200rps.js` (isolated from `WS_MAX_VUS`) |
+| `WS_MAX_VUS` / `MAX_VUS` | `5000` | Peak concurrent WS connections in `ws_5000_concurrent.js` |
 | `PASSENGER_COUNT` | `200` | Active passengers created on train `12951` in `match_recompute_storm.js` |
 
 ## Usage
@@ -58,7 +62,7 @@ Load testing suite for Prompt 16 non-functional & SLO verification using [Grafan
 ./load/k6/run_all.sh --storm
 
 # Scaled-down local smoke test
-MAX_VUS=250 RATE=50 DURATION=15s PASSENGER_COUNT=40 ./load/k6/run_all.sh --all
+WS_MAX_VUS=250 VERIFY_MAX_VUS=150 RATE=50 DURATION=15s PASSENGER_COUNT=40 ./load/k6/run_all.sh --all
 ```
 
 ### Docker `grafana/k6` Fallback

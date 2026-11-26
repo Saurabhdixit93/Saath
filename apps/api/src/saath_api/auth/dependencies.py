@@ -209,7 +209,7 @@ async def require_admin_actor(
 
     settings = get_request_settings(request)
     allowed = set(settings.admin_sso_allowed_email_list)
-    if settings.is_production:
+    if settings.env not in ("development", "test"):
         if not allowed or actor.admin_email not in allowed:
             raise ProblemDetailError(
                 status_code=status.HTTP_403_FORBIDDEN,

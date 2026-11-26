@@ -6,10 +6,20 @@ import {
   authenticateSession,
   buildHeaders,
   getAuthConfig,
+  phoneForIndex,
   resolveAuthMode,
   syntheticPnrForIndex,
   xffForIndex,
 } from './lib/auth.js';
+
+function parseDurationSeconds(raw) {
+  const s = String(raw || '60s').trim().toLowerCase();
+  if (s.endsWith('ms')) return Number.parseFloat(s) / 1000;
+  if (s.endsWith('s')) return Number.parseFloat(s);
+  if (s.endsWith('m')) return Number.parseFloat(s) * 60;
+  if (s.endsWith('h')) return Number.parseFloat(s) * 3600;
+  return Number.parseFloat(s) || 60;
+}
 
 const RATE = Number(__ENV.RATE || 200);
 const DURATION = __ENV.DURATION || '60s';
@@ -46,19 +56,83 @@ export const options = {
 export function setup() {
   const cfg = getAuthConfig(__ENV);
   const authMode = resolveAuthMode(cfg.apiUrl, cfg);
+  const durationSec = parseDurationSeconds(DURATION);
+  const estCallsPerUser = (RATE * durationSec) / Math.max(1, PREMINT_USERS) + 1;
+  if (estCallsPerUser > 30) {
+    console.warn(
+      `WARNING: Estimated ${estCallsPerUser.toFixed(1)} verify calls/user exceeds verify.per_user_per_day (30) in rate_limits.yaml. Increase PREMINT_USERS to >= ${Math.ceil((RATE * durationSec) / 29)}.`,
+    );
+  }
+
   const runOffset = (Date.now() % 1000000) * 100;
   const users = [];
 
   if (authMode === 'otp') {
-    for (let i = 0; i < PREMINT_USERS; i += 1) {
-      const session = authenticateSession(cfg.apiUrl, 1000 + i, 'otp', cfg);
-      if (!session.ok || !session.access) {
-        throw new Error(`Failed OTP setup auth at index ${i}: status=${session.status} body=${session.raw}`);
+    for (let start = 0; start < PREMINT_USERS; start += BATCH_SIZE) {
+      const count = Math.min(BATCH_SIZE, PREMINT_USERS - start);
+      const startReqs = [];
+      for (let j = 0; j < count; j += 1) {
+        const idx = start + j;
+        startReqs.push({
+          method: 'POST',
+          url: `${cfg.apiUrl}/v1/auth/otp/start`,
+          body: JSON.stringify({
+            phone: phoneForIndex(1000 + idx),
+            channel: 'whatsapp',
+            turnstile: cfg.turnstileToken,
+            locale: 'en',
+          }),
+          params: {
+            headers: buildHeaders(xffForIndex(1000 + idx)),
+            tags: { endpoint: 'setup_otp_start' },
+          },
+        });
       }
-      users.push({
-        token: session.access,
-        cachedPnr: syntheticPnrForIndex(runOffset + i, 7),
-      });
+      const startResps = http.batch(startReqs);
+      const verifyReqs = [];
+      for (let j = 0; j < startResps.length; j += 1) {
+        const idx = start + j;
+        const sr = startResps[j];
+        if (sr.status !== 200) {
+          throw new Error(`Failed OTP start at index ${idx}: status=${sr.status} body=${sr.body}`);
+        }
+        const sBody = sr.json();
+        const hdrOtp =
+          sr.headers['X-Dev-Otp'] ||
+          sr.headers['x-dev-otp'] ||
+          sr.headers['X-Sandbox-Otp'] ||
+          sr.headers['x-sandbox-otp'];
+        const code = (sBody && (sBody.dev_otp || sBody.otp)) || hdrOtp || cfg.testOtpCode;
+        verifyReqs.push({
+          method: 'POST',
+          url: `${cfg.apiUrl}/v1/auth/otp/verify`,
+          body: JSON.stringify({ request_id: sBody.request_id, code }),
+          params: {
+            headers: buildHeaders(xffForIndex(1000 + idx)),
+            tags: { endpoint: 'setup_otp_verify' },
+          },
+        });
+      }
+      const verifyResps = http.batch(verifyReqs);
+      for (let j = 0; j < verifyResps.length; j += 1) {
+        const idx = start + j;
+        const vr = verifyResps[j];
+        if (vr.status !== 200) {
+          const fallback = authenticateSession(cfg.apiUrl, 1000 + idx, 'otp', cfg);
+          if (!fallback.ok || !fallback.access) {
+            throw new Error(`Failed OTP verify at index ${idx}: status=${vr.status} body=${vr.body}`);
+          }
+          users.push({
+            token: fallback.access,
+            cachedPnr: syntheticPnrForIndex(runOffset + idx, 7),
+          });
+          continue;
+        }
+        users.push({
+          token: vr.json().access,
+          cachedPnr: syntheticPnrForIndex(runOffset + idx, 7),
+        });
+      }
     }
   } else {
     for (let start = 0; start < PREMINT_USERS; start += BATCH_SIZE) {

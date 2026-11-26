@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
@@ -12,6 +13,7 @@ import { ANTI_FOUC_THEME_SCRIPT } from "@saath/ui";
 import { routing } from "@/i18n/routing";
 import { AuthProvider } from "@/components/AuthProvider";
 import { AppHeader } from "@/components/AppHeader";
+import { AppFooter } from "@/components/AppFooter";
 import { BottomNav } from "@/components/BottomNav";
 import "../globals.css";
 
@@ -64,6 +66,7 @@ export default async function LocaleLayout({
 
   setRequestLocale(locale);
   const messages = await getMessages();
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     <html
@@ -73,6 +76,7 @@ export default async function LocaleLayout({
     >
       <head>
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{ __html: ANTI_FOUC_THEME_SCRIPT }}
         />
       </head>
@@ -80,9 +84,10 @@ export default async function LocaleLayout({
         <NextIntlClientProvider messages={messages} locale={locale}>
           <AuthProvider>
             <AppHeader />
-            <main className="mx-auto w-full max-w-3xl px-4 pt-6 pb-24 md:pb-12">
+            <main className="mx-auto w-full max-w-3xl px-4 pt-6 pb-12">
               {children}
             </main>
+            <AppFooter />
             <BottomNav />
           </AuthProvider>
         </NextIntlClientProvider>

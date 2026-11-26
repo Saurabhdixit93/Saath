@@ -10,11 +10,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { ToastProvider, useToast } from "@saath/ui";
 import type { UserProfile } from "@saath/contracts";
 import { createBrowserApiClient } from "@/lib/api";
+import {
+  clearPendingDpdpConsents,
+  setAcknowledgedDpdpConsent,
+  type DpdpAuthSource,
+} from "@/lib/dpdp";
 import { publicEnv } from "@/lib/env";
 import { makeQueryClient } from "@/lib/query-client";
 import { RealtimeProvider } from "@/lib/realtime/RealtimeProvider";
@@ -76,6 +81,8 @@ interface AuthContextValue {
     user: UserProfile;
   }) => void;
   setUser: (user: UserProfile | null) => void;
+  getDpdpAuth: () => DpdpAuthSource;
+  clearLocalSession: () => void;
   logout: () => Promise<void>;
 }
 
@@ -84,6 +91,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 function InnerAuthProvider({ children }: { children: ReactNode }) {
   const tProfile = useTranslations("profile");
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [authKind, setAuthKind] = useState<AuthKind>("uninitialized");
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -289,6 +297,31 @@ function InnerAuthProvider({ children }: { children: ReactNode }) {
     [persistTokens]
   );
 
+  const getDpdpAuth = useCallback(
+    (): DpdpAuthSource => ({
+      getAccessToken: () => accessRef.current,
+      refreshTokens,
+    }),
+    [refreshTokens]
+  );
+
+  const clearLocalSession = useCallback(() => {
+    persistTokens("uninitialized", null, null);
+    try {
+      window.localStorage.removeItem("saath_access_token");
+      window.localStorage.removeItem("access_token");
+      window.localStorage.removeItem("saath_refresh_token");
+      window.localStorage.removeItem("refresh_token");
+      window.localStorage.removeItem("saath_user");
+    } catch {
+      // ignore storage errors
+    }
+    clearPendingDpdpConsents();
+    setAcknowledgedDpdpConsent(false);
+    setUser(null);
+    queryClient.clear();
+  }, [persistTokens, queryClient]);
+
   const logout = useCallback(async () => {
     try {
       if (accessRef.current && authKind === "user") {
@@ -297,18 +330,9 @@ function InnerAuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Clear local session even if server call fails
     }
-    persistTokens("uninitialized", null, null);
-    try {
-      window.localStorage.removeItem("saath_access_token");
-      window.localStorage.removeItem("access_token");
-      window.localStorage.removeItem("saath_refresh_token");
-      window.localStorage.removeItem("refresh_token");
-    } catch {
-      // ignore storage errors
-    }
-    setUser(null);
+    clearLocalSession();
     showToast({ variant: "info", message: tProfile("loggedOutToast") });
-  }, [apiClient, authKind, persistTokens, showToast, tProfile]);
+  }, [apiClient, authKind, clearLocalSession, showToast, tProfile]);
 
   return (
     <AuthContext.Provider
@@ -322,6 +346,8 @@ function InnerAuthProvider({ children }: { children: ReactNode }) {
         closeOtpModal: () => setOtpOpen(false),
         setUserSession,
         setUser,
+        getDpdpAuth,
+        clearLocalSession,
         logout,
       }}
     >

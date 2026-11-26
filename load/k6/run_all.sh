@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_URL="${API_URL:-http://127.0.0.1:8000}"
 WS_URL="${WS_URL:-ws://127.0.0.1:8000}"
 ENV_MODE="${ENV:-${E2E_ENV:-development}}"
+VERIFY_MAX_VUS="${VERIFY_MAX_VUS:-500}"
+WS_MAX_VUS="${WS_MAX_VUS:-${MAX_VUS:-5000}}"
 
 RUN_VERIFY=0
 RUN_WS=0
@@ -96,8 +98,8 @@ fi
 if [[ "$RUN_WS" -eq 1 ]]; then
   open_files="$(ulimit -n 2>/dev/null || echo 0)"
   if [[ "$open_files" =~ ^[0-9]+$ ]] && [[ "$open_files" -lt 16384 ]]; then
-    echo "WARNING: 'ulimit -n' is $open_files (< 16384). High-concurrency WS tests (MAX_VUS=${MAX_VUS:-5000}) may hit EMFILE." >&2
-    echo "         Run 'ulimit -n 16384' or set MAX_VUS=1000 for local smoke runs." >&2
+    echo "WARNING: 'ulimit -n' is $open_files (< 16384). High-concurrency WS tests (WS_MAX_VUS=${WS_MAX_VUS}) may hit EMFILE." >&2
+    echo "         Run 'ulimit -n 16384' or set WS_MAX_VUS=1000 for local smoke runs." >&2
   fi
 fi
 
@@ -131,13 +133,18 @@ echo "Preflight passed: $API_URL/readyz returned 200 (runner=$RUNNER)."
 
 run_k6_script() {
   local script_rel="$1"
+  local script_max_vus="$VERIFY_MAX_VUS"
+  if [[ "$script_rel" == "ws_5000_concurrent.js" ]]; then
+    script_max_vus="$WS_MAX_VUS"
+  fi
+
   echo ""
   echo "============================================================"
   echo "Running k6 scenario: ${script_rel}"
   echo "============================================================"
 
   if [[ "$RUNNER" == "k6" ]]; then
-    API_URL="$API_URL" WS_URL="$WS_URL" k6 run "${SCRIPT_DIR}/${script_rel}"
+    API_URL="$API_URL" WS_URL="$WS_URL" MAX_VUS="$script_max_vus" k6 run "${SCRIPT_DIR}/${script_rel}"
   else
     local docker_api_url="$API_URL"
     local docker_ws_url="$WS_URL"
@@ -165,7 +172,7 @@ run_k6_script() {
       -e "PREMINT_USERS=${PREMINT_USERS:-500}" \
       -e "PRE_ALLOCATED_VUS=${PRE_ALLOCATED_VUS:-150}" \
       -e "CACHE_HIT_RATIO=${CACHE_HIT_RATIO:-0.7}" \
-      -e "MAX_VUS=${MAX_VUS:-5000}" \
+      -e "MAX_VUS=${script_max_vus}" \
       -e "HEARTBEAT_INTERVAL_SEC=${HEARTBEAT_INTERVAL_SEC:-15}" \
       -e "HOLD_SECONDS=${HOLD_SECONDS:-60}" \
       -e "PASSENGER_COUNT=${PASSENGER_COUNT:-200}" \

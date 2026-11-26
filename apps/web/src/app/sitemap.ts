@@ -28,6 +28,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
   entries.push(withAlternates("/pnr-status", 0.9, "hourly"));
   entries.push(withAlternates("/pricing", 0.6, "weekly"));
   entries.push(withAlternates("/blog", 0.7, "weekly"));
+  entries.push(withAlternates("/legal/privacy", 0.5, "weekly"));
+  entries.push(withAlternates("/legal/terms", 0.5, "weekly"));
+  entries.push(withAlternates("/grievance", 0.5, "weekly"));
 
   for (const article of BLOG_ARTICLES) {
     entries.push(withAlternates(`/blog/${article.slug}`, 0.7, "weekly"));

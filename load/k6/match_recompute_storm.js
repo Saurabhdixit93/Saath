@@ -6,6 +6,7 @@ import {
   authenticateSession,
   buildHeaders,
   getAuthConfig,
+  phoneForIndex,
   resolveAuthMode,
   syntheticPnrForIndex,
   xffForIndex,
@@ -52,16 +53,73 @@ export function setup() {
   const passengers = [];
 
   if (authMode === 'otp') {
-    for (let i = 0; i < PASSENGER_COUNT; i += 1) {
-      const session = authenticateSession(cfg.apiUrl, 200000 + i, 'otp', cfg);
-      if (!session.ok || !session.access) {
-        throw new Error(`Storm OTP auth failed at ${i}: ${session.status} ${session.raw}`);
+    for (let start = 0; start < PASSENGER_COUNT; start += BATCH_SIZE) {
+      const end = Math.min(PASSENGER_COUNT, start + BATCH_SIZE);
+      const startReqs = [];
+      for (let i = start; i < end; i += 1) {
+        startReqs.push({
+          method: 'POST',
+          url: `${cfg.apiUrl}/v1/auth/otp/start`,
+          body: JSON.stringify({
+            phone: phoneForIndex(200000 + i),
+            channel: 'whatsapp',
+            turnstile: cfg.turnstileToken,
+            locale: 'en',
+          }),
+          params: {
+            headers: buildHeaders(xffForIndex(200000 + i)),
+            tags: { endpoint: 'storm_setup_otp_start' },
+          },
+        });
       }
-      passengers.push({
-        token: session.access,
-        xffIp: xffForIndex(200000 + i),
-        pnr: syntheticPnrForIndex(runOffset + i, 7),
-      });
+      const startResps = http.batch(startReqs);
+      const verifyReqs = [];
+      for (let j = 0; j < startResps.length; j += 1) {
+        const idx = start + j;
+        const sr = startResps[j];
+        if (sr.status !== 200) {
+          throw new Error(`Storm OTP start failed at ${idx}: ${sr.status} ${sr.body}`);
+        }
+        const sBody = sr.json();
+        const hdrOtp =
+          sr.headers['X-Dev-Otp'] ||
+          sr.headers['x-dev-otp'] ||
+          sr.headers['X-Sandbox-Otp'] ||
+          sr.headers['x-sandbox-otp'];
+        const code = (sBody && (sBody.dev_otp || sBody.otp)) || hdrOtp || cfg.testOtpCode;
+        verifyReqs.push({
+          method: 'POST',
+          url: `${cfg.apiUrl}/v1/auth/otp/verify`,
+          body: JSON.stringify({ request_id: sBody.request_id, code }),
+          params: {
+            headers: buildHeaders(xffForIndex(200000 + idx)),
+            tags: { endpoint: 'storm_setup_otp_verify' },
+          },
+        });
+      }
+      const verifyResps = http.batch(verifyReqs);
+      for (let j = 0; j < verifyResps.length; j += 1) {
+        const idx = start + j;
+        const vr = verifyResps[j];
+        const xffIp = xffForIndex(200000 + idx);
+        if (vr.status !== 200) {
+          const fallback = authenticateSession(cfg.apiUrl, 200000 + idx, 'otp', cfg);
+          if (!fallback.ok || !fallback.access) {
+            throw new Error(`Storm OTP auth failed at ${idx}: ${vr.status} ${vr.body}`);
+          }
+          passengers.push({
+            token: fallback.access,
+            xffIp,
+            pnr: syntheticPnrForIndex(runOffset + idx, 7),
+          });
+          continue;
+        }
+        passengers.push({
+          token: vr.json().access,
+          xffIp,
+          pnr: syntheticPnrForIndex(runOffset + idx, 7),
+        });
+      }
     }
   } else {
     for (let start = 0; start < PASSENGER_COUNT; start += BATCH_SIZE) {
@@ -135,6 +193,9 @@ export function setup() {
   };
 }
 
+// Per-VU monotonic match_version tracker (k6 isolates JS state per VU).
+// Note: when parties/router.py omits arq_pool, PUT /goal runs recompute_journey_matches
+// inline under Redis distributed lock lock:match:{ji.id}.
 let lastObservedMatchVersion = 0;
 
 export default function (data) {

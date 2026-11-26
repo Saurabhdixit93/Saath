@@ -737,6 +737,22 @@ export class SaathApiClient {
     return this.request('GET', '/v1/karma', { token });
   }
 
+  async getRewardsCatalogue<T = Record<string, unknown>>(
+    token: string,
+  ): Promise<ApiResponse<T>> {
+    return this.request('GET', '/v1/karma/rewards', { token });
+  }
+
+  async redeemReward<T = Record<string, unknown>>(
+    token: string,
+    rewardCode: string,
+  ): Promise<ApiResponse<T>> {
+    return this.request('POST', '/v1/karma/rewards/redeem', {
+      token,
+      body: { reward_code: rewardCode },
+    });
+  }
+
   async getMe<T = Record<string, unknown>>(token: string): Promise<ApiResponse<T>> {
     return this.request('GET', '/v1/me', { token });
   }
@@ -965,7 +981,7 @@ export class SaathApiClient {
     },
   >(
     email?: string,
-    opts?: { id_token?: string; code?: string },
+    opts?: { id_token?: string; code?: string; redirect_uri?: string },
   ): Promise<ApiResponse<T>> {
     const body: Record<string, unknown> = {};
     if (email !== undefined) {
@@ -976,6 +992,9 @@ export class SaathApiClient {
     }
     if (opts?.code !== undefined) {
       body.code = opts.code;
+    }
+    if (opts?.redirect_uri !== undefined) {
+      body.redirect_uri = opts.redirect_uri;
     }
     return this.request('POST', '/v1/admin/auth/session', { body });
   }
@@ -1046,7 +1065,10 @@ export class SaathApiClient {
   async overrideAdminDispute<T = Record<string, unknown>>(
     token: string,
     disputeId: string,
-    body: Record<string, unknown>,
+    body: {
+      action: 'complete' | 'not_completed' | 'reverse_karma' | 'clear_conflict' | 'dismiss';
+      note?: string;
+    },
   ): Promise<ApiResponse<T>> {
     return this.request('POST', `/v1/admin/disputes/${encodeURIComponent(disputeId)}/override`, {
       token,
@@ -1064,7 +1086,10 @@ export class SaathApiClient {
   async reviewAdminRedemption<T = Record<string, unknown>>(
     token: string,
     redemptionId: string,
-    body: Record<string, unknown>,
+    body: {
+      action: 'approve' | 'fulfill' | 'reject' | 'cancel';
+      note?: string;
+    },
   ): Promise<ApiResponse<T>> {
     return this.request(
       'POST',

@@ -33,8 +33,8 @@ export const options = {
         { duration: `${HOLD_SECONDS}s`, target: MAX_VUS },
         { duration: '15s', target: 0 },
       ],
-      gracefulRampDown: '10s',
-      gracefulStop: '10s',
+      gracefulRampDown: '15s',
+      gracefulStop: `${HOLD_SECONDS + 15}s`,
     },
   },
   thresholds: {
@@ -50,9 +50,12 @@ export function setup() {
   const cfg = getAuthConfig(__ENV);
   // Default to fast anonymous auth for 5k WS unless AUTH_MODE=otp is explicitly requested
   const authMode = __ENV.AUTH_MODE ? resolveAuthMode(cfg.apiUrl, cfg) : 'anon';
+  const baseWsUrl = cfg.wsUrl.replace(/\/+$/, '').replace(/\/v1\/ws$/, '');
+  const totalHoldWindowMs = (15 + 20 + 25 + HOLD_SECONDS) * 1000;
   return {
     apiUrl: cfg.apiUrl,
-    wsUrl: cfg.wsUrl,
+    wsUrl: baseWsUrl,
+    scenarioEndAtMs: Date.now() + totalHoldWindowMs,
     turnstileToken: cfg.turnstileToken,
     testOtpCode: cfg.testOtpCode,
     authMode,
@@ -70,6 +73,8 @@ export default function (data) {
   }
 
   const wsEndpoint = `${data.wsUrl}/v1/ws`;
+  const remainingWindowMs = Math.max(1000, data.scenarioEndAtMs - Date.now());
+  const socketHoldMs = Math.min(HOLD_SECONDS * 1000, remainingWindowMs);
   let readyReceived = false;
   let hadError = false;
   let authSentAt = 0;
@@ -119,7 +124,7 @@ export default function (data) {
 
     socket.setTimeout(function () {
       socket.close();
-    }, HOLD_SECONDS * 1000);
+    }, socketHoldMs);
   });
 
   const ok = check(res, {

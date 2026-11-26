@@ -12,8 +12,11 @@ from uuid import UUID
 
 import httpx
 import jwt
+import structlog
 from fastapi import Request, status
-from sqlalchemy import case, delete, func, or_, select, update
+from redis.exceptions import RedisError
+from sqlalchemy import Text, case, delete, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.admin.models import FeatureFlag
@@ -79,6 +82,9 @@ from saath_api.swaps.models import SeatLock, SwapCard, SwapParticipant, SwapProp
 _GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"]
+_DISPUTABLE_SWAP_STATES = ("awaiting_confirmation", "completed", "not_completed")
+
+logger = structlog.get_logger(__name__)
 
 OidcVerifierFn = Callable[..., Awaitable[str]]
 
@@ -144,7 +150,22 @@ async def verify_google_oidc_token(
                 title="OIDC Code Exchange Failed",
                 detail="Google Workspace rejected the authorization code.",
             )
-        token_payload = token_resp.json()
+        try:
+            token_payload = token_resp.json()
+        except ValueError as exc:
+            raise ProblemDetailError(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                code="invalid_oidc_code",
+                title="OIDC Code Exchange Failed",
+                detail="Google Workspace returned an invalid token exchange response.",
+            ) from exc
+        if not isinstance(token_payload, dict):
+            raise ProblemDetailError(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                code="invalid_oidc_code",
+                title="OIDC Code Exchange Failed",
+                detail="Google Workspace returned a malformed token exchange response.",
+            )
         raw_id_token = str(token_payload.get("id_token") or "").strip()
 
     if not raw_id_token:
@@ -166,6 +187,14 @@ async def verify_google_oidc_token(
         ) from exc
 
     kid = header.get("kid")
+    if not isinstance(kid, str) or not kid.strip():
+        raise ProblemDetailError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="invalid_oidc_token",
+            title="Invalid OIDC Token",
+            detail="Google Workspace ID token header is missing a key ID.",
+        )
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as http_client:
             jwks_resp = await http_client.get(_GOOGLE_CERTS_URL)
@@ -181,7 +210,7 @@ async def verify_google_oidc_token(
 
     keys = jwks.get("keys", []) if isinstance(jwks, dict) else []
     matching_jwk = next(
-        (k for k in keys if isinstance(k, dict) and (kid is None or k.get("kid") == kid)),
+        (k for k in keys if isinstance(k, dict) and k.get("kid") == kid),
         None,
     )
     if matching_jwk is None:
@@ -302,6 +331,13 @@ async def create_admin_session(
                     redirect_uri=req.redirect_uri,
                 )
             ).strip().lower()
+            if req.email and req.email.strip() and req.email.strip().lower() != verified_email:
+                raise ProblemDetailError(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    code="admin_email_mismatch",
+                    title="Email Mismatch",
+                    detail="Requested email does not match verified Google Workspace identity.",
+                )
             if verified_email not in allowed:
                 raise ProblemDetailError(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -356,13 +392,21 @@ async def get_funnel_analytics(
     from_date: date | None = None,
     to_date: date | None = None,
 ) -> FunnelAnalyticsResponse:
+    if from_date is not None and to_date is not None and from_date > to_date:
+        raise ProblemDetailError(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="invalid_date_range",
+            title="Invalid Date Range",
+            detail="from_date must be on or before to_date.",
+        )
+
     route_clean = route.strip().upper() if route and route.strip() else None
 
-    ji_stmt = select(JourneyInstance)
+    ji_filters = []
     if from_date is not None:
-        ji_stmt = ji_stmt.where(JourneyInstance.service_date >= from_date)
+        ji_filters.append(JourneyInstance.service_date >= from_date)
     if to_date is not None:
-        ji_stmt = ji_stmt.where(JourneyInstance.service_date <= to_date)
+        ji_filters.append(JourneyInstance.service_date <= to_date)
     if route_clean is not None:
         route_booking_subq = select(Booking.journey_instance_id).where(
             func.upper(
@@ -374,7 +418,7 @@ async def get_funnel_analytics(
             )
             == route_clean
         )
-        ji_stmt = ji_stmt.where(
+        ji_filters.append(
             or_(
                 func.upper(JourneyInstance.service_no) == route_clean,
                 func.upper(JourneyInstance.carrier_code) == route_clean,
@@ -382,8 +426,13 @@ async def get_funnel_analytics(
             )
         )
 
+    ji_stmt = select(JourneyInstance)
+    journey_id_subq = select(JourneyInstance.id)
+    if ji_filters:
+        ji_stmt = ji_stmt.where(*ji_filters)
+        journey_id_subq = journey_id_subq.where(*ji_filters)
+
     journeys = list((await db.execute(ji_stmt)).scalars().all())
-    journey_ids = [j.id for j in journeys]
 
     outbox_stmt = select(NotificationsOutbox.status, func.count(NotificationsOutbox.id)).group_by(
         NotificationsOutbox.status
@@ -409,7 +458,7 @@ async def get_funnel_analytics(
         delivery_rate=delivery_rate,
     )
 
-    if not journey_ids:
+    if not journeys:
         return FunnelAnalyticsResponse(
             from_date=from_date,
             to_date=to_date,
@@ -432,24 +481,33 @@ async def get_funnel_analytics(
                 Booking.from_code,
                 Booking.to_code,
                 Booking.trust_tier,
-            ).where(Booking.journey_instance_id.in_(journey_ids))
+                func.count(Booking.id),
+            )
+            .where(Booking.journey_instance_id.in_(journey_id_subq))
+            .group_by(
+                Booking.journey_instance_id,
+                Booking.from_code,
+                Booking.to_code,
+                Booking.trust_tier,
+            )
         )
     ).all()
 
     verified_by_ji: dict[UUID, int] = defaultdict(int)
     route_pair_counts: dict[UUID, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    for ji_id, from_code, to_code, trust_tier in booking_rows:
+    for ji_id, from_code, to_code, trust_tier, cnt in booking_rows:
+        n = int(cnt)
         if trust_tier in ("verified_provider", "verified_bcbp", "verified_doc"):
-            verified_by_ji[ji_id] += 1
+            verified_by_ji[ji_id] += n
         if from_code and to_code:
             pair = f"{from_code.upper()}-{to_code.upper()}"
-            route_pair_counts[ji_id][pair] += 1
+            route_pair_counts[ji_id][pair] += n
 
     goal_rows = (
         await db.execute(
             select(Party.journey_instance_id, func.count(func.distinct(Goal.party_id)))
             .join(Goal, Goal.party_id == Party.id)
-            .where(Party.journey_instance_id.in_(journey_ids), Goal.active.is_(True))
+            .where(Party.journey_instance_id.in_(journey_id_subq), Goal.active.is_(True))
             .group_by(Party.journey_instance_id)
         )
     ).all()
@@ -461,7 +519,7 @@ async def get_funnel_analytics(
                 MatchCandidate.journey_instance_id,
                 func.count(func.distinct(MatchCandidate.for_party_id)),
             )
-            .where(MatchCandidate.journey_instance_id.in_(journey_ids))
+            .where(MatchCandidate.journey_instance_id.in_(journey_id_subq))
             .group_by(MatchCandidate.journey_instance_id)
         )
     ).all()
@@ -474,7 +532,7 @@ async def get_funnel_analytics(
                 SwapProposal.status,
                 func.count(SwapProposal.id),
             )
-            .where(SwapProposal.journey_instance_id.in_(journey_ids))
+            .where(SwapProposal.journey_instance_id.in_(journey_id_subq))
             .group_by(SwapProposal.journey_instance_id, SwapProposal.status)
         )
     ).all()
@@ -610,13 +668,26 @@ async def get_providers_health(
             failures = 0
             open_ttl_seconds = 0
             if redis is not None:
-                is_open = bool(await redis.exists(f"cb:rail:{pname}:open"))
-                raw_fail = await redis.get(f"cb:rail:{pname}:failures")
-                failures = int(raw_fail) if raw_fail else 0
-                if is_open:
-                    ttl_raw = await redis.ttl(f"cb:rail:{pname}:open")
-                    if isinstance(ttl_raw, int) and ttl_raw > 0:
-                        open_ttl_seconds = ttl_raw
+                try:
+                    is_open = bool(await redis.exists(f"cb:rail:{pname}:open"))
+                    if is_open:
+                        ttl_raw = await redis.ttl(f"cb:rail:{pname}:open")
+                        if isinstance(ttl_raw, int) and ttl_raw > 0:
+                            open_ttl_seconds = ttl_raw
+                    raw_fail = await redis.get(f"cb:rail:{pname}:failures")
+                    try:
+                        failures = int(raw_fail) if raw_fail else 0
+                    except (ValueError, TypeError):
+                        failures = 0
+                except (RedisError, OSError, ValueError, TypeError) as exc:
+                    logger.warning(
+                        "provider_health_redis_degraded",
+                        provider=pname,
+                        error=str(exc),
+                    )
+                    is_open = False
+                    failures = 0
+                    open_ttl_seconds = 0
             mode = "fake" if "fake" in pname.lower() else "live"
             providers.append(
                 ProviderHealthItem(
@@ -1267,26 +1338,29 @@ async def list_disputes(
     negative_confirm_subq = select(SwapParticipant.proposal_id).where(
         SwapParticipant.post_confirm.in_(("no", "did_not_board"))
     )
+    overridden_subq = select(AuditLog.resource).where(
+        AuditLog.action == "admin.dispute_override",
+        AuditLog.resource.is_not(None),
+    )
+    swap_resource_expr = func.concat("swap:", func.cast(SwapProposal.id, Text))
+    booking_resource_expr = func.concat("booking:", func.cast(Booking.id, Text))
+
     if status_filter == "open":
         swap_cond = or_(
             SwapProposal.status == "not_completed",
             (SwapProposal.status == "awaiting_confirmation")
             & SwapProposal.id.in_(negative_confirm_subq),
-        )
+        ) & ~swap_resource_expr.in_(overridden_subq)
     elif status_filter == "resolved":
-        overridden_subq = select(AuditLog.resource).where(
-            AuditLog.action == "admin.dispute_override"
-        )
         swap_cond = or_(
             (SwapProposal.status == "completed") & SwapProposal.id.in_(negative_confirm_subq),
-            func.concat("swap:", func.cast(SwapProposal.id, AuditLog.resource.type)).in_(
-                overridden_subq
-            ),
+            swap_resource_expr.in_(overridden_subq),
         )
     else:
         swap_cond = or_(
             SwapProposal.status == "not_completed",
             SwapProposal.id.in_(negative_confirm_subq),
+            swap_resource_expr.in_(overridden_subq),
         )
 
     swap_rows = (
@@ -1333,29 +1407,40 @@ async def list_disputes(
             )
         )
 
-    if status_filter in ("open", "all"):
-        conflict_rows = (
-            await db.execute(
-                select(Booking, JourneyInstance)
-                .join(JourneyInstance, JourneyInstance.id == Booking.journey_instance_id)
-                .where(Booking.claim_conflict_flagged.is_(True))
-                .order_by(Booking.created_at.desc())
+    if status_filter == "open":
+        booking_cond = Booking.claim_conflict_flagged.is_(True)
+    elif status_filter == "resolved":
+        booking_cond = Booking.claim_conflict_flagged.is_(False) & booking_resource_expr.in_(
+            overridden_subq
+        )
+    else:
+        booking_cond = or_(
+            Booking.claim_conflict_flagged.is_(True),
+            booking_resource_expr.in_(overridden_subq),
+        )
+
+    conflict_rows = (
+        await db.execute(
+            select(Booking, JourneyInstance)
+            .join(JourneyInstance, JourneyInstance.id == Booking.journey_instance_id)
+            .where(booking_cond)
+            .order_by(Booking.created_at.desc())
+        )
+    ).all()
+    for booking, ji in conflict_rows:
+        dispute_items.append(
+            AdminDisputeItemDTO(
+                dispute_id=booking.id,
+                dispute_type="claim_conflict",
+                status="conflict_flagged" if booking.claim_conflict_flagged else "resolved",
+                journey_instance_id=ji.id,
+                service=f"{ji.carrier_code} {ji.service_no}".strip(),
+                service_date=ji.service_date,
+                participants=[],
+                claim_conflict_flagged=booking.claim_conflict_flagged,
+                created_at=booking.created_at,
             )
-        ).all()
-        for booking, ji in conflict_rows:
-            dispute_items.append(
-                AdminDisputeItemDTO(
-                    dispute_id=booking.id,
-                    dispute_type="claim_conflict",
-                    status="conflict_flagged",
-                    journey_instance_id=ji.id,
-                    service=f"{ji.carrier_code} {ji.service_no}".strip(),
-                    service_date=ji.service_date,
-                    participants=[],
-                    claim_conflict_flagged=True,
-                    created_at=booking.created_at,
-                )
-            )
+        )
 
     dispute_items.sort(key=lambda item: item.created_at, reverse=True)
     total = len(dispute_items)
@@ -1372,6 +1457,86 @@ async def list_disputes(
     await db.commit()
 
     return AdminDisputeListResponse(items=paged, total=total)
+
+
+async def _reverse_proposal_karma_safe(
+    *,
+    db: AsyncSession,
+    proposal_id: UUID,
+    reason: str,
+) -> list[UUID]:
+    credited_rows = (
+        await db.execute(
+            select(KarmaLedger).where(
+                KarmaLedger.proposal_id == proposal_id,
+                KarmaLedger.state == "credited",
+                KarmaLedger.user_id.is_not(None),
+            )
+        )
+    ).scalars().all()
+    if not credited_rows:
+        return []
+
+    expected_keys = [
+        f"karma_reversed:{proposal_id}:{row.user_id}"
+        for row in credited_rows
+        if row.user_id is not None
+    ]
+    existing_keys = set(
+        (
+            await db.execute(
+                select(NotificationsOutbox.idempotency_key).where(
+                    NotificationsOutbox.idempotency_key.in_(expected_keys)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not existing_keys:
+        return await reverse_for_proposal(
+            db=db,
+            proposal_id=proposal_id,
+            reason=reason,
+        )
+
+    reversed_uids: list[UUID] = []
+    for row in credited_rows:
+        if row.user_id is None:
+            continue
+        rev_amount = -abs(int(row.delta))
+        stmt = (
+            pg_insert(KarmaLedger)
+            .values(
+                user_id=row.user_id,
+                proposal_id=proposal_id,
+                delta=rev_amount,
+                state="reversed",
+                reason=reason,
+            )
+            .on_conflict_do_nothing(constraint="uq_karma_ledger_user_proposal_state")
+            .returning(KarmaLedger.id)
+        )
+        inserted = (await db.execute(stmt)).scalar_one_or_none()
+        if inserted is not None:
+            reversed_uids.append(row.user_id)
+            idem_key = f"karma_reversed:{proposal_id}:{row.user_id}"
+            if idem_key not in existing_keys:
+                await db.execute(
+                    pg_insert(NotificationsOutbox)
+                    .values(
+                        user_id=row.user_id,
+                        event="KarmaReversed",
+                        payload={
+                            "swap_id": str(proposal_id),
+                            "points": abs(rev_amount),
+                            "reason": reason,
+                        },
+                        idempotency_key=idem_key,
+                    )
+                    .on_conflict_do_nothing(index_elements=["idempotency_key"])
+                )
+    return reversed_uids
 
 
 async def override_dispute(
@@ -1430,6 +1595,14 @@ async def override_dispute(
             detail="Action 'clear_conflict' is only valid for booking claim conflicts.",
         )
 
+    if proposal.status not in _DISPUTABLE_SWAP_STATES:
+        raise ProblemDetailError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="invalid_dispute_state",
+            title="Invalid Dispute State",
+            detail=f"Cannot override swap in non-disputable state {proposal.status!r}.",
+        )
+
     parts = list(
         (
             await db.execute(
@@ -1486,6 +1659,8 @@ async def override_dispute(
         )
         await evaluate_and_award_badges(db=db, proposal=proposal, parts=parts, ji=ji)
         credited_users = sorted(awarded.keys(), key=str)
+    elif req.action == "dismiss":
+        proposal.version += 1
     else:
         was_completed = proposal.status == "completed"
         proposal.status = "not_completed"
@@ -1498,7 +1673,7 @@ async def override_dispute(
                     reliability_completed=func.greatest(0, User.reliability_completed - 1)
                 )
             )
-        reversed_users = await reverse_for_proposal(
+        reversed_users = await _reverse_proposal_karma_safe(
             db=db,
             proposal_id=proposal.id,
             reason=f"admin_override:{req.action}",

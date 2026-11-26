@@ -7,6 +7,11 @@ import { z } from "zod";
 import { BottomSheet, Button, useToast } from "@saath/ui";
 import { parseProblemDetail } from "@saath/contracts";
 import { publicEnv } from "@/lib/env";
+import {
+  clearPendingDpdpConsents,
+  getPendingDpdpConsents,
+  saveMyConsents,
+} from "@/lib/dpdp";
 import { useAuth } from "./AuthProvider";
 import { TurnstileWidget } from "./TurnstileWidget";
 
@@ -208,7 +213,17 @@ export function PhoneOtpSheet({ open, onClose }: PhoneOtpSheetProps) {
         refresh: data.refresh,
         user: data.user,
       });
+      const pendingConsents = getPendingDpdpConsents();
+      if (pendingConsents && pendingConsents.length > 0) {
+        try {
+          await saveMyConsents(data.access, pendingConsents);
+          clearPendingDpdpConsents();
+        } catch {
+          // Non-blocking best-effort consent sync
+        }
+      }
       await queryClient.invalidateQueries({ queryKey: ["me"] });
+      await queryClient.invalidateQueries({ queryKey: ["dpdp-consents"] });
       showToast({ variant: "success", message: t("otpSuccess") });
       onClose();
     } catch {
