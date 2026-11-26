@@ -109,10 +109,11 @@ class LLMProvider(Protocol):
 
 _SCAM_RE = re.compile(
     r"(?i)(?:"
-    r"\b(?:pay|send)\s+(?:(?:me|us)\s+)?"
+    r"\b(?:pay|send|transfer)\s+(?:(?:me|us)\s+)?"
     r"(?:"
     r"(?:money|inr|rupees?|advance|deposit|fee|first|upi)\b"
-    r"|rs\b\.?"
+    r"|(?:in|as|for)\s+(?:advance|deposit|fee)\b"
+    r"|rs(?:\.?\s*\d+|\b\.?)"
     r"|₹\s*\d*"
     r"|(?:an?|the|some)\s+(?:money|advance|deposit|fee)\b"
     r"|(?:via|on|by|through)\s+(?:upi|gpay|phonepe|paytm)\b"
@@ -120,6 +121,9 @@ _SCAM_RE = re.compile(
     r"(?:(?:in|as|for)\s+)?(?:advance|deposit|fee)\b|"
     r"(?:first|money)\b|(?:(?:via|on|by|through)\s+)?(?:upi|gpay|phonepe|paytm)\b)"
     r")"
+    r"|\b(?:gpay|phonepe|paytm|upi)\s+(?:(?:me|us)\s+)?(?:rs\.?\s*|₹\s*)?\d+(?:[.,]\d+)?\b"
+    r"(?:\s*(?:rs\b\.?|(?:inr|rupees?)\b|"
+    r"(?:(?:in|as|for)\s+)?(?:advance|deposit|fee)\b|first\b))?"
     r"|\b(?:share\s+your\s+otp|bank\s+account|lottery|prize\s+won|crypto\s+transfer)\b"
     r"|(?:(?:पैसे|रुपये|एडवांस)\s+(?:भेजो|दो)|ओटीपी\s+बताओ)"
     r")"

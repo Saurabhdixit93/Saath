@@ -401,6 +401,11 @@ async def test_evaluate_message_moderation_catches_advance_fee_scams_and_allows_
         "Send 200 rupees advance via UPI",
         "Pay ₹500 first",
         "Send me Rs. 300 deposit before boarding",
+        "transfer Rs 1000 deposit before swap",
+        "Please transfer 500 advance first",
+        "Pay Rs500 first",
+        "Pay in advance Rs 500",
+        "GPay me 500 first",
     ):
         red = redact_contact_details(scam_msg, locale="en")
         outcome = await evaluate_message_moderation(
@@ -416,6 +421,8 @@ async def test_evaluate_message_moderation_catches_advance_fee_scams_and_allows_
         "Meet at SBI counter near B3",
         "Can we swap seats 61 and 62?",
         "Can you send the swap request first?",
+        "I can transfer to coach B3",
+        "Please send RSVP by tonight",
     ):
         red = redact_contact_details(benign_msg, locale="en")
         outcome = await evaluate_message_moderation(
