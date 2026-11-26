@@ -163,6 +163,9 @@ def plan_party_bay_swaps(
                     continue
                 if not ext.coach or ext.coach.upper() != target_coach:
                     continue
+                if gtype == "together" and target_bay is not None:
+                    if ext.bay is None or abs(ext.bay - target_bay) > 1:
+                        continue
                 if party_women_only and not is_verified_female(ext):
                     continue
                 if ext.women_only and not party_all_female:
@@ -194,6 +197,12 @@ def plan_party_bay_swaps(
                             m.owner_user_id,
                         ) in graph.blocks:
                             continue
+                    if gtype == "together" and target_bay is not None:
+                        if ext.bay is None or abs(ext.bay - target_bay) > 1:
+                            continue
+                        if (m.coach or "").upper() == target_coach and m.bay is not None:
+                            if abs(ext.bay - target_bay) >= abs(m.bay - target_bay):
+                                continue
                     overlap = check_segment_overlap(m, ext)
                     ext_overlap = check_segment_overlap(ext, m)
                     if overlap is None or ext_overlap is None:

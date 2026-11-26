@@ -1230,7 +1230,6 @@ async def reverify_journey(
     actor: Actor,
     journey_id: UUID,
     simulate_chart_change: bool = False,
-    arq_pool: Any | None = None,
 ) -> JourneyHubResponse:
     ji, booking, party = await _load_actor_journey_context(
         db=db, actor=actor, journey_id=journey_id
@@ -1333,8 +1332,9 @@ async def reverify_journey(
     if changed:
         from saath_api.matching.service import schedule_or_run_match_recompute
 
+        # Run inline (arq_pool=None) so chart/berth changes refresh matches immediately.
         await schedule_or_run_match_recompute(
-            db=db, redis=redis, journey_instance_id=ji.id
+            db=db, redis=redis, journey_instance_id=ji.id, settings=settings
         )
 
     return await _build_journey_hub(

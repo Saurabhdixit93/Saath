@@ -352,6 +352,120 @@ def test_party_bay_plan_enforces_women_only_blocks_and_no_split_when_together() 
     assert plan_party_bay_swaps(g2, {party_id: [m1_together, m2_split]}) == []
 
 
+def test_party_bay_plan_together_never_moves_member_farther_in_same_coach() -> None:
+    p_sh1 = uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-m1")
+    p_sh2 = uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-m2")
+    party_id = uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-party")
+    m1 = SeatNode(
+        seat_holder_id=p_sh1,
+        party_id=party_id,
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-bk1"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-u1"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="9",
+        seat_type="LB",
+        bay=2,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="together",
+        movers=frozenset({p_sh1, p_sh2}),
+    )
+    m2 = SeatNode(
+        seat_holder_id=p_sh2,
+        party_id=party_id,
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-bk2"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-u2"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="17",
+        seat_type="UB",
+        bay=3,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="together",
+        movers=frozenset({p_sh1, p_sh2}),
+    )
+    # External in bay 5 (farther) or bay 1 (same distance on opposite side of bay 2)
+    ext_far = SeatNode(
+        seat_holder_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-far"),
+        party_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-p1"),
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-b1"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-u1"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="33",
+        seat_type="LB",
+        bay=5,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="open_to_help",
+        movers=frozenset(),
+        standing_give_to="anyone",
+    )
+    ext_opp = SeatNode(
+        seat_holder_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-opp"),
+        party_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-p2"),
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-b2"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-u2"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="1",
+        seat_type="LB",
+        bay=1,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="open_to_help",
+        movers=frozenset(),
+        standing_give_to="anyone",
+    )
+    g_no_closer = build_swap_graph([m1, m2, ext_far, ext_opp])
+    assert plan_party_bay_swaps(g_no_closer, {party_id: [m1, m2]}) == []
+
+    # External in target bay 2 strictly brings m2 closer (distance 1 -> 0)
+    ext_target = SeatNode(
+        seat_holder_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-t"),
+        party_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-pt"),
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-bt"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pbt-ext-ut"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="10",
+        seat_type="MB",
+        bay=2,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="open_to_help",
+        movers=frozenset(),
+        standing_give_to="anyone",
+    )
+    g_closer = build_swap_graph([m1, m2, ext_far, ext_opp, ext_target])
+    plans = plan_party_bay_swaps(g_closer, {party_id: [m1, m2]})
+    assert len(plans) == 1
+    assert plans[0].target_bay == 2
+    assert plans[0].cycles == ((p_sh2, ext_target.seat_holder_id),)
+
+
 def test_matching_and_swaps_import_cleanly() -> None:
     import saath_api.main  # noqa: F401
     import saath_api.matching.service  # noqa: F401

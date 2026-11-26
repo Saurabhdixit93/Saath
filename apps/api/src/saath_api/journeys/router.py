@@ -152,7 +152,6 @@ async def post_v1_journey_reverify(
         actor=actor,
         journey_id=journey_id,
         simulate_chart_change=simulate_change,
-        arq_pool=getattr(request.app.state, "arq_pool", None),
     )
 
 

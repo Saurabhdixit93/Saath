@@ -446,7 +446,7 @@ class FakeRailProvider:
             from_code="NDLS",
             to_code="MMCT",
             from_seq=1,
-            to_seq=6,
+            to_seq=9,
             departure_at=dep_at,
             arrival_at=arr_at,
             chart_state="pending",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -15,6 +16,7 @@ from saath_api.journeys.sms_parser import (
     parse_irctc_sms_text,
     parse_irctc_sms_with_optional_llm,
 )
+from saath_api.matching.graph import SeatNode, check_segment_overlap
 from saath_api.providers.rail.fake import FakeRailProvider
 from saath_api.providers.rail.protocol import (
     BookingDTO,
@@ -123,6 +125,63 @@ async def test_fake_rail_provider_70_pax_and_error_pnrs() -> None:
         await fake.get_pnr("1111111111")
     with pytest.raises(RailPnrInvalidError):
         await fake.get_pnr("12345")
+
+
+async def test_fake_rail_provider_synthetic_12951_overlaps_brc_mmct_sms() -> None:
+    fake = FakeRailProvider()
+    synth = await fake.get_pnr("5555555555")
+    assert synth.train_no == "12951"
+    assert synth.from_code == "NDLS"
+    assert synth.to_code == "MMCT"
+    assert synth.from_seq == 1
+    assert synth.to_seq == 9
+
+    sms = parse_irctc_sms_text(
+        "PNR 9123456789 TRN 12951 DOJ 2026-12-01 BRC-MMCT 3A CNF/B3/45/LB"
+    )
+    assert sms.from_code == "BRC"
+    assert sms.to_code == "MMCT"
+    assert sms.from_seq == 6
+    assert sms.to_seq == 9
+
+    n_synth = SeatNode(
+        seat_holder_id=uuid.uuid4(),
+        party_id=uuid.uuid4(),
+        booking_id=uuid.uuid4(),
+        owner_user_id=uuid.uuid4(),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="12",
+        seat_type="UB",
+        bay=2,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=synth.from_seq,
+        to_seq=synth.to_seq,
+        goal_type="lower",
+    )
+    n_sms = SeatNode(
+        seat_holder_id=uuid.uuid4(),
+        party_id=uuid.uuid4(),
+        booking_id=uuid.uuid4(),
+        owner_user_id=uuid.uuid4(),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="45",
+        seat_type="LB",
+        bay=6,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_doc",
+        from_seq=sms.from_seq,
+        to_seq=sms.to_seq,
+        goal_type="open_to_help",
+    )
+    assert check_segment_overlap(n_synth, n_sms) == "partial"
+    assert check_segment_overlap(n_sms, n_synth) == "full"
 
 
 async def test_provider_router_fallback_timeout_circuit_breaker_and_cache() -> None:
