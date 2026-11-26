@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,7 +93,8 @@ describe("Swap lifecycle & Inbox confirmation", () => {
 
     let acceptAttempts = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/v1/swaps/0193632e-0000-7000-8000-000000000010") && (!init?.method || init.method === "GET")) {
         return new Response(JSON.stringify(makeSwapPayload()), {
           status: 200,
@@ -139,17 +140,21 @@ describe("Swap lifecycle & Inbox confirmation", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { container, unmount } = render(
-      <NextIntlClientProvider locale="en" messages={enMessages}>
-        <AuthProvider>
-          <Suspense fallback={<div>loading</div>}>
-            <SwapDetailPage
-              params={Promise.resolve({ id: "0193632e-0000-7000-8000-000000000010" })}
-            />
-          </Suspense>
-        </AuthProvider>
-      </NextIntlClientProvider>
-    );
+    let rendered!: ReturnType<typeof render>;
+    await act(async () => {
+      rendered = render(
+        <NextIntlClientProvider locale="en" messages={enMessages}>
+          <AuthProvider>
+            <Suspense fallback={<div>loading</div>}>
+              <SwapDetailPage
+                params={Promise.resolve({ id: "0193632e-0000-7000-8000-000000000010" })}
+              />
+            </Suspense>
+          </AuthProvider>
+        </NextIntlClientProvider>
+      );
+    });
+    const { container, unmount } = rendered;
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Accept swap" })).toBeInTheDocument()

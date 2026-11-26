@@ -183,6 +183,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ showToast, dismissToast }}>
       {children}
       <div
+        role="region"
         aria-label="Notifications"
         className="pointer-events-none fixed inset-x-0 bottom-20 z-50 mx-auto flex w-full max-w-md flex-col gap-2 px-4 md:bottom-6"
       >

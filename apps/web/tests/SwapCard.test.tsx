@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -150,17 +150,19 @@ describe("SwapCard & Public Verify", () => {
       })
     );
 
-    render(
-      <NextIntlClientProvider locale="en" messages={enMessages}>
-        <AuthProvider>
-          <Suspense fallback={<div>loading</div>}>
-            <SwapCardPage
-              params={Promise.resolve({ id: "0193632e-0000-7000-8000-000000000020" })}
-            />
-          </Suspense>
-        </AuthProvider>
-      </NextIntlClientProvider>
-    );
+    await act(async () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={enMessages}>
+          <AuthProvider>
+            <Suspense fallback={<div>loading</div>}>
+              <SwapCardPage
+                params={Promise.resolve({ id: "0193632e-0000-7000-8000-000000000020" })}
+              />
+            </Suspense>
+          </AuthProvider>
+        </NextIntlClientProvider>
+      );
+    });
 
     await waitFor(() =>
       expect(screen.getByText(/#SW-7Q2K9M/)).toBeInTheDocument()
@@ -171,7 +173,8 @@ describe("SwapCard & Public Verify", () => {
 
   it("renders public verify page for valid, revoked, and 404 states", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/SW-VALID1")) {
         return new Response(
           JSON.stringify({
@@ -219,40 +222,48 @@ describe("SwapCard & Public Verify", () => {
 
     const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
 
-    const r1 = render(
-      <QueryClientProvider client={new QueryClient()}>
-        <NextIntlClientProvider locale="en" messages={enMessages}>
-          <Suspense fallback={<div>loading</div>}>
-            <PublicVerifySwapCardPage params={Promise.resolve({ code: "SW-VALID1" })} />
-          </Suspense>
-        </NextIntlClientProvider>
-      </QueryClientProvider>
-    );
+    let r1!: ReturnType<typeof render>;
+    await act(async () => {
+      r1 = render(
+        <QueryClientProvider client={new QueryClient()}>
+          <NextIntlClientProvider locale="en" messages={enMessages}>
+            <Suspense fallback={<div>loading</div>}>
+              <PublicVerifySwapCardPage params={Promise.resolve({ code: "SW-VALID1" })} />
+            </Suspense>
+          </NextIntlClientProvider>
+        </QueryClientProvider>
+      );
+    });
     await waitFor(() => expect(screen.getByText(/Valid Swap Card/i)).toBeInTheDocument());
     expect(await runAxe(r1.container)).toHaveNoViolations();
     r1.unmount();
 
-    const r2 = render(
-      <QueryClientProvider client={new QueryClient()}>
-        <NextIntlClientProvider locale="en" messages={enMessages}>
-          <Suspense fallback={<div>loading</div>}>
-            <PublicVerifySwapCardPage params={Promise.resolve({ code: "SW-REVOKED" })} />
-          </Suspense>
-        </NextIntlClientProvider>
-      </QueryClientProvider>
-    );
+    let r2!: ReturnType<typeof render>;
+    await act(async () => {
+      r2 = render(
+        <QueryClientProvider client={new QueryClient()}>
+          <NextIntlClientProvider locale="en" messages={enMessages}>
+            <Suspense fallback={<div>loading</div>}>
+              <PublicVerifySwapCardPage params={Promise.resolve({ code: "SW-REVOKED" })} />
+            </Suspense>
+          </NextIntlClientProvider>
+        </QueryClientProvider>
+      );
+    });
     await waitFor(() => expect(screen.getByText(/Revoked \/ Invalidated/i)).toBeInTheDocument());
     r2.unmount();
 
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <NextIntlClientProvider locale="en" messages={enMessages}>
-          <Suspense fallback={<div>loading</div>}>
-            <PublicVerifySwapCardPage params={Promise.resolve({ code: "SW-ZZZZ99" })} />
-          </Suspense>
-        </NextIntlClientProvider>
-      </QueryClientProvider>
-    );
+    await act(async () => {
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <NextIntlClientProvider locale="en" messages={enMessages}>
+            <Suspense fallback={<div>loading</div>}>
+              <PublicVerifySwapCardPage params={Promise.resolve({ code: "SW-ZZZZ99" })} />
+            </Suspense>
+          </NextIntlClientProvider>
+        </QueryClientProvider>
+      );
+    });
     await waitFor(() => expect(screen.getByText(/Swap Card not found/i)).toBeInTheDocument());
     vi.unstubAllGlobals();
   });

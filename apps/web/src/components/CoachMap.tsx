@@ -13,7 +13,7 @@ export interface CoachMapProps {
   onSelectMatchSeat?: (seat: CoachMapSeatDTO) => void;
 }
 
-const SEAT_TYPE_KEY: Record<string, string> = {
+const SEAT_TYPE_KEY = {
   LB: "berthTypeLB",
   MB: "berthTypeMB",
   UB: "berthTypeUB",
@@ -23,16 +23,16 @@ const SEAT_TYPE_KEY: Record<string, string> = {
   WS: "berthTypeWS",
   MS: "berthTypeMS",
   AS: "berthTypeAS",
-};
+} as const;
 
-const STATE_TEXT_KEY: Record<CoachMapSeatDTO["state"], string> = {
+const STATE_TEXT_KEY = {
   mine: "seatStateMine",
   party: "seatStateParty",
   match: "seatStateMatch",
   incoming: "seatStateIncoming",
   occupied: "seatStateOccupied",
   unknown: "seatStateUnknown",
-};
+} as const satisfies Record<CoachMapSeatDTO["state"], string>;
 
 export function CoachMap({
   mapData,
@@ -192,8 +192,11 @@ export function CoachMap({
               marker = "•";
             }
 
-            const typeKey = SEAT_TYPE_KEY[cell.seat_type.toUpperCase()];
-            const berthName = typeKey ? tMatches(typeKey) : cell.seat_type;
+            const upperType = cell.seat_type.toUpperCase();
+            const berthName =
+              upperType in SEAT_TYPE_KEY
+                ? tMatches(SEAT_TYPE_KEY[upperType as keyof typeof SEAT_TYPE_KEY])
+                : cell.seat_type;
             const stateText = tMatches(STATE_TEXT_KEY[cell.state]);
             const ariaLabel = `Coach ${mapData.coach}, berth ${seatStr}, ${berthName}, ${stateText}`;
             const isSelected = activeSeatNo === seatStr;

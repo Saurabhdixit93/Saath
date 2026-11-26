@@ -1,4 +1,4 @@
-const LABELED_PNR_REGEX = /\bPNR\s*(?:NO\.?|NUMBER)?\s*[:\-]?\s*([0-9]{10})\b/i;
+const LABELED_PNR_REGEX = /\bPNR\s*(?:NO\.?|NUMBER)?\s*[:-]?\s*([0-9]{10})\b/i;
 const TEN_DIGIT_PNR_REGEX = /\b([0-9]{10})\b/;
 
 export interface PnrParseResult {

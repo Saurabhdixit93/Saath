@@ -109,6 +109,7 @@ def test_production_forbids_missing_keys_and_fake_modes() -> None:
         ("whatsapp_phone_number_id", "   "),
         ("whatsapp_app_secret", ""),
         ("whatsapp_app_secret", "   "),
+        ("whatsapp_app_secret", "dev-whatsapp-secret"),
         ("sms_mode", "fake"),
         ("msg91_auth_key", ""),
         ("msg91_auth_key", "   "),

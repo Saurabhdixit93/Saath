@@ -151,7 +151,7 @@ export default function SwapDetailPage({
   const swap = swapQuery.data;
   const partners = swap.participants.filter((p) => !p.is_me);
 
-  const statusLabelKey: Record<string, string> = {
+  const statusLabelKey = {
     pending: "statusPending",
     confirmed: "statusConfirmed",
     declined: "statusDeclined",
@@ -161,7 +161,12 @@ export default function SwapDetailPage({
     awaiting_confirmation: "statusAwaitingConfirmation",
     completed: "statusCompleted",
     not_completed: "statusNotCompleted",
-  };
+  } as const;
+  type SwapStatusKey = (typeof statusLabelKey)[keyof typeof statusLabelKey];
+  const statusKey: SwapStatusKey =
+    swap.status in statusLabelKey
+      ? statusLabelKey[swap.status as keyof typeof statusLabelKey]
+      : "statusPending";
 
   return (
     <div className="space-y-5">
@@ -178,7 +183,7 @@ export default function SwapDetailPage({
         </div>
 
         <span className="rounded-full bg-[var(--secondary)] px-3 py-1 text-xs font-bold text-[var(--secondary-ink)]">
-          {t(statusLabelKey[swap.status] ?? "statusPending")}
+          {t(statusKey)}
         </span>
       </div>
 

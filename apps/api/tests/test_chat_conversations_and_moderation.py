@@ -194,3 +194,124 @@ async def test_block_and_three_distinct_reports_auto_restrict(
         json={"body": "Hi after block", "client_id": "after-blk"},
     )
     assert r1_send.status_code == 403
+
+
+async def test_block_by_partner_alias_match_alias_and_rejects_foreign_or_raw_user_id(
+    client: AsyncClient,
+    fake_messaging: FakeMessagingProvider,
+) -> None:
+    tok_a, uid_a = await _otp_login(client, fake_messaging, "9876543801")
+    tok_b, uid_b = await _otp_login(client, fake_messaging, "9876543802")
+    tok_c, uid_c = await _otp_login(client, fake_messaging, "9876543803")
+    tok_outsider, _ = await _otp_login(client, fake_messaging, "9876543804")
+
+    h_a = {"Authorization": f"Bearer {tok_a}"}
+    h_b = {"Authorization": f"Bearer {tok_b}"}
+    h_c = {"Authorization": f"Bearer {tok_c}"}
+    h_out = {"Authorization": f"Bearer {tok_outsider}"}
+
+    va = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    vb = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+    vc = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_c, json={"mode": "train", "pnr": "4333333333"}
+        )
+    ).json()
+
+    await client.put(
+        f"/v1/parties/{vb['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [vb["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{vc['party']['id']}/goal",
+        headers=h_c,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [vc["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{va['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [va["seat_holders"][0]["id"]], "constraints": {}},
+    )
+
+    matches_before = (
+        await client.get(f"/v1/parties/{va['party']['id']}/matches", headers=h_a)
+    ).json()["items"]
+    pair_matches = [m for m in matches_before if m["kind"] == "pair"]
+    assert len(pair_matches) >= 2
+    target_card = pair_matches[0]
+    match_alias = target_card["others"][0]["alias"]
+
+    # Raw user_id is never accepted as alias_ref
+    raw_uid_block = await client.post("/v1/users/block", headers=h_a, json={"alias_ref": uid_b})
+    assert raw_uid_block.status_code == 404
+
+    # Foreign/non-owned pseudonymous match alias is rejected for outsider
+    foreign_match_block = await client.post(
+        "/v1/users/block", headers=h_out, json={"alias_ref": match_alias}
+    )
+    assert foreign_match_block.status_code == 404
+
+    # Block via MatchCard.others[0].alias without conversation & verify exclusion from matches
+    blk_match = await client.post("/v1/users/block", headers=h_a, json={"alias_ref": match_alias})
+    assert blk_match.status_code == 200
+    assert blk_match.json()["blocked"] is True
+
+    matches_after = (
+        await client.get(f"/v1/parties/{va['party']['id']}/matches", headers=h_a)
+    ).json()["items"]
+    assert all(all(o["alias"] != match_alias for o in m["others"]) for m in matches_after)
+    remaining_pairs = [m for m in matches_after if m["kind"] == "pair"]
+    assert len(remaining_pairs) >= 1
+
+    # Block remaining partner via conversation partner_alias & reject outsider access
+    convo = (
+        await client.post(
+            "/v1/conversations", headers=h_a, json={"card_id": remaining_pairs[0]["card_id"]}
+        )
+    ).json()
+    foreign_ref_block = await client.post(
+        "/v1/users/block",
+        headers=h_out,
+        json={"alias_ref": convo["partner_alias_ref"]},
+    )
+    assert foreign_ref_block.status_code == 403
+
+    foreign_alias_block = await client.post(
+        "/v1/users/block",
+        headers=h_out,
+        json={"alias_ref": convo["partner_alias"]},
+    )
+    assert foreign_alias_block.status_code == 404
+
+    blk_convo_alias = await client.post(
+        "/v1/users/block",
+        headers=h_a,
+        json={"alias_ref": convo["partner_alias"]},
+    )
+    assert blk_convo_alias.status_code == 200
+    assert blk_convo_alias.json()["blocked"] is True
+
+    post_blk_send = await client.post(
+        f"/v1/conversations/{convo['id']}/messages",
+        headers=h_a,
+        json={"body": "After block", "client_id": "blk-alias-1"},
+    )
+    assert post_blk_send.status_code == 403
+    assert len({uid_a, uid_b, uid_c}) == 3

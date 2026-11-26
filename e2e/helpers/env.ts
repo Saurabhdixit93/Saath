@@ -6,7 +6,8 @@ export const E2E_ENV = {
   turnstileTestToken: process.env.TURNSTILE_TEST_TOKEN ?? 'fake-turnstile-ok',
   testOtpCode: process.env.E2E_TEST_OTP ?? '123456',
   adminTestEmail: process.env.E2E_ADMIN_EMAIL ?? 'ops@saath.test',
-  whatsappWebhookSecret: process.env.WHATSAPP_APP_SECRET ?? 'dev-whatsapp-secret',
+  whatsappWebhookSecret:
+    process.env.WHATSAPP_APP_SECRET?.trim() || 'dev-whatsapp-secret',
   paymentWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ?? 'dev-razorpay-secret',
   b2bApiKey: process.env.E2E_B2B_API_KEY ?? 'saath_test_b2b_key',
   envMode: process.env.ENV ?? 'test',

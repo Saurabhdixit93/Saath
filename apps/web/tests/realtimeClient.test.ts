@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { createElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { ToastProvider } from "@saath/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import enMessages from "../messages/en.json";
@@ -77,7 +77,7 @@ describe("RealtimeProvider & sseFetch", () => {
       onclose: (() => void) | null = null;
       onerror: (() => void) | null = null;
       sent: string[] = [];
-      constructor(_url: string) {
+      constructor() {
         sockets.push(this);
       }
       send(d: string) {
@@ -113,30 +113,26 @@ describe("RealtimeProvider & sseFetch", () => {
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     let latestMode = "";
 
-    function Probe({ children }: { children?: ReactNode }) {
+    function Probe() {
       const rt = useRealtime();
       latestMode = rt.mode;
       return createElement("div", { "data-testid": "mode" }, rt.mode);
     }
 
+    const probeEl = createElement(Probe);
+    const realtimeEl = createElement(RealtimeProvider, {
+      accessToken: "user-jwt",
+      children: probeEl,
+    });
+    const toastEl = createElement(ToastProvider, null, realtimeEl);
+    const queryEl = createElement(QueryClientProvider, { client: queryClient }, toastEl);
+
     render(
-      createElement(
-        NextIntlClientProvider,
-        { locale: "en", messages: enMessages },
-        createElement(
-          QueryClientProvider,
-          { client: queryClient },
-          createElement(
-            ToastProvider,
-            null,
-            createElement(
-              RealtimeProvider,
-              { accessToken: "user-jwt" },
-              createElement(Probe)
-            )
-          )
-        )
-      )
+      createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages: enMessages,
+        children: queryEl,
+      })
     );
 
     expect(sockets.length).toBe(1);

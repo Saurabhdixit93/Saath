@@ -529,7 +529,7 @@ async def process_whatsapp_webhook(
                 detail="Malformed X-Hub-Signature-256 header.",
             )
         sig_hex = signature_header.split("=", 1)[1]
-        if not verify_hmac_sha256_hex("dev-whatsapp-app-secret", raw_body, sig_hex):
+        if not verify_hmac_sha256_hex("dev-whatsapp-secret", raw_body, sig_hex):
             raise ProblemDetailError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="invalid_webhook_signature",

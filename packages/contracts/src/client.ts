@@ -113,7 +113,10 @@ export function parseProblemDetail(error: unknown): ProblemDetail | null {
 export function createSaathClient(options: SaathClientOptions) {
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
-    ...(options.fetch ? { fetch: options.fetch } : {}),
+    fetch:
+      options.fetch ??
+      (((input: RequestInfo | URL, init?: RequestInit) =>
+        globalThis.fetch(input, init)) as typeof globalThis.fetch),
   });
 
   let inflightRefresh: Promise<string | null> | null = null;

@@ -13,7 +13,7 @@ export interface MatchCardProps {
   requesting?: boolean;
 }
 
-const SEAT_TYPE_KEY_MAP: Record<string, string> = {
+const SEAT_TYPE_KEY_MAP = {
   LB: "berthTypeLB",
   MB: "berthTypeMB",
   UB: "berthTypeUB",
@@ -23,7 +23,7 @@ const SEAT_TYPE_KEY_MAP: Record<string, string> = {
   WS: "berthTypeWS",
   MS: "berthTypeMS",
   AS: "berthTypeAS",
-};
+} as const;
 
 export function MatchCard({
   card,
@@ -34,8 +34,11 @@ export function MatchCard({
 }: MatchCardProps) {
   const t = useTranslations("matches");
 
-  const stypeKey = SEAT_TYPE_KEY_MAP[card.you_get.seat_type.toUpperCase()];
-  const seatTypeName = stypeKey ? t(stypeKey) : card.you_get.seat_type;
+  const upperType = card.you_get.seat_type.toUpperCase();
+  const seatTypeName =
+    upperType in SEAT_TYPE_KEY_MAP
+      ? t(SEAT_TYPE_KEY_MAP[upperType as keyof typeof SEAT_TYPE_KEY_MAP])
+      : card.you_get.seat_type;
   const targetSummary =
     mode === "flight"
       ? `${seatTypeName}${card.you_get.bay ? ` · Row ${card.you_get.bay}` : ""}`

@@ -1,6 +1,8 @@
-import { useTranslations } from "next-intl";
+import { hasLocale, useTranslations } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
+import { notFound } from "next/navigation";
 import { HomeTabs } from "@/components/HomeTabs";
+import { routing } from "@/i18n/routing";
 
 export default async function HomePage({
   params,
@@ -8,6 +10,9 @@ export default async function HomePage({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
+  if (!hasLocale(routing.locales, locale)) {
+    notFound();
+  }
   setRequestLocale(locale);
 
   return <HomeView />;

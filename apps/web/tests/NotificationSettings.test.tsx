@@ -45,7 +45,8 @@ describe("Profile Notification Settings & Value-First Web Push Opt-In", () => {
     });
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       const method = init?.method || (input instanceof Request ? input.method : "GET");
       if (url.endsWith("/v1/me") && method === "GET") {
         return new Response(
@@ -118,7 +119,9 @@ describe("Profile Notification Settings & Value-First Web Push Opt-In", () => {
     await waitFor(() =>
       expect(
         fetchMock.mock.calls.some(([u]) =>
-          String(typeof u === "string" ? u : u.url).endsWith("/v1/me/push-subscriptions")
+          String(
+            typeof u === "string" ? u : u instanceof URL ? u.toString() : u.url
+          ).endsWith("/v1/me/push-subscriptions")
         )
       ).toBe(true)
     );
@@ -129,7 +132,9 @@ describe("Profile Notification Settings & Value-First Web Push Opt-In", () => {
       expect(
         fetchMock.mock.calls.some(
           ([u, i]) =>
-            String(typeof u === "string" ? u : u.url).endsWith("/v1/me") &&
+            String(
+              typeof u === "string" ? u : u instanceof URL ? u.toString() : u.url
+            ).endsWith("/v1/me") &&
             (i?.method === "PATCH" || (u instanceof Request && u.method === "PATCH"))
         )
       ).toBe(true)

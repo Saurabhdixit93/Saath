@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -18,6 +19,7 @@ from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import uuid7
 from saath_api.core.redis import SlidingWindowRateLimiter
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
+from saath_api.matching.graph import make_pseudonymous_alias
 from saath_api.matching.models import Block, MatchCandidate
 from saath_api.matching.service import schedule_or_run_match_recompute
 from saath_api.messaging.models import Conversation, ConversationMember, Message, Report
@@ -37,7 +39,7 @@ from saath_api.messaging.schemas import (
     TranslateMessageResponse,
 )
 from saath_api.notifications.models import NotificationsOutbox
-from saath_api.parties.models import PartyMember
+from saath_api.parties.models import Party, PartyMember
 from saath_api.providers.llm import LLMProvider
 from saath_api.realtime.pubsub import publish_conversation_event, publish_subscribe_control
 from saath_api.swaps.models import SwapParticipant, SwapProposal
@@ -630,7 +632,7 @@ async def send_message(
     user_row = (
         await db.execute(select(User).where(User.id == actor.user_id))
     ).scalar_one()
-    if user_row.status == "restricted":
+    if user_row.status in ("restricted", "banned", "deleted"):
         raise ProblemDetailError(
             status_code=status.HTTP_403_FORBIDDEN,
             code="account_restricted",
@@ -852,12 +854,198 @@ async def block_user_by_alias_ref(
 ) -> BlockUserResponse:
     assert actor.user_id is not None
 
+    target_user_id: UUID | None = None
+    extra_shared_ji_ids: set[UUID] = set()
+    audit_meta: dict[str, str] = {}
+
+    # Step 1: exact opaque alias_ref ("ar_...") lookup
     target_member = (
         await db.execute(
             select(ConversationMember).where(ConversationMember.alias_ref == alias_ref)
         )
     ).scalar_one_or_none()
-    if target_member is None:
+    if target_member is not None:
+        actor_member = (
+            await db.execute(
+                select(ConversationMember).where(
+                    ConversationMember.conversation_id == target_member.conversation_id,
+                    ConversationMember.user_id == actor.user_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if actor_member is None:
+            raise ProblemDetailError(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="forbidden",
+                title="Forbidden",
+                detail="You cannot block a participant outside your conversations.",
+            )
+
+        if target_member.user_id == actor.user_id:
+            raise ProblemDetailError(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                code="cannot_block_self",
+                title="Invalid Block Request",
+                detail="You cannot block yourself.",
+            )
+
+        target_user_id = target_member.user_id
+        convo_ji_id = (
+            await db.execute(
+                select(Conversation.journey_instance_id).where(
+                    Conversation.id == target_member.conversation_id
+                )
+            )
+        ).scalar_one_or_none()
+        if convo_ji_id is not None:
+            extra_shared_ji_ids.add(convo_ji_id)
+        audit_meta = {"conversation_id": str(target_member.conversation_id)}
+    else:
+        # Step 2a: actor-scoped lookup by conversation display alias ("Passenger ...")
+        actor_convo_ids_sq = select(ConversationMember.conversation_id).where(
+            ConversationMember.user_id == actor.user_id
+        )
+        convo_matches = list(
+            (
+                await db.execute(
+                    select(ConversationMember, Conversation.journey_instance_id)
+                    .join(
+                        Conversation,
+                        Conversation.id == ConversationMember.conversation_id,
+                    )
+                    .where(
+                        ConversationMember.conversation_id.in_(actor_convo_ids_sq),
+                        ConversationMember.alias == alias_ref,
+                        ConversationMember.user_id != actor.user_id,
+                    )
+                )
+            ).all()
+        )
+        if convo_matches:
+            distinct_uids = {cm.user_id for cm, _ in convo_matches}
+            if len(distinct_uids) > 1:
+                raise ProblemDetailError(
+                    status_code=status.HTTP_409_CONFLICT,
+                    code="ambiguous_alias",
+                    title="Ambiguous Alias",
+                    detail=(
+                        "Multiple participants share this display alias; "
+                        "pass alias_ref from the conversation."
+                    ),
+                )
+            target_user_id = next(iter(distinct_uids))
+            for _, ji_id in convo_matches:
+                extra_shared_ji_ids.add(ji_id)
+            audit_meta = {"conversation_id": str(convo_matches[0][0].conversation_id)}
+        else:
+            # Step 2b: actor-scoped lookup across active MatchCandidates via pseudonymous alias
+            actor_party_ids = set(
+                (
+                    await db.execute(
+                        select(Party.id).where(Party.leader_user_id == actor.user_id)
+                    )
+                )
+                .scalars()
+                .all()
+            ) | set(
+                (
+                    await db.execute(
+                        select(PartyMember.party_id)
+                        .join(SeatHolder, SeatHolder.id == PartyMember.seat_holder_id)
+                        .join(Booking, Booking.id == SeatHolder.booking_id)
+                        .where(
+                            or_(
+                                SeatHolder.linked_user_id == actor.user_id,
+                                Booking.owner_user_id == actor.user_id,
+                            )
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if actor_party_ids:
+                cands = list(
+                    (
+                        await db.execute(
+                            select(MatchCandidate)
+                            .join(
+                                JourneyInstance,
+                                (JourneyInstance.id == MatchCandidate.journey_instance_id)
+                                & (
+                                    JourneyInstance.match_version
+                                    == MatchCandidate.match_version
+                                ),
+                            )
+                            .where(MatchCandidate.for_party_id.in_(actor_party_ids))
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                cand_sh_ids: set[UUID] = set()
+                cand_sh_map: dict[UUID, list[UUID]] = {}
+                for cand in cands:
+                    sh_list: list[UUID] = list(cand.cycle_seat_holders)
+                    if cand.kind == "plan" and isinstance(cand.plan_cycles, dict):
+                        raw_cycles = cand.plan_cycles.get("cycles") or []
+                        if isinstance(raw_cycles, list):
+                            for cyc in raw_cycles:
+                                if isinstance(cyc, list):
+                                    for raw_id in cyc:
+                                        with suppress(ValueError):
+                                            sh_list.append(UUID(str(raw_id)))
+                    cand_sh_map[cand.id] = sh_list
+                    cand_sh_ids.update(sh_list)
+
+                if cand_sh_ids:
+                    sh_rows = (
+                        await db.execute(
+                            select(SeatHolder, Booking)
+                            .join(Booking, Booking.id == SeatHolder.booking_id)
+                            .where(SeatHolder.id.in_(cand_sh_ids))
+                        )
+                    ).all()
+                    sh_owner_by_id: dict[UUID, tuple[SeatHolder, UUID | None]] = {
+                        sh.id: (sh, sh.linked_user_id or booking.owner_user_id)
+                        for sh, booking in sh_rows
+                    }
+                    matched_uids: set[UUID] = set()
+                    matched_ji_ids: set[UUID] = set()
+                    matched_card_id: str | None = None
+                    for cand in cands:
+                        for sh_id in cand_sh_map.get(cand.id, []):
+                            pair = sh_owner_by_id.get(sh_id)
+                            if pair is None:
+                                continue
+                            sh, uid = pair
+                            if uid is None or uid == actor.user_id:
+                                continue
+                            if (
+                                make_pseudonymous_alias(sh.coach, sh.seat_type, sh.id)
+                                == alias_ref
+                            ):
+                                matched_uids.add(uid)
+                                matched_ji_ids.add(cand.journey_instance_id)
+                                if matched_card_id is None:
+                                    matched_card_id = cand.card_id
+
+                    if len(matched_uids) > 1:
+                        raise ProblemDetailError(
+                            status_code=status.HTTP_409_CONFLICT,
+                            code="ambiguous_alias",
+                            title="Ambiguous Alias",
+                            detail=(
+                                "Multiple participants share this display alias; "
+                                "pass alias_ref from the conversation."
+                            ),
+                        )
+                    if len(matched_uids) == 1:
+                        target_user_id = next(iter(matched_uids))
+                        extra_shared_ji_ids.update(matched_ji_ids)
+                        audit_meta = {"card_id": matched_card_id or ""}
+
+    if target_user_id is None:
         raise ProblemDetailError(
             status_code=status.HTTP_404_NOT_FOUND,
             code="alias_not_found",
@@ -865,48 +1053,16 @@ async def block_user_by_alias_ref(
             detail="Could not find that conversation participant.",
         )
 
-    actor_member = (
-        await db.execute(
-            select(ConversationMember).where(
-                ConversationMember.conversation_id == target_member.conversation_id,
-                ConversationMember.user_id == actor.user_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if actor_member is None:
-        raise ProblemDetailError(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="forbidden",
-            title="Forbidden",
-            detail="You cannot block a participant outside your conversations.",
-        )
-
-    if target_member.user_id == actor.user_id:
-        raise ProblemDetailError(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            code="cannot_block_self",
-            title="Invalid Block Request",
-            detail="You cannot block yourself.",
-        )
-
     existing_block = (
         await db.execute(
             select(Block).where(
                 Block.blocker == actor.user_id,
-                Block.blocked == target_member.user_id,
+                Block.blocked == target_user_id,
             )
         )
     ).scalar_one_or_none()
     if existing_block is None:
-        db.add(Block(blocker=actor.user_id, blocked=target_member.user_id))
-
-    convo_ji_id = (
-        await db.execute(
-            select(Conversation.journey_instance_id).where(
-                Conversation.id == target_member.conversation_id
-            )
-        )
-    ).scalar_one_or_none()
+        db.add(Block(blocker=actor.user_id, blocked=target_user_id))
 
     actor_ji_ids = set(
         (
@@ -933,7 +1089,7 @@ async def block_user_by_alias_ref(
         (
             await db.execute(
                 select(Booking.journey_instance_id).where(
-                    Booking.owner_user_id == target_member.user_id
+                    Booking.owner_user_id == target_user_id
                 )
             )
         )
@@ -944,15 +1100,13 @@ async def block_user_by_alias_ref(
             await db.execute(
                 select(Booking.journey_instance_id)
                 .join(SeatHolder, SeatHolder.booking_id == Booking.id)
-                .where(SeatHolder.linked_user_id == target_member.user_id)
+                .where(SeatHolder.linked_user_id == target_user_id)
             )
         )
         .scalars()
         .all()
     )
-    shared_ji_id_set = actor_ji_ids & target_ji_ids
-    if convo_ji_id is not None:
-        shared_ji_id_set.add(convo_ji_id)
+    shared_ji_id_set = (actor_ji_ids & target_ji_ids) | extra_shared_ji_ids
 
     recompute_ji_ids: list[UUID] = []
     if shared_ji_id_set:
@@ -975,8 +1129,8 @@ async def block_user_by_alias_ref(
         AuditLog(
             actor=f"user:{actor.user_id}",
             action="user.blocked",
-            resource=f"user:{target_member.user_id}",
-            meta={"conversation_id": str(target_member.conversation_id)},
+            resource=f"user:{target_user_id}",
+            meta=audit_meta,
         )
     )
     await db.commit()

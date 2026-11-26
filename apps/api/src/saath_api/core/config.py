@@ -164,6 +164,7 @@ _DEV_PNR_PEPPER = "dev-pnr-pepper-change-in-production-32b"
 _DEV_PHONE_AES_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 _DEV_PHONE_BLIND_INDEX_KEY = "YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk="
 _DEV_INVITE_TOKEN_SECRET = "dev-invite-token-secret-change-in-production"
+_DEV_WHATSAPP_APP_SECRET = "dev-whatsapp-secret"
 
 
 def _validate_b64_32bytes(value: str, field_name: str) -> None:
@@ -312,6 +313,7 @@ class Settings(BaseSettings):
                 not self.whatsapp_access_token.strip()
                 or not self.whatsapp_phone_number_id.strip()
                 or not self.whatsapp_app_secret.strip()
+                or self.whatsapp_app_secret.strip() == _DEV_WHATSAPP_APP_SECRET
             ):
                 raise ValueError(
                     "WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, and WHATSAPP_APP_SECRET "

@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { Suspense } from "react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -42,7 +43,8 @@ describe("Inbox & Masked Chat UI", () => {
 
   it("renders masked conversations alongside swaps in /inbox", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes("/v1/swaps")) {
         return new Response(JSON.stringify({ items: [] }), {
           status: 200,
@@ -117,9 +119,11 @@ describe("Inbox & Masked Chat UI", () => {
     ];
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const pathname = new URL(url, "http://localhost:8000").pathname;
       const method = init?.method || (input instanceof Request ? input.method : "GET");
-      if (url.endsWith("/messages") && method === "GET") {
+      if (pathname.endsWith("/messages") && method === "GET") {
         return new Response(
           JSON.stringify({
             conversation: {
@@ -178,16 +182,24 @@ describe("Inbox & Masked Chat UI", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={enMessages}>
-        <AuthProvider>
-          <ConversationChatPage params={Promise.resolve({ id: "convo-1" })} />
-        </AuthProvider>
-      </NextIntlClientProvider>
-    );
+    let rendered!: ReturnType<typeof render>;
+    await act(async () => {
+      rendered = render(
+        <NextIntlClientProvider locale="en" messages={enMessages}>
+          <AuthProvider>
+            <Suspense fallback={<div>loading</div>}>
+              <ConversationChatPage params={Promise.resolve({ id: "convo-1" })} />
+            </Suspense>
+          </AuthProvider>
+        </NextIntlClientProvider>
+      );
+    });
+    const { container } = rendered;
 
     expect(await screen.findByText("Contact details unlock after you both agree")).toBeInTheDocument();
-    expect(screen.getByText("Happy to swap!")).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Conversation messages")).getByText("Happy to swap!")
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Translate" }));
     expect(await screen.findByText("अदला-बदली करने में खुशी होगी!")).toBeInTheDocument();
@@ -200,7 +212,7 @@ describe("Inbox & Masked Chat UI", () => {
   });
 
   it("suppresses self-typing echo and renders partner typing indicator", async () => {
-    let activeSocket: {
+    type MockSocketInstance = {
       readyState: number;
       onopen: (() => void) | null;
       onmessage: ((evt: { data: string }) => void) | null;
@@ -208,7 +220,11 @@ describe("Inbox & Masked Chat UI", () => {
       onclose: (() => void) | null;
       send: ReturnType<typeof vi.fn>;
       close: ReturnType<typeof vi.fn>;
-    } | null = null;
+    };
+    let activeSocket: MockSocketInstance | null = null;
+    const registerSocket = (ws: MockSocketInstance) => {
+      activeSocket = ws;
+    };
 
     class MockWebSocket {
       static OPEN = 1;
@@ -221,7 +237,7 @@ describe("Inbox & Masked Chat UI", () => {
       close = vi.fn();
 
       constructor() {
-        activeSocket = this;
+        registerSocket(this);
         setTimeout(() => {
           this.onopen?.();
           this.onmessage?.({ data: JSON.stringify({ type: "ready" }) });
@@ -230,8 +246,10 @@ describe("Inbox & Masked Chat UI", () => {
     }
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.endsWith("/messages")) {
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      const pathname = new URL(url, "http://localhost:8000").pathname;
+      if (pathname.endsWith("/messages")) {
         return new Response(
           JSON.stringify({
             conversation: {
@@ -263,13 +281,17 @@ describe("Inbox & Masked Chat UI", () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
-      <NextIntlClientProvider locale="en" messages={enMessages}>
-        <AuthProvider>
-          <ConversationChatPage params={Promise.resolve({ id: "convo-1" })} />
-        </AuthProvider>
-      </NextIntlClientProvider>
-    );
+    await act(async () => {
+      render(
+        <NextIntlClientProvider locale="en" messages={enMessages}>
+          <AuthProvider>
+            <Suspense fallback={<div>loading</div>}>
+              <ConversationChatPage params={Promise.resolve({ id: "convo-1" })} />
+            </Suspense>
+          </AuthProvider>
+        </NextIntlClientProvider>
+      );
+    });
 
     expect(await screen.findByText("Contact details unlock after you both agree")).toBeInTheDocument();
     await waitFor(() => expect(activeSocket).not.toBeNull());

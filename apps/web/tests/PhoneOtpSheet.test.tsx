@@ -15,7 +15,8 @@ describe("PhoneOtpSheet", () => {
 
   it("validates +91 mobile number, submits OTP start + verify, and passes axe", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/v1/auth/anonymous")) {
         return new Response(
           JSON.stringify({ access: "anon.jwt", token_type: "bearer", expires_in: 7200 }),
@@ -182,7 +183,8 @@ describe("PhoneOtpSheet", () => {
 
     let attempt = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/v1/auth/anonymous")) {
         return new Response(
           JSON.stringify({ access: "anon.jwt", token_type: "bearer", expires_in: 7200 }),

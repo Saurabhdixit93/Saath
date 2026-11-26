@@ -34,7 +34,8 @@ describe("PricingPage", () => {
 
     let unlocked = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input.url;
+      const url =
+        typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.endsWith("/v1/pricing/plans")) {
         return new Response(
           JSON.stringify({

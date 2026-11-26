@@ -27,7 +27,8 @@ describe("HomeTabs", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input.url;
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
         if (url.endsWith("/v1/journeys/verify")) {
           return new Response(
             JSON.stringify({

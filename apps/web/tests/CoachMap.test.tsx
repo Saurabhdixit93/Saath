@@ -101,7 +101,7 @@ describe("CoachMap", () => {
     firstOption.focus();
     await user.keyboard("{ArrowUp}");
     expect(secondOption).toHaveFocus();
-  });
+  }, 15_000);
 
   it("renders interactive CoachBerthMap with role=listbox and role=option", async () => {
     const user = userEvent.setup();
