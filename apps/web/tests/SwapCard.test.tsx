@@ -5,7 +5,8 @@ import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SwapCardDTO } from "@saath/contracts";
 import enMessages from "../messages/en.json";
-import { AuthProvider } from "../src/components/AuthProvider";
+import { AppHeader } from "../src/components/AppHeader";
+import { AuthProvider, useAuth } from "../src/components/AuthProvider";
 import { SwapCard } from "../src/components/SwapCard";
 import SwapCardPage from "../src/app/[locale]/swaps/[id]/card/page";
 import PublicVerifySwapCardPage from "../src/app/[locale]/v/[code]/page";
@@ -61,13 +62,23 @@ describe("SwapCard & Public Verify", () => {
     window.localStorage.clear();
   });
 
-  it("renders SwapCard QR SVG, toggles Hindi preserving Latin numerals, and passes axe", async () => {
+  it("renders SwapCard QR SVG, syncs <html lang>, keeps Hindi button unique with AppHeader, and passes axe", async () => {
+    const header = btoa(JSON.stringify({ alg: "EdDSA", typ: "JWT" }));
+    const payload = btoa(
+      JSON.stringify({ sub: "user-1", kind: "user", exp: Math.floor(Date.now() / 1000) + 900 })
+    );
+    window.sessionStorage.setItem("saath_access", `${header}.${payload}.sig`);
+    window.sessionStorage.setItem("saath_auth_kind", "user");
     const user = userEvent.setup();
     const onDownloadPng = vi.fn(async () => {});
+    document.documentElement.lang = "en";
 
-    const { container } = render(
+    const { container, unmount } = render(
       <NextIntlClientProvider locale="en" messages={enMessages}>
-        <SwapCard card={SAMPLE_CARD} onDownloadPng={onDownloadPng} />
+        <AuthProvider>
+          <AppHeader />
+          <SwapCard card={SAMPLE_CARD} onDownloadPng={onDownloadPng} />
+        </AuthProvider>
       </NextIntlClientProvider>
     );
 
@@ -76,13 +87,48 @@ describe("SwapCard & Public Verify", () => {
     expect(screen.getByRole("img", { name: /QR code for SW-7Q2K9M/i })).toBeInTheDocument();
     expect(screen.getByText(/Subject to TTE approval/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /हिंदी में दिखाएँ/i }));
+    // Must uniquely resolve to SwapCard toggle (without colliding with LanguageSwitcher)
+    const hindiBtn = screen.getByRole("button", { name: /हिंदी|हिं|Hindi/i });
+    await user.click(hindiBtn);
+    expect(document.documentElement.lang).toBe("hi");
     expect(screen.getByText(/साथ स्वैप कार्ड/)).toBeInTheDocument();
     expect(screen.getByText(/IR 12951 · 2026-12-01/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /PNG डाउनलोड करें/i }));
     expect(onDownloadPng).toHaveBeenCalledWith("hi");
     expect(await runAxe(container)).toHaveNoViolations();
+    unmount();
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("AuthProvider prefers valid non-anon localStorage JWT over anon sessionStorage JWT", async () => {
+    const header = btoa(JSON.stringify({ alg: "EdDSA", typ: "JWT" }));
+    const exp = Math.floor(Date.now() / 1000) + 900;
+    const anonPayload = btoa(JSON.stringify({ sub: "anon:abc", kind: "anon", exp }));
+    const userPayload = btoa(JSON.stringify({ sub: "user-99", kind: "user", exp }));
+    const anonJwt = `${header}.${anonPayload}.sig`;
+    const userJwt = `${header}.${userPayload}.sig`;
+
+    window.sessionStorage.setItem("saath_access", anonJwt);
+    window.sessionStorage.setItem("saath_auth_kind", "anon");
+    window.localStorage.setItem("saath_access_token", userJwt);
+
+    function AuthProbe() {
+      const { authKind, accessToken } = useAuth();
+      return <div data-testid="auth-probe">{`${authKind}:${accessToken}`}</div>;
+    }
+
+    render(
+      <NextIntlClientProvider locale="en" messages={enMessages}>
+        <AuthProvider>
+          <AuthProbe />
+        </AuthProvider>
+      </NextIntlClientProvider>
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("auth-probe")).toHaveTextContent(`user:${userJwt}`)
+    );
   });
 
   it("hydrates SwapCardPage offline from localStorage when network fails", async () => {

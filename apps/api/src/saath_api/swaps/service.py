@@ -22,9 +22,8 @@ from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import uuid7
 from saath_api.core.redis import SlidingWindowRateLimiter
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
-from saath_api.matching.graph import format_seat_descriptor, make_pseudonymous_alias
+from saath_api.matching.graph import make_pseudonymous_alias
 from saath_api.matching.models import MatchCandidate
-from saath_api.matching.service import schedule_or_run_match_recompute
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.parties.models import PartyMember
 from saath_api.swaps.cards import (
@@ -744,7 +743,7 @@ async def accept_swap(
                     "  FROM conversation_members cm "
                     "  GROUP BY cm.conversation_id "
                     "  HAVING COUNT(*) >= 2 "
-                    "  AND BOOL_AND(cm.user_id = ANY(:participant_uids))"
+                    "  AND BOOL_AND(cm.user_id IS NOT NULL AND cm.user_id = ANY(:participant_uids))"
                     ")"
                 ).bindparams(
                     bindparam("ji_id", type_=PG_UUID(as_uuid=True)),
@@ -829,6 +828,25 @@ async def decline_swap(
                 detail=f"Cannot decline a swap with status {proposal.status!r}.",
             )
 
+        expected_version = proposal.version
+        upd = await db.execute(
+            update(SwapProposal)
+            .where(
+                SwapProposal.id == proposal.id,
+                SwapProposal.version == expected_version,
+                SwapProposal.status == "pending",
+            )
+            .values(version=expected_version + 1)
+        )
+        if upd.rowcount != 1:  # type: ignore[attr-defined]
+            raise ProblemDetailError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="version_conflict",
+                title="Swap Updated",
+                detail="This swap was modified concurrently. Please refresh and try again.",
+            )
+        proposal.version = expected_version + 1
+
         now = datetime.now(UTC)
         for p in my_parts:
             p.decision = "declined"
@@ -836,18 +854,8 @@ async def decline_swap(
 
         proposal.status = "declined"
         proposal.decline_reason = req.reason.strip() if req.reason else None
-        proposal.version += 1
 
         await db.execute(delete(SeatLock).where(SeatLock.proposal_id == proposal.id))
-
-        ji = (
-            await db.execute(
-                select(JourneyInstance).where(
-                    JourneyInstance.id == proposal.journey_instance_id
-                )
-            )
-        ).scalar_one()
-        ji.match_version += 1
 
         participant_user_ids = {p.user_id for p in parts if p.user_id is not None}
         for uid in participant_user_ids:
@@ -857,7 +865,7 @@ async def decline_swap(
                     event="ProposalDeclined",
                     payload={
                         "swap_id": str(proposal.id),
-                        "journey_instance_id": str(ji.id),
+                        "journey_instance_id": str(proposal.journey_instance_id),
                     },
                     idempotency_key=f"proposal_declined:{proposal.id}:{uid}",
                 )
@@ -881,6 +889,8 @@ async def decline_swap(
         raise
 
     await db.refresh(proposal)
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
     await schedule_or_run_match_recompute(
         db=db,
         redis=redis,
@@ -927,18 +937,26 @@ async def cancel_swap(
                 detail=f"Cannot cancel a swap with status {proposal.status!r}.",
             )
 
-        proposal.status = "cancelled"
-        proposal.version += 1
-        await db.execute(delete(SeatLock).where(SeatLock.proposal_id == proposal.id))
-
-        ji = (
-            await db.execute(
-                select(JourneyInstance).where(
-                    JourneyInstance.id == proposal.journey_instance_id
-                )
+        expected_version = proposal.version
+        upd = await db.execute(
+            update(SwapProposal)
+            .where(
+                SwapProposal.id == proposal.id,
+                SwapProposal.version == expected_version,
+                SwapProposal.status == "pending",
             )
-        ).scalar_one()
-        ji.match_version += 1
+            .values(version=expected_version + 1)
+        )
+        if upd.rowcount != 1:  # type: ignore[attr-defined]
+            raise ProblemDetailError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="version_conflict",
+                title="Swap Updated",
+                detail="This swap was modified concurrently. Please refresh and try again.",
+            )
+        proposal.version = expected_version + 1
+        proposal.status = "cancelled"
+        await db.execute(delete(SeatLock).where(SeatLock.proposal_id == proposal.id))
 
         participant_user_ids = {p.user_id for p in parts if p.user_id is not None}
         for uid in participant_user_ids:
@@ -948,7 +966,7 @@ async def cancel_swap(
                     event="SwapCancelled",
                     payload={
                         "swap_id": str(proposal.id),
-                        "journey_instance_id": str(ji.id),
+                        "journey_instance_id": str(proposal.journey_instance_id),
                     },
                     idempotency_key=f"swap_cancelled:{proposal.id}:{uid}",
                 )
@@ -972,6 +990,8 @@ async def cancel_swap(
         raise
 
     await db.refresh(proposal)
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
     await schedule_or_run_match_recompute(
         db=db,
         redis=redis,
@@ -1028,12 +1048,30 @@ async def confirm_completion(
                     detail="You have already submitted a different completion answer.",
                 )
 
+        expected_version = proposal.version
+        upd = await db.execute(
+            update(SwapProposal)
+            .where(
+                SwapProposal.id == proposal.id,
+                SwapProposal.version == expected_version,
+                SwapProposal.status.in_(("confirmed", "awaiting_confirmation")),
+            )
+            .values(version=expected_version + 1)
+        )
+        if upd.rowcount != 1:  # type: ignore[attr-defined]
+            raise ProblemDetailError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="version_conflict",
+                title="Swap Updated",
+                detail="This swap was modified concurrently. Please refresh and try again.",
+            )
+        proposal.version = expected_version + 1
+
         now = datetime.now(UTC)
         for p in my_parts:
             p.post_confirm = req.answer
             p.post_confirmed_at = now
 
-        proposal.version += 1
         participant_user_ids = {p.user_id for p in parts if p.user_id is not None}
 
         if req.answer in ("no", "did_not_board"):
@@ -1312,13 +1350,6 @@ async def expire_pending_swaps(
 
     await db.execute(delete(SeatLock).where(SeatLock.proposal_id.in_(prop_ids)))
 
-    for ji_id in ji_ids:
-        ji = (
-            await db.execute(select(JourneyInstance).where(JourneyInstance.id == ji_id))
-        ).scalar_one_or_none()
-        if ji is not None:
-            ji.match_version += 1
-
     parts = list(
         (
             await db.execute(
@@ -1342,6 +1373,8 @@ async def expire_pending_swaps(
             )
 
     await db.commit()
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
     for ji_id in ji_ids:
         await schedule_or_run_match_recompute(
             db=db, redis=redis, journey_instance_id=ji_id

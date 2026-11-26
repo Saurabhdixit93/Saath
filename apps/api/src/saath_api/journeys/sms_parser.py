@@ -167,6 +167,34 @@ def _parse_date_token(token: str) -> date:
     raise SmsParseError(f"Unrecognized date token: {token!r}")
 
 
+_ROUTE_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "IN",
+        "TO",
+        "IRCTC",
+        "PNR",
+        "DOJ",
+        "FOR",
+        "AND",
+        "TRN",
+        "TRAIN",
+        "NO",
+        "CNF",
+        "RAC",
+        "WL",
+        "FROM",
+        "GO",
+        "ON",
+        "AT",
+        "BY",
+        "IS",
+        "THE",
+        "OF",
+        "AS",
+    }
+)
+
+
 def parse_irctc_sms_text(
     raw_text: str,
     *,
@@ -198,12 +226,15 @@ def parse_irctc_sms_text(
     class_match = _CLASS_RE.search(text)
     explicit_class = class_match.group(1).upper() if class_match else None
 
-    route_match = _ROUTE_RE.search(text)
     from_code = "NDLS"
     to_code = "MMCT"
-    if route_match and route_match.group(1) not in {"PNR", "DOJ", "TRN"}:
-        from_code = route_match.group(1).upper()
-        to_code = route_match.group(2).upper()
+    for route_match in _ROUTE_RE.finditer(text):
+        cand_from = route_match.group(1).upper()
+        cand_to = route_match.group(2).upper()
+        if cand_from not in _ROUTE_STOP_WORDS and cand_to not in _ROUTE_STOP_WORDS:
+            from_code = cand_from
+            to_code = cand_to
+            break
 
     passengers: list[ParsedSmsPassenger] = []
     for idx, m in enumerate(_PAX_BERTH_SLASH_RE.finditer(text), start=1):

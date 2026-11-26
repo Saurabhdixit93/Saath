@@ -1,3 +1,1 @@
-from saath_api.swaps.router import router
-
-__all__ = ["router"]
+"""Swap lifecycle, seat locks, and signed Swap Card module."""

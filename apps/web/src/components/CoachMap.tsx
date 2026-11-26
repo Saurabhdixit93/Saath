@@ -4,7 +4,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { SeatLegendBadge } from "@saath/ui";
 import type { CoachMapResponse, CoachMapSeatDTO } from "@saath/contracts";
-import { buildCoachLayout } from "@/lib/coachLayouts";
+import { buildCoachLayout, findVerticalSlotIndex } from "@/lib/coachLayouts";
 
 export interface CoachMapProps {
   mapData: CoachMapResponse;
@@ -216,8 +216,10 @@ export function CoachMap({
                   let targetIdx: number | null = null;
                   if (ev.key === "ArrowRight") targetIdx = Math.min(orderedNos.length - 1, slotIdx + 1);
                   else if (ev.key === "ArrowLeft") targetIdx = Math.max(0, slotIdx - 1);
-                  else if (ev.key === "ArrowDown") targetIdx = Math.min(orderedNos.length - 1, slotIdx + 3);
-                  else if (ev.key === "ArrowUp") targetIdx = Math.max(0, slotIdx - 3);
+                  else if (ev.key === "ArrowDown")
+                    targetIdx = findVerticalSlotIndex(spec.slots, slotIdx, "down");
+                  else if (ev.key === "ArrowUp")
+                    targetIdx = findVerticalSlotIndex(spec.slots, slotIdx, "up");
                   else if (ev.key === "Home") targetIdx = 0;
                   else if (ev.key === "End") targetIdx = orderedNos.length - 1;
                   else if (ev.key === "Enter" || ev.key === " ") {

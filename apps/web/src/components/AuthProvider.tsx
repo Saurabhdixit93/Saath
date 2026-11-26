@@ -226,38 +226,54 @@ function InnerAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const sessionAccess = window.sessionStorage.getItem(ACCESS_STORAGE_KEY);
+      const rawSessionKind = window.sessionStorage.getItem(KIND_STORAGE_KEY) as AuthKind | null;
+      const sessionKind: AuthKind | null = sessionAccess
+        ? rawSessionKind === "anon" || rawSessionKind === "user"
+          ? rawSessionKind
+          : inferAuthKindFromJwt(sessionAccess)
+        : null;
+      const sessionValid = Boolean(sessionAccess && !isJwtExpired(sessionAccess));
+
       const localAccess =
         window.localStorage.getItem("saath_access_token") ??
         window.localStorage.getItem("access_token");
-      const storedAccess = sessionAccess || localAccess;
-      const storedKind =
-        (window.sessionStorage.getItem(KIND_STORAGE_KEY) as AuthKind | null) ??
-        (storedAccess ? inferAuthKindFromJwt(storedAccess) : null);
+      const localKind = localAccess ? inferAuthKindFromJwt(localAccess) : null;
+      const localValid = Boolean(localAccess && !isJwtExpired(localAccess));
+
       const storedRefresh =
         window.localStorage.getItem(REFRESH_STORAGE_KEY) ??
         window.localStorage.getItem("saath_refresh_token") ??
         window.localStorage.getItem("refresh_token");
       refreshRef.current = storedRefresh;
 
-      if (storedAccess && (storedKind === "anon" || storedKind === "user")) {
-        if (isJwtExpired(storedAccess)) {
+      // Prefer a valid non-anon user JWT in localStorage over an anon sessionStorage token
+      if (localValid && localAccess && localKind === "user" && (!sessionValid || sessionKind === "anon")) {
+        kindRef.current = "user";
+        accessRef.current = localAccess;
+        setAccessToken(localAccess);
+        setAuthKind("user");
+        window.sessionStorage.setItem(ACCESS_STORAGE_KEY, localAccess);
+        window.sessionStorage.setItem(KIND_STORAGE_KEY, "user");
+      } else if (sessionValid && sessionAccess && (sessionKind === "anon" || sessionKind === "user")) {
+        kindRef.current = sessionKind;
+        accessRef.current = sessionAccess;
+        setAccessToken(sessionAccess);
+        setAuthKind(sessionKind);
+      } else if (localValid && localAccess && (localKind === "anon" || localKind === "user")) {
+        kindRef.current = localKind;
+        accessRef.current = localAccess;
+        setAccessToken(localAccess);
+        setAuthKind(localKind);
+      } else {
+        if (sessionAccess && isJwtExpired(sessionAccess)) {
           window.sessionStorage.removeItem(ACCESS_STORAGE_KEY);
           window.sessionStorage.removeItem(KIND_STORAGE_KEY);
-          if (storedRefresh) {
-            void refreshTokens();
-          } else {
-            void ensureAuth();
-          }
-        } else {
-          kindRef.current = storedKind;
-          accessRef.current = storedAccess;
-          setAccessToken(storedAccess);
-          setAuthKind(storedKind);
         }
-      } else if (storedRefresh) {
-        void refreshTokens();
-      } else {
-        void ensureAuth();
+        if (storedRefresh) {
+          void refreshTokens();
+        } else {
+          void ensureAuth();
+        }
       }
     } catch {
       void ensureAuth();
@@ -281,6 +297,14 @@ function InnerAuthProvider({ children }: { children: ReactNode }) {
       // Clear local session even if server call fails
     }
     persistTokens("uninitialized", null, null);
+    try {
+      window.localStorage.removeItem("saath_access_token");
+      window.localStorage.removeItem("access_token");
+      window.localStorage.removeItem("saath_refresh_token");
+      window.localStorage.removeItem("refresh_token");
+    } catch {
+      // ignore storage errors
+    }
     setUser(null);
     showToast({ variant: "info", message: tProfile("loggedOutToast") });
   }, [apiClient, authKind, persistTokens, showToast, tProfile]);

@@ -13,6 +13,7 @@ from saath_api.matching.graph import (
     is_verified_female,
 )
 from saath_api.matching.packing import pack_disjoint_cycles
+from saath_api.matching.party import plan_party_bay_swaps
 
 _SEAT_TYPES = ("LB", "MB", "UB", "SL", "SU")
 _GOAL_TYPES = ("lower", "upper", "same_coach", "open_to_help")
@@ -72,7 +73,9 @@ def seat_nodes_strategy(draw: st.DrawFn) -> tuple[list[SeatNode], frozenset[tupl
                 no_middle=no_middle,
                 same_coach_only=same_coach_only,
                 verified_only=verified_only,
-                standing_give_to="anyone" if goal == "open_to_help" else None,
+                standing_give_to=draw(st.sampled_from(("anyone", "senior", "women")))
+                if goal == "open_to_help"
+                else None,
             )
         )
 
@@ -225,3 +228,132 @@ def test_4way_same_party_id_never_mixed_in_non_plan_cycle() -> None:
     for cyc in cycles:
         assert len({graph.nodes[u].party_id for u in cyc.nodes}) == len(cyc.nodes)
     assert cycles == []
+
+
+def test_standing_offer_give_to_women_excludes_male_seeker() -> None:
+    helper = SeatNode(
+        seat_holder_id=uuid.uuid5(uuid.NAMESPACE_DNS, "so-h"),
+        party_id=uuid.uuid5(uuid.NAMESPACE_DNS, "so-ph"),
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "so-bh"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "so-uh"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="1",
+        seat_type="LB",
+        bay=1,
+        age_band="adult",
+        gender_band="M",
+        user_gender_self="male",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="open_to_help",
+        movers=frozenset({uuid.uuid5(uuid.NAMESPACE_DNS, "so-h")}),
+        standing_give_to="women",
+    )
+    male_seeker = _make_node(
+        10,
+        seat_type="UB",
+        seat_no="3",
+        gender_band="M",
+        user_gender_self="male",
+        goal_type="lower",
+    )
+    female_seeker = _make_node(
+        11,
+        seat_type="UB",
+        seat_no="6",
+        gender_band="F",
+        user_gender_self="female",
+        goal_type="lower",
+    )
+    graph = build_swap_graph([helper, male_seeker, female_seeker])
+    cycles = enumerate_bounded_cycles(graph)
+    assert len(cycles) == 1
+    assert set(cycles[0].nodes) == {helper.seat_holder_id, female_seeker.seat_holder_id}
+
+
+def test_party_bay_plan_enforces_women_only_blocks_and_no_split_when_together() -> None:
+    p_sh1 = uuid.uuid5(uuid.NAMESPACE_DNS, "pb-m1")
+    p_sh2 = uuid.uuid5(uuid.NAMESPACE_DNS, "pb-m2")
+    party_id = uuid.uuid5(uuid.NAMESPACE_DNS, "pb-party")
+    # Case 1: Both party members already in (B3, bay 1) -> must NOT split apart
+    m1_together = SeatNode(
+        seat_holder_id=p_sh1,
+        party_id=party_id,
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pb-bk1"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pb-u1"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="1",
+        seat_type="LB",
+        bay=1,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="together",
+        movers=frozenset({p_sh1, p_sh2}),
+        women_only=True,
+    )
+    m2_together = SeatNode(
+        seat_holder_id=p_sh2,
+        party_id=party_id,
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pb-bk2"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pb-u2"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="2",
+        seat_type="MB",
+        bay=1,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="together",
+        movers=frozenset({p_sh1, p_sh2}),
+        women_only=True,
+    )
+    ext_male = _make_node(20, seat_type="LB", seat_no="4", gender_band="M", user_gender_self="male")
+    g1 = build_swap_graph([m1_together, m2_together, ext_male])
+    assert plan_party_bay_swaps(g1, {party_id: [m1_together, m2_together]}) == []
+
+    # Case 2: m2 is in bay 2, ext_male is male while party has women_only=True -> rejected
+    m2_split = SeatNode(
+        seat_holder_id=p_sh2,
+        party_id=party_id,
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pb-bk2"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, "pb-u2"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no="9",
+        seat_type="LB",
+        bay=2,
+        age_band="adult",
+        gender_band="F",
+        user_gender_self="female",
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type="together",
+        movers=frozenset({p_sh1, p_sh2}),
+        women_only=True,
+    )
+    ext_female_blocked = _make_node(21, seat_type="LB", seat_no="4", gender_band="F", user_gender_self="female")
+    assert m1_together.owner_user_id is not None and ext_female_blocked.owner_user_id is not None
+    g2 = build_swap_graph(
+        [m1_together, m2_split, ext_male, ext_female_blocked],
+        blocks=frozenset({(m1_together.owner_user_id, ext_female_blocked.owner_user_id)}),
+    )
+    assert plan_party_bay_swaps(g2, {party_id: [m1_together, m2_split]}) == []
+
+
+def test_matching_and_swaps_import_cleanly() -> None:
+    import saath_api.main  # noqa: F401
+    import saath_api.matching.service  # noqa: F401
+    import saath_api.swaps.service  # noqa: F401
+    import saath_api.worker  # noqa: F401

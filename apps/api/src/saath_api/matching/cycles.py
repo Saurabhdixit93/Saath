@@ -116,6 +116,16 @@ def enumerate_bounded_cycles(
                         is_verified_female(graph.nodes[uid]) for uid in path_nodes
                     ):
                         continue
+                    # Standing offer give_to='women': the member receiving that helper's seat must be verified female
+                    if any(
+                        graph.nodes[path_nodes[idx]].goal_type == "open_to_help"
+                        and graph.nodes[path_nodes[idx]].standing_give_to == "women"
+                        and not is_verified_female(
+                            graph.nodes[path_nodes[(idx - 1) % cyc_len]]
+                        )
+                        for idx in range(cyc_len)
+                    ):
+                        continue
                     # Cycle-wide blocks invariant: no pair of members in the cycle may have a block
                     if any(
                         _has_block_between(

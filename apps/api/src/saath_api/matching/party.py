@@ -153,6 +153,8 @@ def plan_party_bay_swaps(
                 continue
 
             # Candidate external helpers/seekers near target
+            party_women_only = any(m.women_only for m in members)
+            party_all_female = all(is_verified_female(m) for m in members)
             externals: list[SeatNode] = []
             for ext in all_active_externals:
                 if ext.party_id == party_id:
@@ -160,6 +162,20 @@ def plan_party_bay_swaps(
                 if ext.goal_type != "open_to_help" and ext.seat_holder_id not in ext.movers:
                     continue
                 if not ext.coach or ext.coach.upper() != target_coach:
+                    continue
+                if party_women_only and not is_verified_female(ext):
+                    continue
+                if ext.women_only and not party_all_female:
+                    continue
+                if any(
+                    pm.owner_user_id is not None
+                    and ext.owner_user_id is not None
+                    and (
+                        (pm.owner_user_id, ext.owner_user_id) in graph.blocks
+                        or (ext.owner_user_id, pm.owner_user_id) in graph.blocks
+                    )
+                    for pm in members
+                ):
                     continue
                 externals.append(ext)
 
@@ -169,6 +185,8 @@ def plan_party_bay_swaps(
             edge_scores: dict[tuple[UUID, UUID], int] = {}
             partial_used = False
             for m in need_move:
+                if party_women_only and not is_verified_female(m):
+                    continue
                 for ext in externals:
                     if m.owner_user_id and ext.owner_user_id:
                         if (m.owner_user_id, ext.owner_user_id) in graph.blocks or (
@@ -188,7 +206,7 @@ def plan_party_bay_swaps(
                         continue
                     if ext.no_middle and (m.seat_type or "").upper() in ("MB", "SM", "MS"):
                         continue
-                    if m.women_only and not is_verified_female(ext):
+                    if (m.women_only or party_women_only) and not is_verified_female(ext):
                         continue
                     if ext.women_only and not is_verified_female(m):
                         continue
@@ -202,7 +220,10 @@ def plan_party_bay_swaps(
                     m_stype = (m.seat_type or "").upper()
                     ext_accepts = False
                     if ext.goal_type == "open_to_help":
-                        ext_accepts = True
+                        if ext.standing_give_to == "women" and not is_verified_female(m):
+                            ext_accepts = False
+                        else:
+                            ext_accepts = True
                     elif ext.goal_type == "lower" and m_stype in ("LB", "SL"):
                         ext_accepts = True
                     elif ext.goal_type == "upper" and m_stype in ("UB", "SU"):
@@ -241,6 +262,31 @@ def plan_party_bay_swaps(
                     edge_scores[(m.seat_holder_id, ext.seat_holder_id)] = pair_score
 
             assigned = _solve_bipartite_assignment(need_move, externals, edge_scores)
+            if not assigned:
+                continue
+
+            # Enforce plan-wide women_only & pairwise blocks across all assigned pairs
+            assigned.sort(key=lambda item: (-item[2], item[0].seat_holder_id.bytes, item[1].seat_holder_id.bytes))
+            kept: list[tuple[SeatNode, SeatNode, int]] = []
+            for m, ext, sc in assigned:
+                cand_nodes = [*members, *(km for km, _, _ in kept), *(ke for _, ke, _ in kept), m, ext]
+                if any(n.women_only for n in cand_nodes) and not all(
+                    is_verified_female(n) for n in cand_nodes
+                ):
+                    continue
+                if any(
+                    a.owner_user_id is not None
+                    and b.owner_user_id is not None
+                    and (
+                        (a.owner_user_id, b.owner_user_id) in graph.blocks
+                        or (b.owner_user_id, a.owner_user_id) in graph.blocks
+                    )
+                    for a in (m, ext)
+                    for b in (*members, *(km for km, _, _ in kept), *(ke for _, ke, _ in kept))
+                ):
+                    continue
+                kept.append((m, ext, sc))
+            assigned = kept
             if not assigned:
                 continue
 

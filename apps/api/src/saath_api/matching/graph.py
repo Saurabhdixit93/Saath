@@ -219,8 +219,10 @@ def evaluate_edge_eligibility(
         # Open-to-help passengers accept seats not blocked by their constraints;
         # avoid middle berths if helper currently has a non-middle berth unless explicitly open.
         give_to = u.standing_give_to or "anyone"
-        if give_to == "women" and not is_verified_female(v):
-            goal_fit = 0.4
+        if give_to == "women":
+            if not is_verified_female(v):
+                return False, 0.0, overlap
+            goal_fit = 0.95
         elif give_to == "senior" and v.age_band == "senior":
             goal_fit = 1.0
         elif give_to == "senior":

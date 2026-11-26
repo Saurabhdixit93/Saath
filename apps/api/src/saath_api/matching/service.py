@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Literal
@@ -86,7 +88,7 @@ def compute_matches_in_memory(
     t0 = time.perf_counter()
     active_count = sum(1 for n in nodes if n.goal_type is not None)
     max_out_degree = 20 if active_count > 80 else 25
-    max_cycles_per_root = 12 if active_count > 80 else 25
+    max_cycles_per_root = 15 if active_count > 80 else 25
     cp_sat_limit = 0.7 if active_count > 80 else 1.0
     graph = build_swap_graph(nodes, blocks=blocks, max_out_degree=max_out_degree)
     all_cycles = enumerate_bounded_cycles(
@@ -347,17 +349,24 @@ async def recompute_journey_matches(
                     party_cycles[pid].append(cyc)
 
             seen_cards_per_party: dict[UUID, set[tuple[UUID, ...]]] = defaultdict(set)
+            seen_card_ids: set[str] = set()
             candidates_to_add: list[MatchCandidate] = []
 
             # Emit party bay plans first for together/same_coach parties
             for plan in computed.party_plans:
+                plan_card_id = _deterministic_card_id(
+                    plan.party_id, "plan", plan.all_seat_holders
+                )
+                if plan_card_id in seen_card_ids:
+                    continue
+                seen_card_ids.add(plan_card_id)
                 candidates_to_add.append(
                     MatchCandidate(
                         id=uuid7(),
                         journey_instance_id=journey_instance_id,
                         match_version=ji_curr.match_version,
                         for_party_id=plan.party_id,
-                        card_id=f"mc_{uuid7().hex}",
+                        card_id=plan_card_id,
                         cycle_seat_holders=list(plan.all_seat_holders),
                         plan_cycles={
                             "target_coach": plan.target_coach,
@@ -390,13 +399,17 @@ async def recompute_journey_matches(
                     if cyc.nodes in seen_cards_per_party[pid]:
                         continue
                     seen_cards_per_party[pid].add(cyc.nodes)
+                    cyc_card_id = _deterministic_card_id(pid, cyc.kind, cyc.nodes)
+                    if cyc_card_id in seen_card_ids:
+                        continue
+                    seen_card_ids.add(cyc_card_id)
                     candidates_to_add.append(
                         MatchCandidate(
                             id=uuid7(),
                             journey_instance_id=journey_instance_id,
                             match_version=ji_curr.match_version,
                             for_party_id=pid,
-                            card_id=f"mc_{uuid7().hex}",
+                            card_id=cyc_card_id,
                             cycle_seat_holders=list(cyc.nodes),
                             plan_cycles={
                                 "segment_overlap": cyc.segment_overlap,
@@ -411,6 +424,12 @@ async def recompute_journey_matches(
                     if emitted >= 20:
                         break
 
+            if candidates_to_add:
+                await db.execute(
+                    delete(MatchCandidate).where(
+                        MatchCandidate.card_id.in_([c.card_id for c in candidates_to_add])
+                    )
+                )
             for cand in candidates_to_add:
                 db.add(cand)
             await db.commit()
@@ -546,6 +565,17 @@ async def _ensure_matches_computed_for_version(
         journey_instance_id=ji.id,
         publish_events=False,
     )
+
+
+def _deterministic_card_id(
+    for_party_id: UUID,
+    kind: str,
+    cycle_seat_holders: Sequence[UUID],
+) -> str:
+    """Stable card_id derived from (for_party_id, kind, canonical_cycle_seat_holders)."""
+    joined = ",".join(str(uid) for uid in cycle_seat_holders)
+    digest = hashlib.sha256(f"{for_party_id}:{kind}:{joined}".encode()).hexdigest()[:24]
+    return f"mc_{digest}"
 
 
 def _node_by_seat_holder_map(nodes: list[SeatNode]) -> dict[UUID, SeatNode]:

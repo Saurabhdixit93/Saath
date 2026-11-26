@@ -152,6 +152,7 @@ async def post_v1_journey_reverify(
         actor=actor,
         journey_id=journey_id,
         simulate_chart_change=simulate_change,
+        arq_pool=getattr(request.app.state, "arq_pool", None),
     )
 
 
@@ -166,7 +167,16 @@ async def post_v1_journey_reverify(
 )
 async def delete_v1_journey(
     journey_id: UUID,
+    request: Request,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> DeleteJourneyResponse:
-    return await delete_journey_booking(db=db, actor=actor, journey_id=journey_id)
+    return await delete_journey_booking(
+        db=db,
+        redis=redis,
+        actor=actor,
+        journey_id=journey_id,
+        arq_pool=getattr(request.app.state, "arq_pool", None),
+        settings=get_request_settings(request),
+    )

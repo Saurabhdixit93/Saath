@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, it, vi } from "vitest";
 import type { CoachMapResponse } from "@saath/contracts";
 import enMessages from "../messages/en.json";
+import { CoachBerthMap } from "../src/components/CoachBerthMap";
 import { CoachMap } from "../src/components/CoachMap";
 import { runAxe } from "../vitest.setup";
 
@@ -95,5 +96,36 @@ describe("CoachMap", () => {
     expect(secondOption).toHaveFocus();
     await user.keyboard("{Enter}");
     expect(onSelectMatchSeat).toHaveBeenCalled();
+
+    // Geometry-aware ArrowUp / ArrowDown in 3A (berth 1 LB -> ArrowUp -> berth 2 MB)
+    firstOption.focus();
+    await user.keyboard("{ArrowUp}");
+    expect(secondOption).toHaveFocus();
+  });
+
+  it("renders interactive CoachBerthMap with role=listbox and role=option", async () => {
+    const user = userEvent.setup();
+    const onToggleSeat = vi.fn();
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={enMessages}>
+        <CoachBerthMap
+          travelClass="CC"
+          coachLabel="C1"
+          mySeats={["1"]}
+          selectedSeats={["6"]}
+          onToggleSeat={onToggleSeat}
+        />
+      </NextIntlClientProvider>
+    );
+
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    const seat1 = screen.getByRole("option", { name: /Seat 1 WS bay 1/i });
+    seat1.focus();
+    await user.keyboard("{ArrowDown}");
+    const seat6 = screen.getByRole("option", { name: /Seat 6 WS bay 2/i });
+    expect(seat6).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onToggleSeat).toHaveBeenCalledWith("6");
+    expect(await runAxe(container)).toHaveNoViolations();
   });
 });

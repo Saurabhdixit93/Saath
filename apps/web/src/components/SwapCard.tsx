@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { Button } from "@saath/ui";
@@ -83,6 +83,23 @@ export function SwapCard({
   const routeLocale = useLocale() === "hi" ? "hi" : "en";
   const t = useTranslations("swaps");
   const [cardLocale, setCardLocale] = useState<"en" | "hi">(initialLocale ?? routeLocale);
+  const prevHtmlLangRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (prevHtmlLangRef.current === null) {
+      prevHtmlLangRef.current = document.documentElement.lang;
+    }
+    document.documentElement.lang = cardLocale;
+  }, [cardLocale]);
+
+  useEffect(() => {
+    return () => {
+      if (typeof document !== "undefined" && prevHtmlLangRef.current !== null) {
+        document.documentElement.lang = prevHtmlLangRef.current;
+      }
+    };
+  }, []);
 
   const copy = CARD_COPY[cardLocale];
   const qrGeom = useMemo(() => buildQrPathD(card.qr_url), [card.qr_url]);

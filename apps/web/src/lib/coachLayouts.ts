@@ -356,3 +356,38 @@ export function buildCoachLayout(travelClass: string, capacity?: number): CoachL
     viewBoxHeight: maxY,
   };
 }
+
+export function findVerticalSlotIndex(
+  slots: BerthSlot[],
+  currentIdx: number,
+  direction: "up" | "down"
+): number {
+  const curr = slots[currentIdx];
+  if (!curr) return currentIdx;
+
+  const isDown = direction === "down";
+  const sameCol: Array<{ idx: number; slot: BerthSlot }> = [];
+  const otherCol: Array<{ idx: number; slot: BerthSlot }> = [];
+
+  for (let i = 0; i < slots.length; i += 1) {
+    const s = slots[i]!;
+    if (isDown ? s.y <= curr.y + 1 : s.y >= curr.y - 1) {
+      continue;
+    }
+    if (Math.abs(s.x - curr.x) <= 2) {
+      sameCol.push({ idx: i, slot: s });
+    } else {
+      otherCol.push({ idx: i, slot: s });
+    }
+  }
+
+  const pool = sameCol.length > 0 ? sameCol : otherCol;
+  if (pool.length === 0) return currentIdx;
+
+  pool.sort((a, b) => {
+    const yDiff = isDown ? a.slot.y - b.slot.y : b.slot.y - a.slot.y;
+    if (Math.abs(yDiff) > 1) return yDiff;
+    return Math.abs(a.slot.x - curr.x) - Math.abs(b.slot.x - curr.x);
+  });
+  return pool[0]!.idx;
+}

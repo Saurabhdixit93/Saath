@@ -794,6 +794,7 @@ export interface operations {
       401: ProblemResp;
       403: ProblemResp;
       404: ProblemResp;
+      429: ProblemResp;
     };
   };
   post_v1_party_invite_v1_journeys__journey_id__party_invite_post: {
