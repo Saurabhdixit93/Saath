@@ -11,6 +11,7 @@ import type { RealtimeServerEvent } from "../src/lib/realtime/types";
 
 describe("RealtimeProvider & sseFetch", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });

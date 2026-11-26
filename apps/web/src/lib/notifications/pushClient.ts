@@ -49,9 +49,10 @@ export async function subscribeBrowserWebPush(
     return { subscribed: false, permission };
   }
 
-  let endpoint = `https://push.saath.local/sub/${Date.now()}`;
-  let p256dh = "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8";
-  let auth = "tBHItJI5svbpez7KI4CCXg";
+  const vapidPublicKey = publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY.trim();
+  let endpoint: string | null = null;
+  let p256dh = "";
+  let auth = "";
 
   if ("serviceWorker" in navigator && "PushManager" in window) {
     try {
@@ -59,11 +60,11 @@ export async function subscribeBrowserWebPush(
       const existing = await reg.pushManager.getSubscription();
       const sub =
         existing ??
-        (publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        (vapidPublicKey
           ? await reg.pushManager.subscribe({
               userVisibleOnly: true,
               applicationServerKey: urlBase64ToUint8Array(
-                publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+                vapidPublicKey
               ) as BufferSource,
             })
           : null);
@@ -73,9 +74,24 @@ export async function subscribeBrowserWebPush(
         p256dh = subJson.keys?.p256dh || arrayBufferToBase64Url(sub.getKey("p256dh"));
         auth = subJson.keys?.auth || arrayBufferToBase64Url(sub.getKey("auth"));
       }
-    } catch {
+    } catch (err) {
+      if (vapidPublicKey) {
+        throw err instanceof Error
+          ? err
+          : new Error("Failed to subscribe to Web Push notifications");
+      }
       // Fallback to synthetic local registration payload when VAPID key is unset in local dev
     }
+  }
+
+  if (!endpoint || !p256dh || !auth) {
+    if (vapidPublicKey) {
+      throw new Error("Web Push subscription is unavailable in this browser");
+    }
+    endpoint = `https://push.saath.local/sub/${Date.now()}`;
+    p256dh =
+      "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8";
+    auth = "tBHItJI5svbpez7KI4CCXg";
   }
 
   const { data, error } = await apiClient.POST("/v1/me/push-subscriptions", {

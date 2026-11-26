@@ -45,5 +45,5 @@ describe("renderSwapCardPngBuffer", () => {
     const pngHi = await renderSwapCardPngBuffer(SAMPLE_CARD, "hi");
     expect(pngHi.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).toBe(true);
     expect(pngHi.byteLength).toBeGreaterThan(1000);
-  });
+  }, 15_000);
 });

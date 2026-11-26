@@ -202,6 +202,7 @@ export function RealtimeProvider({
     }
 
     let cancelled = false;
+    sseAttemptRef.current = 0;
     let currentAbort: AbortController | null = null;
     let readyTimer: ReturnType<typeof setTimeout> | null = null;
     let pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -209,36 +210,48 @@ export function RealtimeProvider({
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let wsProbeTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const cleanupTimers = () => {
+    const cleanupTransportTimers = () => {
       if (readyTimer) clearTimeout(readyTimer);
       if (pingTimer) clearInterval(pingTimer);
-      if (pollTimer) clearInterval(pollTimer);
       if (retryTimer) clearTimeout(retryTimer);
       if (wsProbeTimer) clearTimeout(wsProbeTimer);
       readyTimer = null;
       pingTimer = null;
-      pollTimer = null;
       retryTimer = null;
       wsProbeTimer = null;
     };
 
+    const stopPolling = () => {
+      if (pollTimer) clearInterval(pollTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      pollTimer = null;
+      retryTimer = null;
+    };
+
+    const cleanupAllTimers = () => {
+      cleanupTransportTimers();
+      stopPolling();
+    };
+
     const startPolling = () => {
       if (cancelled) return;
-      cleanupTimers();
+      cleanupTransportTimers();
       setMode("polling");
       setConnected(false);
-      pollTimer = setInterval(() => {
-        if (typeof document !== "undefined" && document.hidden) {
-          return;
-        }
-        void queryClient.invalidateQueries({ queryKey: ["journeys"] });
-        void queryClient.invalidateQueries({ queryKey: ["journey"] });
-        void queryClient.invalidateQueries({ queryKey: ["matches"] });
-        void queryClient.invalidateQueries({ queryKey: ["swaps"] });
-        void queryClient.invalidateQueries({ queryKey: ["swap"] });
-        void queryClient.invalidateQueries({ queryKey: ["conversations"] });
-        void queryClient.invalidateQueries({ queryKey: ["messages"] });
-      }, POLLING_INTERVAL_MS);
+      if (!pollTimer) {
+        pollTimer = setInterval(() => {
+          if (typeof document !== "undefined" && document.hidden) {
+            return;
+          }
+          void queryClient.invalidateQueries({ queryKey: ["journeys"] });
+          void queryClient.invalidateQueries({ queryKey: ["journey"] });
+          void queryClient.invalidateQueries({ queryKey: ["matches"] });
+          void queryClient.invalidateQueries({ queryKey: ["swaps"] });
+          void queryClient.invalidateQueries({ queryKey: ["swap"] });
+          void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+          void queryClient.invalidateQueries({ queryKey: ["messages"] });
+        }, POLLING_INTERVAL_MS);
+      }
 
       const backoffMs = Math.min(30000, 2000 * 2 ** sseAttemptRef.current);
       sseAttemptRef.current += 1;
@@ -249,8 +262,10 @@ export function RealtimeProvider({
 
     const startSse = () => {
       if (cancelled) return;
-      cleanupTimers();
-      setMode("sse");
+      cleanupTransportTimers();
+      if (!pollTimer) {
+        setMode("sse");
+      }
       currentAbort?.abort();
       currentAbort = new AbortController();
       const sseUrl = `${publicEnv.NEXT_PUBLIC_API_URL.replace(/\/$/, "")}/v1/events/stream`;
@@ -269,6 +284,8 @@ export function RealtimeProvider({
         onOpen: () => {
           if (!cancelled) {
             sseAttemptRef.current = 0;
+            stopPolling();
+            setMode("sse");
             setConnected(true);
             setReadyCount((c) => c + 1);
           }
@@ -288,8 +305,10 @@ export function RealtimeProvider({
         startSse();
         return;
       }
-      cleanupTimers();
-      setMode("ws");
+      cleanupTransportTimers();
+      if (!pollTimer) {
+        setMode("ws");
+      }
       setConnected(false);
 
       let isReady = false;
@@ -297,7 +316,7 @@ export function RealtimeProvider({
       const triggerSseFallback = () => {
         if (cancelled || fallbackTriggered) return;
         fallbackTriggered = true;
-        cleanupTimers();
+        cleanupTransportTimers();
         try {
           ws.close();
         } catch {
@@ -337,6 +356,9 @@ export function RealtimeProvider({
           const parsed = JSON.parse(String(msgEvent.data)) as RealtimeServerEvent;
           if (parsed.type === "ready") {
             isReady = true;
+            sseAttemptRef.current = 0;
+            stopPolling();
+            setMode("ws");
             if (readyTimer) {
               clearTimeout(readyTimer);
               readyTimer = null;
@@ -371,7 +393,7 @@ export function RealtimeProvider({
 
     return () => {
       cancelled = true;
-      cleanupTimers();
+      cleanupAllTimers();
       currentAbort?.abort();
       if (wsRef.current) {
         try {
