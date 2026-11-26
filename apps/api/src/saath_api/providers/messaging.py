@@ -282,12 +282,15 @@ class MSG91SMSAdapter:
         timeout_seconds: float = 3.0,
     ) -> None:
         cleaned_auth_key = auth_key.strip()
+        cleaned_sender_id = sender_id.strip()
         cleaned_template_id = template_id.strip()
         cleaned_notify_template_id = notify_template_id.strip()
-        if not cleaned_auth_key or not cleaned_template_id:
-            raise ValueError("MSG91_AUTH_KEY and MSG91_DLT_TE_ID_OTP are required")
+        if not cleaned_auth_key or not cleaned_sender_id or not cleaned_template_id:
+            raise ValueError(
+                "MSG91_AUTH_KEY, MSG91_SENDER_ID, and MSG91_DLT_TE_ID_OTP are required"
+            )
         self._auth_key = cleaned_auth_key
-        self._sender_id = sender_id.strip()
+        self._sender_id = cleaned_sender_id
         self._template_id = cleaned_template_id
         self._notify_template_id = cleaned_notify_template_id or cleaned_template_id
         self._timeout_seconds = timeout_seconds

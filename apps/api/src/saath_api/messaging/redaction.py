@@ -14,6 +14,7 @@ _HINTS: dict[str, str] = {
 _ZERO_WIDTH_CHARS: frozenset[str] = frozenset(
     {"\u200b", "\u200c", "\u200d", "\ufeff", "\u00ad", "\u034f", "\u180e"}
 )
+_KEYCAP_VARIATION_CHARS: frozenset[str] = frozenset({"\ufe0e", "\ufe0f", "\u20e3"})
 _DEVANAGARI_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 
 _DIGIT_WORDS: dict[str, int] = {
@@ -138,7 +139,7 @@ _EMAIL_OBFUSCATED_RE = re.compile(
     r"(?i)\b[a-z0-9._%+-]+\s*(?:\[at\]|\(at\)|\{at\}|@)\s*[a-z0-9.-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,}(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})?(?!/)\b"
 )
 _EMAIL_WORD_AT_RE = re.compile(
-    r"(?i)\b[a-z0-9._%+-]+\s+at\s+(?:[a-z0-9-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*(?:com|in|org|net|co|io|me|edu|gov|gmail|yahoo|outlook|hotmail|proton|icloud)(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})?|(?:gmail|yahoo|outlook|hotmail|proton|icloud)\s+(?:dot\s+)?(?:com|in|co\.in))(?!/)\b"
+    r"(?i)\b[a-z0-9._%+-]+\s+at\s+(?:[a-z0-9-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*(?:com|in|org|net|co|io|me|edu|gov|xyz|gmail|yahoo|outlook|hotmail|proton|icloud)(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})?|(?:gmail|yahoo|outlook|hotmail|proton|icloud)\s+(?:dot\s+)?(?:com|in|co\.in))(?!/)\b"
 )
 
 # 3. UPI IDs (handle@psp, alphanumeric PSP handles, and obfuscated [at]/at PSP handles)
@@ -206,12 +207,18 @@ _UPI_OBFUSCATED_WORD_AT_KNOWN_RE = re.compile(
     rf"(?i)\b([a-z0-9._-]{{2,}})\s+at\s+(?:{_UNAMBIGUOUS_UPI_PSPS})\b"
     r"(?!\s+(?:desk|counter|kiosk|branch|atm|booth|office|gate|window|stall|shop|store)\b)"
 )
+_UPI_SPACED_AT_KNOWN_RE = re.compile(
+    rf"(?i)\b([a-z0-9._-]{{2,}})(?:\s+@\s*|\s*@\s+)(?:{_KNOWN_UPI_PSPS})\b"
+    r"(?!\s+(?:desk|counter|kiosk|branch|atm|booth|office|gate|window|stall|shop|store)\b)"
+    r"(?!\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z])"
+)
 _UPI_OBFUSCATED_BRACKET_RE = re.compile(
     r"(?i)\b[a-z0-9._-]{2,}\s*(?:\[at\]|\(at\)|\{at\})\s*[a-z][a-z0-9]{2,19}\b(?!/)(?!\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.))",
 )
 
-# 4. Numeric phone patterns (standard, +91, 0-prefixed, spaced/hyphenated/typographic dashes/:/ */~/;/dotted/parens)
-_PHONE_SEP = r"[\s.\-_()*~;:\u2010-\u2014\u2212]"
+# 4. Numeric phone patterns (standard, +91, 0-prefixed, spaced/hyphenated/typographic dashes/:/ */~/;/bullet/middle-dot/dotted/parens)
+_PHONE_SEP = r"[\s.\-_()*~;:\u2010-\u2014\u2212\u00b7\u2022]"
+_PHONE_INTL_SEP = r"[\s.\-_()*~;:/,\u2010-\u2014\u2212\u00b7\u2022]"
 _PHONE_EXPLICIT_RE = re.compile(
     rf"(?<!\d)(?:\(\s*\+?91\s*\)|(?:\+?91|0)){_PHONE_SEP}*[6-9](?:{_PHONE_SEP}*\d){{9}}(?!\d)"
 )
@@ -219,13 +226,20 @@ _PHONE_10_SEPARATED_RE = re.compile(
     rf"(?<!\d)[6-9](?:{_PHONE_SEP}*\d){{9}}(?!\d)"
 )
 _PHONE_INTL_RE = re.compile(
-    rf"(?<!\w)\+\d{{1,3}}{_PHONE_SEP}*\d(?:{_PHONE_SEP}*\d){{7,13}}(?!\d)"
+    rf"(?<!\w)(?:\(\s*\+\d{{1,3}}\s*\)|\+\d{{1,3}}){_PHONE_INTL_SEP}*\d(?:{_PHONE_INTL_SEP}*\d){{7,13}}(?!\d)"
 )
-_DATE_BODY = (
-    r"(?:(?:19|20)\d{2}[-/](?:0?[1-9]|1[0-2])[-/](?:0?[1-9]|[12]\d|3[01])"
-    r"|(?:(?:0?[1-9]|[12]\d|3[01])[-/](?:0?[1-9]|1[0-2])"
-    r"|(?:0?[1-9]|1[0-2])[-/](?:0?[1-9]|[12]\d|3[01]))[-/](?:19|20)?\d{2})"
+_LEADING_PLUS_RE = re.compile(r"(?<!\w)\+\s*$")
+_DATE_SLASH = (
+    r"(?:(?:19|20)\d{2}/(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12]\d|3[01])"
+    r"|(?:(?:0?[1-9]|[12]\d|3[01])/(?:0?[1-9]|1[0-2])"
+    r"|(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12]\d|3[01]))/(?:19|20)?\d{2})"
 )
+_DATE_HYPHEN = (
+    r"(?:(?:19|20)\d{2}-(?:0?[1-9]|1[0-2])-(?:0?[1-9]|[12]\d|3[01])"
+    r"|(?:(?:0?[1-9]|[12]\d|3[01])-(?:0?[1-9]|1[0-2])"
+    r"|(?:0?[1-9]|1[0-2])-(?:0?[1-9]|[12]\d|3[01]))-(?:19|20)?\d{2})"
+)
+_DATE_BODY = rf"(?:{_DATE_SLASH}|{_DATE_HYPHEN})"
 _DATE_LIKE_RE = re.compile(rf"^{_DATE_BODY}$")
 _DATE_EMBEDDED_RE = re.compile(rf"(?<![/\-\d]){_DATE_BODY}(?![/\-\d])")
 _SEAT_CONTEXT_RE = re.compile(
@@ -237,7 +251,7 @@ _TRAIN_CONTEXT_RE = re.compile(
 
 # Token pattern for mixed/word-digit sequences (Latin letters, Devanagari letters+matras, or digits)
 _WORD_OR_NUM_TOKEN_RE = re.compile(r"[0-9]+|(?:[^\W\d_]|[\u0900-\u097F])+", re.UNICODE)
-_SEPARATORS_ONLY_RE = re.compile(r"^[\s\-_.,/|()\[\]+*~;:\u2010-\u2014\u2212]+$")
+_SEPARATORS_ONLY_RE = re.compile(r"^[\s\-_.,/|()\[\]+*~;:\u2010-\u2014\u2212\u00b7\u2022]+$")
 
 
 @dataclass(frozen=True)
@@ -262,13 +276,27 @@ def _prepare_scan_views(raw: str) -> tuple[str, str, str, list[int]]:
     spaced_chars: list[str] = []
     stripped_to_nfkc: list[int] = []
     for idx, ch in enumerate(nfkc):
-        if _is_invisible_format_char(ch):
+        if _is_invisible_format_char(ch) or ch in _KEYCAP_VARIATION_CHARS:
             spaced_chars.append(" ")
         else:
             stripped_chars.append(ch)
             stripped_to_nfkc.append(idx)
             spaced_chars.append(ch)
     return nfkc, "".join(stripped_chars), "".join(spaced_chars), stripped_to_nfkc
+
+
+def _extend_trailing_keycap_marks(nfkc: str, end: int) -> int:
+    n = len(nfkc)
+    while end < n and (
+        nfkc[end] in _KEYCAP_VARIATION_CHARS
+        or (
+            _is_invisible_format_char(nfkc[end])
+            and end + 1 < n
+            and nfkc[end + 1] in _KEYCAP_VARIATION_CHARS
+        )
+    ):
+        end += 1
+    return end
 
 
 def _is_benign_comma_seat_list(
@@ -294,12 +322,36 @@ def _is_benign_comma_seat_list(
     )
 
 
+def _has_plus91_prefix(sub: str, prefix: str) -> bool:
+    if re.search(r"\+\s*91(?!\d)", sub):
+        return True
+    return bool(prefix.rstrip().endswith("+") and re.match(r"^\s*91(?!\d)", sub))
+
+
+def _is_benign_date_span(
+    sub: str,
+    *,
+    prefix: str = "",
+    word_digit_count: int = 0,
+    used_multiplier: bool = False,
+) -> bool:
+    if word_digit_count > 0 or used_multiplier:
+        return False
+    if _has_plus91_prefix(sub, prefix):
+        return False
+    if not _DATE_EMBEDDED_RE.search(sub):
+        return False
+    remainder = _DATE_EMBEDDED_RE.sub(" ", sub)
+    remaining_digits = sum(1 for ch in remainder if ch.isdigit())
+    return remaining_digits < 4
+
+
 def _looks_like_pure_numeric_phone(
     sub: str,
     numeric_tokens: list[str],
     prefix: str = "",
 ) -> bool:
-    if _DATE_EMBEDDED_RE.search(sub):
+    if _is_benign_date_span(sub, prefix=prefix):
         return False
     # Exempt explicit "train"/"trains" 5-digit pairs like "Checking trains 62001 / 62002"
     if (
@@ -459,6 +511,9 @@ def _find_word_digit_spans(
         if last_valid_j >= idx:
             span_start = tokens[idx].start
             span_end = tokens[last_valid_j].end
+            plus_match = _LEADING_PLUS_RE.search(scan_text[:span_start])
+            if plus_match is not None:
+                span_start = plus_match.start()
             sub = scan_text[span_start:span_end].strip()
             prefix = scan_text[max(0, span_start - 32) : span_start]
             # Match if:
@@ -466,7 +521,12 @@ def _find_word_digit_spans(
             # - OR >= 10 total digits across mixed numeric/word tokens (excluding dates, seat lists, train pairs)
             is_word_phone = word_digit_count >= 3 and non_ambiguous_word_count >= 2 and digit_count >= 7
             if word_digit_count > 0 or used_multiplier:
-                is_numeric_phone = digit_count >= 10 and not _DATE_EMBEDDED_RE.search(sub)
+                is_numeric_phone = digit_count >= 10 and not _is_benign_date_span(
+                    sub,
+                    prefix=prefix,
+                    word_digit_count=word_digit_count,
+                    used_multiplier=used_multiplier,
+                )
             else:
                 is_numeric_phone = _looks_like_pure_numeric_phone(sub, numeric_tokens, prefix)
             if is_word_phone or is_numeric_phone:
@@ -502,9 +562,10 @@ def _collect_tagged_spans(
         for m in regex.finditer(scan):
             tagged.append((m.start(), m.end(), "upi"))
 
-    for m in _UPI_OBFUSCATED_WORD_AT_KNOWN_RE.finditer(scan):
-        if m.group(1).lower() not in _MEETUP_PRE_AT_WORDS:
-            tagged.append((m.start(), m.end(), "upi"))
+    for regex in (_UPI_OBFUSCATED_WORD_AT_KNOWN_RE, _UPI_SPACED_AT_KNOWN_RE):
+        for m in regex.finditer(scan):
+            if m.group(1).lower() not in _MEETUP_PRE_AT_WORDS:
+                tagged.append((m.start(), m.end(), "upi"))
 
     for regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE, _PHONE_INTL_RE):
         for m in regex.finditer(scan):
@@ -542,10 +603,14 @@ def redact_contact_details(text: str, *, locale: str = "en") -> RedactionResult:
 
     for start, end, cat in _collect_tagged_spans(scan_stripped, stripped_to_nfkc=stripped_to_nfkc):
         if start < end:
-            tagged_nfkc.append((stripped_to_nfkc[start], stripped_to_nfkc[end - 1] + 1, cat))
+            nfkc_start = stripped_to_nfkc[start]
+            nfkc_end = _extend_trailing_keycap_marks(nfkc, stripped_to_nfkc[end - 1] + 1)
+            tagged_nfkc.append((nfkc_start, nfkc_end, cat))
 
     if scan_spaced != scan_stripped:
-        tagged_nfkc.extend(_collect_tagged_spans(scan_spaced))
+        for start, end, cat in _collect_tagged_spans(scan_spaced):
+            if start < end:
+                tagged_nfkc.append((start, _extend_trailing_keycap_marks(nfkc, end), cat))
 
     if not tagged_nfkc:
         return RedactionResult(text=text, redacted=False, categories=(), hint=None)

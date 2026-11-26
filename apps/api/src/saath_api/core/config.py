@@ -320,10 +320,12 @@ class Settings(BaseSettings):
             if self.sms_mode == "fake":
                 raise ValueError("SMS_MODE=fake is forbidden when ENV=production")
             if self.sms_mode == "msg91" and (
-                not self.msg91_auth_key.strip() or not self.msg91_dlt_te_id_otp.strip()
+                not self.msg91_auth_key.strip()
+                or not self.msg91_sender_id.strip()
+                or not self.msg91_dlt_te_id_otp.strip()
             ):
                 raise ValueError(
-                    "MSG91_AUTH_KEY and MSG91_DLT_TE_ID_OTP are mandatory "
+                    "MSG91_AUTH_KEY, MSG91_SENDER_ID, and MSG91_DLT_TE_ID_OTP are mandatory "
                     "when ENV=production and SMS_MODE=msg91"
                 )
             if self.rail_provider_mode == "fake":

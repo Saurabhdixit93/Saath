@@ -112,6 +112,8 @@ def test_production_forbids_missing_keys_and_fake_modes() -> None:
         ("sms_mode", "fake"),
         ("msg91_auth_key", ""),
         ("msg91_auth_key", "   "),
+        ("msg91_sender_id", ""),
+        ("msg91_sender_id", "   "),
         ("msg91_dlt_te_id_otp", ""),
         ("msg91_dlt_te_id_otp", "   "),
         ("push_mode", "fake"),
@@ -338,11 +340,17 @@ def test_live_adapters_reject_whitespace_credentials() -> None:
     with pytest.raises(ValueError):
         RazorpayPaymentAdapter(key_id="id", key_secret="sec", webhook_secret="   ")
     with pytest.raises(ValueError):
+        RazorpayPaymentAdapter(
+            key_id="id", key_secret="sec", webhook_secret="wh", base_url="   "
+        )
+    with pytest.raises(ValueError):
         WhatsAppCloudAdapter(access_token="   ", phone_number_id="123")
     with pytest.raises(ValueError):
         WhatsAppCloudAdapter(access_token="tok", phone_number_id="   ")
     with pytest.raises(ValueError):
         MSG91SMSAdapter(auth_key="   ", sender_id="SAATHI", template_id="tpl")
+    with pytest.raises(ValueError):
+        MSG91SMSAdapter(auth_key="key", sender_id="   ", template_id="tpl")
     with pytest.raises(ValueError):
         MSG91SMSAdapter(auth_key="key", sender_id="SAATHI", template_id="   ")
     with pytest.raises(ValueError):
