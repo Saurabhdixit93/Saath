@@ -7,10 +7,20 @@ from saath_api.providers.llm import LLMProvider, ModerationCategory
 
 _PREFILTER_HIDE_RE = re.compile(
     r"(?i)(?:"
-    r"\b(?:send\s+(?:money|rs|inr|advance|deposit|upi)|pay\s+(?:first|advance|fee)|"
-    r"share\s+your\s+otp|bank\s+account|lottery|crypto\s+transfer|"
+    r"\b(?:pay|send)\s+(?:(?:me|us)\s+)?"
+    r"(?:"
+    r"(?:money|inr|rupees?|advance|deposit|fee|first|upi)\b"
+    r"|rs\b\.?"
+    r"|₹\s*\d*"
+    r"|(?:an?|the|some)\s+(?:money|advance|deposit|fee)\b"
+    r"|(?:via|on|by|through)\s+(?:upi|gpay|phonepe|paytm)\b"
+    r"|\d+(?:[.,]\d+)?\s*(?:rs\b\.?|(?:inr|rupees?)\b|₹|"
+    r"(?:(?:in|as|for)\s+)?(?:advance|deposit|fee)\b|"
+    r"(?:first|money)\b|(?:(?:via|on|by|through)\s+)?(?:upi|gpay|phonepe|paytm)\b)"
+    r")"
+    r"|\b(?:share\s+your\s+otp|bank\s+account|lottery|prize\s+won|crypto\s+transfer|"
     r"kill\s+you|rape|molest|nude|naked|sexting)\b"
-    r"|(?:पैसे\s+भेजो|एडवांस\s+दो|ओटीपी\s+बताओ)"
+    r"|(?:(?:पैसे|रुपये|एडवांस)\s+(?:भेजो|दो)|ओटीपी\s+बताओ)"
     r")"
 )
 

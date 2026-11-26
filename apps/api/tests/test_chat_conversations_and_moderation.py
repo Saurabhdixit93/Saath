@@ -10,6 +10,9 @@ from sqlalchemy import func, select
 
 from saath_api.auth.models import AuditLog
 from saath_api.journeys.models import JourneyInstance
+from saath_api.messaging.moderation import evaluate_message_moderation
+from saath_api.messaging.redaction import redact_contact_details
+from saath_api.providers.llm import FakeLLMProvider
 from saath_api.providers.messaging import FakeMessagingProvider
 
 
@@ -90,6 +93,7 @@ async def test_masked_chat_redaction_idempotency_translate_and_unmask_on_accept(
     )
     assert m1_dup.status_code == 200
     assert m1_dup.json()["id"] == d1["id"]
+    assert m1_dup.json()["redacted_hint"] == d1["redacted_hint"]
 
     # Benign quick reply + translate
     m2 = await client.post(
@@ -117,6 +121,19 @@ async def test_masked_chat_redaction_idempotency_translate_and_unmask_on_accept(
     )
     assert m_scam.status_code == 200
     assert m_scam.json()["moderation"] == "hidden"
+
+    app_ref: Any = client.app  # type: ignore[attr-defined]
+    async with app_ref.state.session_factory() as db:
+        hidden_audit = (
+            await db.execute(
+                select(AuditLog).where(
+                    AuditLog.actor == "system:moderation",
+                    AuditLog.action == "message.hidden",
+                    AuditLog.resource == f"message:{m_scam.json()['id']}",
+                )
+            )
+        ).scalar_one_or_none()
+        assert hidden_audit is not None
 
     msgs_b = (await client.get(f"/v1/conversations/{convo_id}/messages", headers=h_b)).json()["items"]
     assert all(m["client_id"] != "cli-scam" for m in msgs_b)
@@ -374,3 +391,37 @@ async def test_block_by_partner_alias_match_alias_and_rejects_foreign_or_raw_use
         ).scalar_one()
         assert ji_after.match_version == mv_before
         assert audit_after == audit_before
+
+
+async def test_evaluate_message_moderation_catches_advance_fee_scams_and_allows_benign() -> None:
+    llm = FakeLLMProvider()
+
+    for scam_msg in (
+        "Pay Rs 500 advance first before swap",
+        "Send 200 rupees advance via UPI",
+        "Pay ₹500 first",
+        "Send me Rs. 300 deposit before boarding",
+    ):
+        red = redact_contact_details(scam_msg, locale="en")
+        outcome = await evaluate_message_moderation(
+            clean_text=red.text,
+            was_redacted=red.redacted,
+            locale="en",
+            llm_provider=llm,
+        )
+        assert outcome.moderation == "hidden", f"Expected hidden for: {scam_msg}"
+        assert outcome.category == "scam"
+
+    for benign_msg in (
+        "Meet at SBI counter near B3",
+        "Can we swap seats 61 and 62?",
+        "Can you send the swap request first?",
+    ):
+        red = redact_contact_details(benign_msg, locale="en")
+        outcome = await evaluate_message_moderation(
+            clean_text=red.text,
+            was_redacted=red.redacted,
+            locale="en",
+            llm_provider=llm,
+        )
+        assert outcome.moderation == "ok", f"Expected ok for: {benign_msg}"

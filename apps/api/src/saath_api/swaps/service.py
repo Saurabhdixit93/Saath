@@ -16,7 +16,7 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.dependencies import Actor
-from saath_api.auth.models import User
+from saath_api.auth.models import AuditLog, User
 from saath_api.core.config import Settings, YamlConfigBundle, load_yaml_configs
 from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import uuid7
@@ -30,8 +30,11 @@ from saath_api.karma.service import (
 )
 from saath_api.matching.graph import make_pseudonymous_alias
 from saath_api.matching.models import Block, MatchCandidate
+from saath_api.messaging.moderation import evaluate_message_moderation
+from saath_api.messaging.redaction import redact_contact_details
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.parties.models import PartyMember
+from saath_api.providers.llm import FakeLLMProvider, LLMProvider
 from saath_api.swaps.cards import (
     encode_signature_b64,
     generate_public_code,
@@ -312,6 +315,7 @@ async def create_swap_proposal(
     redis: Redis,
     actor: Actor,
     req: CreateSwapRequest,
+    llm_provider: LLMProvider | None = None,
 ) -> SwapDetailDTO:
     if actor.kind != "user" or actor.user_id is None:
         raise ProblemDetailError(
@@ -319,6 +323,31 @@ async def create_swap_proposal(
             code="user_auth_required",
             title="Phone Verification Required",
             detail="Verify your phone number to propose a seat swap.",
+        )
+
+    user_row = (
+        await db.execute(select(User).where(User.id == actor.user_id))
+    ).scalar_one_or_none()
+    if user_row is None:
+        raise ProblemDetailError(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="user_not_found",
+            title="Account Not Found",
+            detail="Authenticated user account no longer exists.",
+        )
+    if user_row.status in ("banned", "deleted"):
+        raise ProblemDetailError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="account_disabled",
+            title="Account Disabled",
+            detail="This account is not permitted to propose seat swaps.",
+        )
+    if user_row.status == "restricted":
+        raise ProblemDetailError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="account_restricted",
+            title="Account Restricted",
+            detail="Your swap privileges are temporarily restricted due to safety reports.",
         )
 
     limiter = SlidingWindowRateLimiter(redis)
@@ -457,13 +486,50 @@ async def create_swap_proposal(
     else:
         expires_at = six_hours
 
+    clean_note: str | None = None
+    if req.note and req.note.strip():
+        raw_note = req.note.strip()
+        locale = "hi" if user_row.locale == "hi" else "en"
+        redaction = redact_contact_details(raw_note, locale=locale)
+        resolved_llm = llm_provider or FakeLLMProvider()
+        mod_outcome = await evaluate_message_moderation(
+            clean_text=redaction.text,
+            was_redacted=redaction.redacted,
+            locale=locale,
+            llm_provider=resolved_llm,
+        )
+        if mod_outcome.moderation == "hidden":
+            db.add(
+                AuditLog(
+                    actor="system:moderation",
+                    action="swap_note.hidden",
+                    resource=f"user:{actor.user_id}",
+                    meta={
+                        "card_id": req.card_id,
+                        "category": mod_outcome.category,
+                        "reason": mod_outcome.reason,
+                    },
+                )
+            )
+            await db.commit()
+            raise ProblemDetailError(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                code="note_moderated",
+                title="Note Not Allowed",
+                detail=(
+                    "Your swap note was blocked by safety moderation. "
+                    "Please remove unsafe or payment-related content."
+                ),
+            )
+        clean_note = redaction.text[:300]
+
     proposal = SwapProposal(
         id=uuid7(),
         journey_instance_id=ji.id,
         initiator_user_id=actor.user_id,
         kind=cand.kind,
         status="pending",
-        note=req.note.strip() if req.note else None,
+        note=clean_note,
         source_card_id=cand.card_id,
         expires_at=expires_at,
         version=0,

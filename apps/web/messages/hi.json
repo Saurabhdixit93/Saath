@@ -359,7 +359,15 @@
     "inviteCopyCta": "आमंत्रण लिंक कॉपी करें",
     "inviteNativeShareCta": "डिवाइस से साझा करें",
     "inviteCopiedToast": "आमंत्रण लिंक और संदेश कॉपी हो गया!",
-    "inviteErrorToast": "अभी सीट आमंत्रण लिंक नहीं बन सका।"
+    "inviteErrorToast": "अभी सीट आमंत्रण लिंक नहीं बन सका।",
+    "draftLangLabel": "संदेश की भाषा",
+    "draftLangEn": "English",
+    "draftLangHi": "हिन्दी",
+    "draftWithAiCta": "AI से विनम्र संदेश लिखवाएँ",
+    "draftingAiCta": "संदेश लिखा जा रहा है...",
+    "draftCharCount": "{count}/300",
+    "draftErrorGeneric": "अभी संदेश तैयार नहीं हो सका। आप नीचे अपना संदेश लिख सकते हैं।",
+    "draftErrorRateLimit": "दैनिक AI सीमा पूरी हो गई है (20/दिन)। आप अभी भी नीचे अपना संदेश लिख सकते हैं।"
   },
   "swaps": {
     "detailTitle": "स्वैप प्रस्ताव",
@@ -644,5 +652,25 @@
     "rewardsOutOfStock": "स्टॉक समाप्त",
     "rewardsRedeemedToast": "रिडेम्पशन अनुरोध दर्ज हो गया!",
     "rewardsMyRedemptionsTitle": "आपके रिडेम्पशन अनुरोध"
+  },
+  "concierge": {
+    "title": "AI स्वैप सहायक",
+    "subtitle": "अपनी ज़रूरत सरल भाषा में लिखें—हम कभी PNR, नाम या फ़ोन नंबर नहीं भेजते।",
+    "chipLower": "वरिष्ठ यात्री के लिए निचली बर्थ",
+    "chipTogether": "परिवार के साथ बैठना है",
+    "chipOpenToHelp": "दूसरों की मदद के लिए तैयार",
+    "inputLabel": "साथ AI सहायक से अपना स्वैप लक्ष्य पूछें",
+    "inputPlaceholder": "जैसे मेरी वरिष्ठ माताजी को इसी कोच में निचली बर्थ चाहिए",
+    "askCta": "सुझाव लें",
+    "thinking": "सोच रहा है...",
+    "proposalTitle": "सुझाया गया स्वैप लक्ष्य",
+    "moversCount": "{count} यात्री चुने गए",
+    "privacyHint": "केवल पूर्वावलोकन — पुष्टि करने से पहले कुछ भी सहेजा नहीं जाता।",
+    "confirmCta": "पुष्टि करें और लक्ष्य लागू करें",
+    "dismissCta": "हटाएँ",
+    "errorRateLimit": "दैनिक AI सीमा पूरी हो गई है (20/दिन)। आप नीचे 'स्वैप लक्ष्य चुनें' का उपयोग कर सकते हैं।",
+    "errorDisabled": "AI सहायक अभी उपलब्ध नहीं है। कृपया नीचे 'स्वैप लक्ष्य चुनें' का उपयोग करें।",
+    "errorAuthRequired": "AI सहायक का उपयोग करने के लिए फ़ोन नंबर सत्यापित करें।",
+    "errorGeneric": "अभी AI सुझाव प्राप्त नहीं हो सका। कृपया पुनः प्रयास करें।"
   }
 }

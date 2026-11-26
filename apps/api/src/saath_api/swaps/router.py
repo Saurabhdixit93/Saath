@@ -68,6 +68,7 @@ async def post_v1_swaps(
         redis=redis,
         actor=actor,
         req=body,
+        llm_provider=getattr(request.app.state, "llm_provider", None),
     )
 
 

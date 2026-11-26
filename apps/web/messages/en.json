@@ -359,7 +359,15 @@
     "inviteCopyCta": "Copy invite link",
     "inviteNativeShareCta": "Share via device",
     "inviteCopiedToast": "Invite link and message copied!",
-    "inviteErrorToast": "Could not create seat invite link right now."
+    "inviteErrorToast": "Could not create seat invite link right now.",
+    "draftLangLabel": "Draft language",
+    "draftLangEn": "English",
+    "draftLangHi": "हिन्दी",
+    "draftWithAiCta": "Draft polite message with AI",
+    "draftingAiCta": "Drafting message...",
+    "draftCharCount": "{count}/300",
+    "draftErrorGeneric": "Could not draft a message right now. You can type your own note below.",
+    "draftErrorRateLimit": "Daily AI limit reached (20/day). You can still type your own note below."
   },
   "swaps": {
     "detailTitle": "Swap proposal",
@@ -644,5 +652,25 @@
     "rewardsOutOfStock": "Out of stock",
     "rewardsRedeemedToast": "Redemption request submitted!",
     "rewardsMyRedemptionsTitle": "Your redemption requests"
+  },
+  "concierge": {
+    "title": "AI Swap Concierge",
+    "subtitle": "Describe what you need in plain language—we never send PNRs, names, or phone numbers.",
+    "chipLower": "Lower berth for senior",
+    "chipTogether": "Sit together with family",
+    "chipOpenToHelp": "Open to helping others",
+    "inputLabel": "Ask Saath AI Concierge about your swap goal",
+    "inputPlaceholder": "e.g. My senior mother needs a lower berth in the same coach",
+    "askCta": "Ask Concierge",
+    "thinking": "Thinking...",
+    "proposalTitle": "Suggested swap goal",
+    "moversCount": "{count} traveller(s) selected",
+    "privacyHint": "Preview only — nothing is saved until you click Confirm.",
+    "confirmCta": "Confirm & apply goal",
+    "dismissCta": "Dismiss",
+    "errorRateLimit": "Daily AI limit reached (20/day). Use Set swap goal below anytime.",
+    "errorDisabled": "AI Concierge is temporarily unavailable. Use Set swap goal below.",
+    "errorAuthRequired": "Verify your phone number to use the AI Concierge.",
+    "errorGeneric": "Could not get an AI suggestion right now. Please try again."
   }
 }

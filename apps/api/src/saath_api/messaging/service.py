@@ -25,7 +25,7 @@ from saath_api.matching.models import Block, MatchCandidate
 from saath_api.matching.service import schedule_or_run_match_recompute
 from saath_api.messaging.models import Conversation, ConversationMember, Message, Report
 from saath_api.messaging.moderation import evaluate_message_moderation
-from saath_api.messaging.redaction import redact_contact_details
+from saath_api.messaging.redaction import redact_contact_details, redaction_hint_for_locale
 from saath_api.messaging.schemas import (
     BlockUserResponse,
     ConversationDTO,
@@ -679,7 +679,11 @@ async def send_message(
             else existing_msg.body,
             lang=existing_msg.lang,
             moderation=existing_msg.moderation,  # type: ignore[arg-type]
-            redacted_hint=None,
+            redacted_hint=(
+                redaction_hint_for_locale(existing_msg.lang or "en")
+                if existing_msg.moderation == "redacted"
+                else None
+            ),
             created_at=existing_msg.created_at,
         )
 
@@ -726,7 +730,21 @@ async def send_message(
     db.add(msg_row)
     convo.updated_at = now
 
-    if mod_outcome.moderation != "hidden":
+    if mod_outcome.moderation == "hidden":
+        db.add(
+            AuditLog(
+                actor="system:moderation",
+                action="message.hidden",
+                resource=f"message:{msg_id}",
+                meta={
+                    "conversation_id": str(conversation_id),
+                    "sender_user_id": str(actor.user_id),
+                    "category": mod_outcome.category,
+                    "reason": mod_outcome.reason,
+                },
+            )
+        )
+    else:
         for recipient_uid in other_uids:
             db.add(
                 NotificationsOutbox(
@@ -767,7 +785,11 @@ async def send_message(
                 else existing_retry.body,
                 lang=existing_retry.lang,
                 moderation=existing_retry.moderation,  # type: ignore[arg-type]
-                redacted_hint=None,
+                redacted_hint=(
+                    redaction_hint_for_locale(existing_retry.lang or "en")
+                    if existing_retry.moderation == "redacted"
+                    else None
+                ),
                 created_at=existing_retry.created_at,
             )
         raise

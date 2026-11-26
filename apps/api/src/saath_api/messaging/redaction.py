@@ -11,6 +11,10 @@ _HINTS: dict[str, str] = {
     "hi": "दोनों के सहमत होने पर संपर्क विवरण अनलॉक होंगे",
 }
 
+
+def redaction_hint_for_locale(locale: str = "en") -> str:
+    return _HINTS["hi"] if locale == "hi" else _HINTS["en"]
+
 _ZERO_WIDTH_CHARS: frozenset[str] = frozenset(
     {"\u200b", "\u200c", "\u200d", "\ufeff", "\u00ad", "\u034f", "\u180e"}
 )
@@ -748,3 +752,42 @@ def redact_contact_details(text: str, *, locale: str = "en") -> RedactionResult:
         categories=tuple(categories_seen),
         hint=hint,
     )
+
+
+_PNR_10_SEPARATED_RE = re.compile(r"(?<!\d)\d(?:[\s\-–—.]*\d){9}(?!\d)")
+
+
+def scrub_separated_ten_digit_pnrs(text: str) -> str:
+    """Replace separated/Devanagari/obfuscated 10-digit PNRs while preserving dates/trains."""
+    if not text:
+        return text
+    scan_chars: list[str] = []
+    scan_to_orig: list[int] = []
+    for idx, ch in enumerate(text):
+        if _is_invisible_format_char(ch) or ch in _KEYCAP_VARIATION_CHARS:
+            continue
+        norm_ch = _normalize_unicode_digits(ch).translate(_DEVANAGARI_DIGITS)
+        scan_chars.append(norm_ch)
+        scan_to_orig.append(idx)
+    if not scan_chars:
+        return text
+
+    scan_text = "".join(scan_chars)
+    spans: list[tuple[int, int]] = []
+    for m in _PNR_10_SEPARATED_RE.finditer(scan_text):
+        if _is_benign_date_span(m.group(0)):
+            continue
+        orig_start = scan_to_orig[m.start()]
+        orig_end = scan_to_orig[m.end() - 1] + 1
+        spans.append((orig_start, orig_end))
+    if not spans:
+        return text
+
+    out_parts: list[str] = []
+    cursor = 0
+    for start, end in spans:
+        out_parts.append(text[cursor:start])
+        out_parts.append("[REDACTED]")
+        cursor = end
+    out_parts.append(text[cursor:])
+    return "".join(out_parts)

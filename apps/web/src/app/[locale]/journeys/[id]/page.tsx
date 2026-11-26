@@ -10,6 +10,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { ChartStatusPill } from "@/components/ChartStatusPill";
 import { PartyAvatarRow } from "@/components/PartyAvatarRow";
+import { ConciergePanel } from "@/components/ConciergePanel";
 import { GoalCard } from "@/components/GoalCard";
 import { GoalWizardSheet } from "@/components/GoalWizardSheet";
 import { CoachBerthMap } from "@/components/CoachBerthMap";
@@ -108,6 +109,7 @@ export default function JourneyHubPage({
       setGoalError(null);
       setWizardOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["journey", journeyId] });
+      await queryClient.invalidateQueries({ queryKey: ["matches"] });
       showToast({ variant: "success", message: t("goalSavedToast") });
     },
     onError: (err) => {
@@ -285,6 +287,15 @@ export default function JourneyHubPage({
         serviceDate={hub.journey.service_date}
         onGenerateInvite={handleGenerateInvite}
         onRemoveMember={(shId) => handleRemoveMember(hub.party.id, shId)}
+      />
+
+      <ConciergePanel
+        journeyId={journeyId}
+        members={hub.party.members}
+        applyingGoal={goalMutation.isPending}
+        onApplyGoal={async (payload) => {
+          await goalMutation.mutateAsync({ partyId: hub.party.id, payload });
+        }}
       />
 
       <GoalCard

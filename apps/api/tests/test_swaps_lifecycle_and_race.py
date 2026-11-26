@@ -8,7 +8,7 @@ from uuid import UUID
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from saath_api.auth.models import User
+from saath_api.auth.models import AuditLog, User
 from saath_api.matching.models import Block
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.notifications.templates import render_notification
@@ -498,3 +498,103 @@ async def test_block_does_not_invalidate_confirmed_swap_or_release_locks(
             db=db, user_a=UUID(uid_a), user_b=UUID(uid_b)
         )
         assert res == []
+
+
+async def test_pre_accept_swap_note_redaction_moderation_and_restricted_user(
+    client: AsyncClient,
+    fake_messaging: FakeMessagingProvider,
+) -> None:
+    tok_a, uid_a = await _otp_login(client, fake_messaging, "9876543461")
+    tok_b, _ = await _otp_login(client, fake_messaging, "9876543462")
+    h_a = {"Authorization": f"Bearer {tok_a}"}
+    h_b = {"Authorization": f"Bearer {tok_b}"}
+
+    v_a = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    v_b = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+
+    await client.put(
+        f"/v1/parties/{v_b['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_b["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{v_a['party']['id']}/goal",
+        headers=h_a,
+        json={
+            "goal_type": "lower",
+            "movers": [v_a["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+
+    matches = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    assert len(matches) >= 1
+    card_id = matches[0]["card_id"]
+
+    # Scam/harassment note is rejected with 422 and logged to AuditLog
+    bad_note = await client.post(
+        "/v1/swaps",
+        headers=h_a,
+        json={
+            "card_id": card_id,
+            "note": "Send advance money and share your otp before swapping",
+        },
+    )
+    assert bad_note.status_code == 422
+    assert bad_note.json()["code"] == "note_moderated"
+
+    app: Any = client.app  # type: ignore[attr-defined]
+    async with app.state.session_factory() as db:
+        audit_row = (
+            await db.execute(
+                select(AuditLog).where(
+                    AuditLog.actor == "system:moderation",
+                    AuditLog.action == "swap_note.hidden",
+                    AuditLog.resource == f"user:{uid_a}",
+                )
+            )
+        ).scalar_one_or_none()
+        assert audit_row is not None
+
+    # Pre-accept contact info in note is redacted with ••• and up to 300 chars allowed
+    padded_note = "Call me on 9876543210 or paytm asha@okicici. " + ("x" * 240)
+    assert len(padded_note) <= 300
+    redacted_swap = await client.post(
+        "/v1/swaps",
+        headers=h_a,
+        json={"card_id": card_id, "note": padded_note},
+    )
+    assert redacted_swap.status_code == 201
+    persisted_note = redacted_swap.json()["note"]
+    assert "•••" in persisted_note
+    assert "9876543210" not in persisted_note
+    assert "okicici" not in persisted_note
+
+    # Cancel to release locks, then verify restricted user cannot propose swap
+    await client.post(f"/v1/swaps/{redacted_swap.json()['id']}/cancel", headers=h_a)
+    async with app.state.session_factory() as db:
+        user_a = (await db.execute(select(User).where(User.id == UUID(uid_a)))).scalar_one()
+        user_a.status = "restricted"
+        await db.commit()
+
+    restricted_resp = await client.post(
+        "/v1/swaps",
+        headers=h_a,
+        json={"card_id": card_id, "note": "Polite note"},
+    )
+    assert restricted_resp.status_code == 403
+    assert restricted_resp.json()["code"] == "account_restricted"

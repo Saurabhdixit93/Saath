@@ -101,6 +101,9 @@ export type RewardRedemptionDTO = components["schemas"]["RewardRedemptionDTO"];
 export type RewardsCatalogueResponse = components["schemas"]["RewardsCatalogueResponse"];
 export type RedeemRewardRequest = components["schemas"]["RedeemRewardRequest"];
 export type RedeemRewardResponse = components["schemas"]["RedeemRewardResponse"];
+export type ConciergeRequest = components["schemas"]["ConciergeRequest"];
+export type DraftRequestBody = components["schemas"]["DraftRequestBody"];
+export type DraftRequestResponse = components["schemas"]["DraftRequestResponse"];
 
 export interface SaathClientOptions {
   baseUrl: string;

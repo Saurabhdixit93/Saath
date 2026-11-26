@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi.openapi.utils import get_openapi
+from saath_api.ai.router import router as ai_router
 from saath_api.auth.router import router as auth_router
 from saath_api.core.config import Settings, YamlConfigBundle, get_settings, load_yaml_configs
 from saath_api.core.db import create_db_engine, create_session_factory
@@ -146,6 +147,7 @@ def create_app(
     app.include_router(matching_router)
     app.include_router(swaps_router)
     app.include_router(karma_router)
+    app.include_router(ai_router)
     app.include_router(realtime_router)
     app.include_router(messaging_router)
     app.include_router(notifications_router)

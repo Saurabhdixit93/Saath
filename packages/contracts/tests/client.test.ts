@@ -261,4 +261,53 @@ describe("createSaathClient 401 single-flight refresh & retry", () => {
     });
     expect(chartRes.data?.rule).toBe("dec2025_morning_prev_20_ist");
   });
+
+  it("supports M5-C POST /v1/ai/draft-request and 429 ProblemDetail", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(req.url);
+      if (url.pathname === "/v1/ai/draft-request" && req.method === "POST") {
+        const body = JSON.parse(await req.text()) as { card_id: string; lang?: string };
+        if (body.card_id === "mc_rate_limited") {
+          return new Response(
+            JSON.stringify({
+              type: "https://saath.app/problems/rate_limited",
+              title: "Daily AI Limit Reached",
+              status: 429,
+              detail: "You have reached the daily limit for AI concierge and draft requests.",
+              code: "rate_limited",
+            }),
+            { status: 429, headers: { "content-type": "application/problem+json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            text:
+              body.lang === "hi"
+                ? "नमस्ते! क्या आप मेरी B3-11 UB सीट से अपनी B3 LB सीट बदलेंगे?"
+                : "Hello! Would you swap your B3 LB for my B3-11 UB seat?",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+
+    const client = createSaathClient({
+      baseUrl: "http://localhost:8000",
+      getAccessToken: () => "valid-jwt",
+      fetch: fetchMock as typeof globalThis.fetch,
+    });
+
+    const okRes = await client.POST("/v1/ai/draft-request", {
+      body: { card_id: "mc_1234", tone: "polite", lang: "hi" },
+    });
+    expect(okRes.data?.text).toMatch(/[\u0900-\u097F]/);
+
+    const limitedRes = await client.POST("/v1/ai/draft-request", {
+      body: { card_id: "mc_rate_limited", tone: "polite", lang: "en" },
+    });
+    expect(parseProblemDetail(limitedRes.error)?.status).toBe(429);
+    expect(parseProblemDetail(limitedRes.error)?.code).toBe("rate_limited");
+  });
 });

@@ -68,6 +68,8 @@ def test_offline_openapi_export_contains_auth_and_problem_detail(tmp_path: Path)
         "/v1/karma",
         "/v1/karma/rewards",
         "/v1/karma/rewards/redeem",
+        "/v1/ai/concierge",
+        "/v1/ai/draft-request",
     ):
         assert expected in paths
 
@@ -83,3 +85,6 @@ def test_offline_openapi_export_contains_auth_and_problem_detail(tmp_path: Path)
     block_responses = paths["/v1/users/block"]["post"]["responses"]
     assert "409" in block_responses
     assert "application/problem+json" in block_responses["409"]["content"]
+    draft_responses = paths["/v1/ai/draft-request"]["post"]["responses"]
+    assert "429" in draft_responses
+    assert "application/problem+json" in draft_responses["429"]["content"]

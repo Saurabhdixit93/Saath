@@ -177,6 +177,12 @@ export interface paths {
   "/v1/karma/rewards/redeem": {
     post: operations["post_v1_karma_rewards_redeem_v1_karma_rewards_redeem_post"];
   };
+  "/v1/ai/concierge": {
+    post: operations["post_v1_ai_concierge_v1_ai_concierge_post"];
+  };
+  "/v1/ai/draft-request": {
+    post: operations["post_v1_ai_draft_request_v1_ai_draft_request_post"];
+  };
 }
 
 export interface components {
@@ -987,6 +993,18 @@ export interface components {
       status: string;
       created_at: string;
     };
+    ConciergeRequest: {
+      journey_id: string;
+      text: string;
+    };
+    DraftRequestBody: {
+      card_id: string;
+      tone?: string;
+      lang?: "en" | "hi" | null;
+    };
+    DraftRequestResponse: {
+      text: string;
+    };
   };
 }
 
@@ -1592,6 +1610,30 @@ export interface operations {
       404: ProblemResp;
       409: ProblemResp;
       422: ProblemResp;
+    };
+  };
+  post_v1_ai_concierge_v1_ai_concierge_post: {
+    requestBody: { content: { "application/json": components["schemas"]["ConciergeRequest"] } };
+    responses: {
+      200: { content: { "text/event-stream": string } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+      429: ProblemResp;
+      503: ProblemResp;
+    };
+  };
+  post_v1_ai_draft_request_v1_ai_draft_request_post: {
+    requestBody: { content: { "application/json": components["schemas"]["DraftRequestBody"] } };
+    responses: {
+      200: { content: { "application/json": components["schemas"]["DraftRequestResponse"] } };
+      401: ProblemResp;
+      403: ProblemResp;
+      404: ProblemResp;
+      422: ProblemResp;
+      429: ProblemResp;
+      503: ProblemResp;
     };
   };
 }

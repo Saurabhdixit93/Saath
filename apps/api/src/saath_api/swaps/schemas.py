@@ -11,7 +11,7 @@ class CreateSwapRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     card_id: str = Field(min_length=4, max_length=80)
-    note: str | None = Field(default=None, max_length=240)
+    note: str | None = Field(default=None, max_length=300)
 
 
 class AcceptSwapRequest(BaseModel):

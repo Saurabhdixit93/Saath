@@ -547,6 +547,20 @@ export default function JourneyMatchesPage({
         card={requestCard}
         loading={createSwapMutation.isPending}
         error={requestError}
+        defaultLang={locale === "hi" ? "hi" : "en"}
+        onDraftMessage={async ({ cardId, lang, tone }) => {
+          const { data, error } = await apiClient.POST("/v1/ai/draft-request", {
+            body: { card_id: cardId, lang, tone },
+          });
+          if (error || !data) {
+            const problem = parseProblemDetail(error);
+            if (problem?.status === 429) {
+              throw new Error(t("draftErrorRateLimit"));
+            }
+            throw new Error(problem?.detail || t("draftErrorGeneric"));
+          }
+          return data.text;
+        }}
         onClose={() => setRequestCard(null)}
         onSubmit={async (cardId, note) => {
           await createSwapMutation.mutateAsync({ cardId, note });

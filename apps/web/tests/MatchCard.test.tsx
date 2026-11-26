@@ -101,4 +101,85 @@ describe("MatchCard & RequestSwapSheet", () => {
     expect(onSubmit).toHaveBeenCalledWith("mc_pair_1", "Senior parent travelling");
     expect(await runAxe(container)).toHaveNoViolations();
   });
+
+  it("generates editable AI outreach draft in English and Hindi on RequestSwapSheet and passes axe", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async () => {});
+    const onDraftMessage = vi.fn(async ({ lang }: { cardId: string; lang: "en" | "hi"; tone: "polite" }) =>
+      lang === "hi"
+        ? "नमस्ते! क्या आप मेरी B3-11 UB सीट से अपनी B3 LB सीट बदलेंगे?"
+        : "Hello! Would you swap your B3 LB for my B3-11 UB seat?"
+    );
+
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={enMessages}>
+        <RequestSwapSheet
+          open={true}
+          card={PAIR_CARD}
+          defaultLang="en"
+          onDraftMessage={onDraftMessage}
+          onClose={vi.fn()}
+          onSubmit={onSubmit}
+        />
+      </NextIntlClientProvider>
+    );
+
+    await user.click(screen.getByRole("button", { name: "हिन्दी" }));
+    await user.click(screen.getByRole("button", { name: /Draft polite message with AI/i }));
+    expect(onDraftMessage).toHaveBeenCalledWith({
+      cardId: "mc_pair_1",
+      lang: "hi",
+      tone: "polite",
+    });
+
+    const noteBox = screen.getByLabelText(/Optional note/i) as HTMLTextAreaElement;
+    expect(noteBox.value).toMatch(/[\u0900-\u097F]/);
+    expect(noteBox.value).toContain("B3-11 UB");
+
+    await user.type(noteBox, " धन्यवाद");
+    await user.click(screen.getByRole("button", { name: "Send swap request" }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      "mc_pair_1",
+      "नमस्ते! क्या आप मेरी B3-11 UB सीट से अपनी B3 LB सीट बदलेंगे? धन्यवाद"
+    );
+    expect(await runAxe(container)).toHaveNoViolations();
+  });
+
+  it("resets note when switching to a different card on RequestSwapSheet", async () => {
+    const user = userEvent.setup();
+    const onDraftMessage = vi.fn(async () => "Draft for first card");
+    const onClose = vi.fn();
+    const onSubmit = vi.fn(async () => {});
+
+    const { rerender } = render(
+      <NextIntlClientProvider locale="en" messages={enMessages}>
+        <RequestSwapSheet
+          open={true}
+          card={PAIR_CARD}
+          onDraftMessage={onDraftMessage}
+          onClose={onClose}
+          onSubmit={onSubmit}
+        />
+      </NextIntlClientProvider>
+    );
+
+    await user.click(screen.getByRole("button", { name: /Draft polite message with AI/i }));
+    const noteBox = screen.getByLabelText(/Optional note/i) as HTMLTextAreaElement;
+    expect(noteBox.value).toBe("Draft for first card");
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={enMessages}>
+        <RequestSwapSheet
+          open={true}
+          card={CYCLE3_CARD}
+          onDraftMessage={onDraftMessage}
+          onClose={onClose}
+          onSubmit={onSubmit}
+        />
+      </NextIntlClientProvider>
+    );
+
+    const updatedNoteBox = screen.getByLabelText(/Optional note/i) as HTMLTextAreaElement;
+    expect(updatedNoteBox.value).toBe("");
+  });
 });
