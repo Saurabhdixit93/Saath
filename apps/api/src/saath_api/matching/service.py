@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Literal
 from uuid import UUID
 
 import structlog
 from fastapi import status
 from redis.asyncio import Redis
+from redis.exceptions import ResponseError
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.dependencies import Actor
 from saath_api.auth.models import User
-from saath_api.core.config import YamlConfigBundle
+from saath_api.core.config import Settings, YamlConfigBundle, get_settings
 from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import uuid7
 from saath_api.journeys.geometry import build_coach_layout, normalize_coach_class
@@ -81,9 +84,17 @@ def compute_matches_in_memory(
 ) -> ComputedMatchOutput:
     """Pure in-memory OR-Tools matching pipeline (used by service & benchmark/property tests)."""
     t0 = time.perf_counter()
-    graph = build_swap_graph(nodes, blocks=blocks, max_out_degree=25)
-    all_cycles = enumerate_bounded_cycles(graph, max_cycle_len=4, max_cycles_per_root=30)
-    packed_cycles = pack_disjoint_cycles(all_cycles, graph.nodes, time_limit_seconds=1.0)
+    active_count = sum(1 for n in nodes if n.goal_type is not None)
+    max_out_degree = 20 if active_count > 80 else 25
+    max_cycles_per_root = 12 if active_count > 80 else 25
+    cp_sat_limit = 0.7 if active_count > 80 else 1.0
+    graph = build_swap_graph(nodes, blocks=blocks, max_out_degree=max_out_degree)
+    all_cycles = enumerate_bounded_cycles(
+        graph, max_cycle_len=4, max_cycles_per_root=max_cycles_per_root
+    )
+    packed_cycles = pack_disjoint_cycles(
+        all_cycles, graph.nodes, time_limit_seconds=cp_sat_limit
+    )
 
     by_party: dict[UUID, list[SeatNode]] = defaultdict(list)
     for n in nodes:
@@ -218,6 +229,30 @@ async def _load_journey_nodes(
     return nodes, frozenset(blocks_set), party_user_ids
 
 
+_UNLOCK_LOCK_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
+
+async def _release_match_lock(redis: Redis, lock_key: str, lock_token: str) -> None:
+    try:
+        await redis.eval(_UNLOCK_LOCK_LUA, 1, lock_key, lock_token)  # type: ignore[misc,no-untyped-call]
+    except ResponseError as exc:
+        if "lupa" not in str(exc).lower() and "unknown command" not in str(exc).lower():
+            return
+        try:
+            current = await redis.get(lock_key)
+            if current == lock_token:
+                await redis.delete(lock_key)
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 async def recompute_journey_matches(
     *,
     db: AsyncSession,
@@ -234,149 +269,198 @@ async def recompute_journey_matches(
         return 0
 
     lock_key = f"lock:match:{journey_instance_id}"
+    dirty_key = f"lock:match:dirty:{journey_instance_id}"
+    debounce_key = f"debounce:match:{journey_instance_id}"
+    lock_token = uuid7().hex
     lock_acquired = False
+    redis_usable = redis is not None
+
     if redis is not None:
         try:
-            lock_acquired = bool(await redis.set(lock_key, "1", nx=True, ex=10))
+            lock_acquired = bool(await redis.set(lock_key, lock_token, nx=True, ex=10))
+            if not lock_acquired:
+                await redis.set(dirty_key, "1", ex=15)
+                for _ in range(40):
+                    await asyncio.sleep(0.05)
+                    lock_acquired = bool(
+                        await redis.set(lock_key, lock_token, nx=True, ex=10)
+                    )
+                    if lock_acquired:
+                        break
         except Exception:
+            redis_usable = False
             lock_acquired = False
 
+    if redis_usable and not lock_acquired:
+        latest_ji = (
+            await db.execute(
+                select(JourneyInstance).where(JourneyInstance.id == journey_instance_id)
+            )
+        ).scalar_one_or_none()
+        return latest_ji.match_version if latest_ji is not None else ji.match_version
+
+    last_version = ji.match_version
     try:
-        nodes, blocks, party_user_ids = await _load_journey_nodes(
-            db, journey_instance_id, mode=ji.mode, layout_ref=ji.layout_ref
-        )
-        computed = compute_matches_in_memory(nodes, blocks=blocks)
-        packed_set = {c.nodes for c in computed.packed_cycles}
+        for _pass_idx in range(3):
+            if redis is not None and redis_usable:
+                try:
+                    await redis.delete(dirty_key)
+                    await redis.delete(debounce_key)
+                except Exception:
+                    pass
 
-        await db.execute(
-            delete(MatchCandidate).where(
-                MatchCandidate.journey_instance_id == journey_instance_id,
-                MatchCandidate.match_version == ji.match_version,
+            ji_curr = (
+                await db.execute(
+                    select(JourneyInstance).where(
+                        JourneyInstance.id == journey_instance_id
+                    )
+                )
+            ).scalar_one_or_none()
+            if ji_curr is None:
+                return last_version
+            last_version = ji_curr.match_version
+
+            nodes, blocks, party_user_ids = await _load_journey_nodes(
+                db, journey_instance_id, mode=ji_curr.mode, layout_ref=ji_curr.layout_ref
             )
-        )
-        await db.execute(
-            delete(MatchCandidate).where(
-                MatchCandidate.journey_instance_id == journey_instance_id,
-                MatchCandidate.match_version < ji.match_version - 2,
+            computed = compute_matches_in_memory(nodes, blocks=blocks)
+            packed_set = {c.nodes for c in computed.packed_cycles}
+
+            await db.execute(
+                delete(MatchCandidate).where(
+                    MatchCandidate.journey_instance_id == journey_instance_id,
+                    MatchCandidate.match_version == ji_curr.match_version,
+                )
             )
-        )
-
-        # Group cycles per party (packed global cycles boosted to top, plus up to 20 alternatives)
-        party_cycles: dict[UUID, list[CandidateCycle]] = defaultdict(list)
-        for cyc in computed.all_cycles:
-            involved_parties = {computed.graph.nodes[uid].party_id for uid in cyc.nodes}
-            for pid in involved_parties:
-                party_cycles[pid].append(cyc)
-
-        seen_cards_per_party: dict[UUID, set[tuple[UUID, ...]]] = defaultdict(set)
-        candidates_to_add: list[MatchCandidate] = []
-
-        # Emit party bay plans first for together/same_coach parties
-        for plan in computed.party_plans:
-            candidates_to_add.append(
-                MatchCandidate(
-                    id=uuid7(),
-                    journey_instance_id=journey_instance_id,
-                    match_version=ji.match_version,
-                    for_party_id=plan.party_id,
-                    card_id=f"mc_{uuid7().hex}",
-                    cycle_seat_holders=list(plan.all_seat_holders),
-                    plan_cycles={
-                        "target_coach": plan.target_coach,
-                        "target_bay": plan.target_bay,
-                        "cycles": [[str(u) for u in cyc] for cyc in plan.cycles],
-                        "segment_overlap": plan.segment_overlap,
-                        "reason_codes": list(plan.reason_codes),
-                    },
-                    score=plan.score,
-                    reasons=list(plan.reasons),
-                    kind="plan",
+            await db.execute(
+                delete(MatchCandidate).where(
+                    MatchCandidate.journey_instance_id == journey_instance_id,
+                    MatchCandidate.match_version < ji_curr.match_version - 2,
                 )
             )
 
-        for pid, cyc_list in party_cycles.items():
-            # Only emit match cards for parties with an active goal
-            party_nodes = [n for n in nodes if n.party_id == pid]
-            if not any(n.goal_type is not None for n in party_nodes):
-                continue
+            # Group cycles per party (packed global cycles boosted to top, plus up to 20 alternatives)
+            party_cycles: dict[UUID, list[CandidateCycle]] = defaultdict(list)
+            for cyc in computed.all_cycles:
+                involved_parties = {computed.graph.nodes[uid].party_id for uid in cyc.nodes}
+                for pid in involved_parties:
+                    party_cycles[pid].append(cyc)
 
-            cyc_list.sort(
-                key=lambda c: (
-                    0 if c.nodes in packed_set else 1,
-                    -c.score,
-                    len(c.nodes),
-                )
-            )
-            emitted = 0
-            for cyc in cyc_list:
-                if cyc.nodes in seen_cards_per_party[pid]:
-                    continue
-                seen_cards_per_party[pid].add(cyc.nodes)
+            seen_cards_per_party: dict[UUID, set[tuple[UUID, ...]]] = defaultdict(set)
+            candidates_to_add: list[MatchCandidate] = []
+
+            # Emit party bay plans first for together/same_coach parties
+            for plan in computed.party_plans:
                 candidates_to_add.append(
                     MatchCandidate(
                         id=uuid7(),
                         journey_instance_id=journey_instance_id,
-                        match_version=ji.match_version,
-                        for_party_id=pid,
+                        match_version=ji_curr.match_version,
+                        for_party_id=plan.party_id,
                         card_id=f"mc_{uuid7().hex}",
-                        cycle_seat_holders=list(cyc.nodes),
+                        cycle_seat_holders=list(plan.all_seat_holders),
                         plan_cycles={
-                            "segment_overlap": cyc.segment_overlap,
-                            "reason_codes": list(cyc.reason_codes),
+                            "target_coach": plan.target_coach,
+                            "target_bay": plan.target_bay,
+                            "cycles": [[str(u) for u in cyc] for cyc in plan.cycles],
+                            "segment_overlap": plan.segment_overlap,
+                            "reason_codes": list(plan.reason_codes),
                         },
-                        score=cyc.score,
-                        reasons=list(cyc.reasons),
-                        kind=cyc.kind,
+                        score=plan.score,
+                        reasons=list(plan.reasons),
+                        kind="plan",
                     )
                 )
-                emitted += 1
-                if emitted >= 20:
-                    break
 
-        for cand in candidates_to_add:
-            db.add(cand)
-        await db.commit()
+            for pid, cyc_list in party_cycles.items():
+                # Only emit match cards for parties with an active goal
+                party_nodes = [n for n in nodes if n.party_id == pid]
+                if not any(n.goal_type is not None for n in party_nodes):
+                    continue
 
-        if redis is not None:
-            try:
-                await redis.set(
-                    f"match:computed:{journey_instance_id}:{ji.match_version}",
-                    "1",
-                    ex=_COMPUTED_MARKER_TTL_SECONDS,
+                cyc_list.sort(
+                    key=lambda c: (
+                        0 if c.nodes in packed_set else 1,
+                        -c.score,
+                        len(c.nodes),
+                    )
                 )
-                if publish_events:
-                    for pid, uids in party_user_ids.items():
-                        event_payload = json.dumps(
-                            {
-                                "type": "match.updated",
-                                "party_id": str(pid),
-                                "journey_instance_id": str(journey_instance_id),
-                                "match_version": ji.match_version,
-                            }
+                emitted = 0
+                for cyc in cyc_list:
+                    if cyc.nodes in seen_cards_per_party[pid]:
+                        continue
+                    seen_cards_per_party[pid].add(cyc.nodes)
+                    candidates_to_add.append(
+                        MatchCandidate(
+                            id=uuid7(),
+                            journey_instance_id=journey_instance_id,
+                            match_version=ji_curr.match_version,
+                            for_party_id=pid,
+                            card_id=f"mc_{uuid7().hex}",
+                            cycle_seat_holders=list(cyc.nodes),
+                            plan_cycles={
+                                "segment_overlap": cyc.segment_overlap,
+                                "reason_codes": list(cyc.reason_codes),
+                            },
+                            score=cyc.score,
+                            reasons=list(cyc.reasons),
+                            kind=cyc.kind,
                         )
-                        for uid in uids:
-                            await redis.publish(f"user:{uid}", event_payload)
-            except Exception:
-                logger.warning(
-                    "match_redis_publish_failed",
-                    journey_instance_id=str(journey_instance_id),
-                )
+                    )
+                    emitted += 1
+                    if emitted >= 20:
+                        break
 
-        logger.info(
-            "matches_recomputed",
-            journey_instance_id=str(journey_instance_id),
-            match_version=ji.match_version,
-            node_count=len(nodes),
-            candidate_count=len(candidates_to_add),
-            elapsed_ms=round(computed.elapsed_ms, 2),
-        )
-        return ji.match_version
+            for cand in candidates_to_add:
+                db.add(cand)
+            await db.commit()
+
+            if redis is not None and redis_usable:
+                try:
+                    await redis.set(
+                        f"match:computed:{journey_instance_id}:{ji_curr.match_version}",
+                        "1",
+                        ex=_COMPUTED_MARKER_TTL_SECONDS,
+                    )
+                    if publish_events:
+                        for pid, uids in party_user_ids.items():
+                            event_payload = json.dumps(
+                                {
+                                    "type": "match.updated",
+                                    "party_id": str(pid),
+                                    "journey_instance_id": str(journey_instance_id),
+                                    "match_version": ji_curr.match_version,
+                                }
+                            )
+                            for uid in uids:
+                                await redis.publish(f"user:{uid}", event_payload)
+                except Exception:
+                    logger.warning(
+                        "match_redis_publish_failed",
+                        journey_instance_id=str(journey_instance_id),
+                    )
+
+            logger.info(
+                "matches_recomputed",
+                journey_instance_id=str(journey_instance_id),
+                match_version=ji_curr.match_version,
+                node_count=len(nodes),
+                candidate_count=len(candidates_to_add),
+                elapsed_ms=round(computed.elapsed_ms, 2),
+            )
+
+            if redis is not None and redis_usable and lock_acquired:
+                try:
+                    if await redis.get(dirty_key):
+                        continue
+                except Exception:
+                    pass
+            break
+
+        return last_version
     finally:
         if redis is not None and lock_acquired:
-            try:
-                await redis.delete(lock_key)
-            except Exception:
-                pass
+            await _release_match_lock(redis, lock_key, lock_token)
 
 
 async def schedule_or_run_match_recompute(
@@ -384,8 +468,38 @@ async def schedule_or_run_match_recompute(
     db: AsyncSession,
     redis: Redis | None,
     journey_instance_id: UUID,
+    arq_pool: Any | None = None,
+    settings: Settings | None = None,
 ) -> None:
-    """Recompute matches after a state transition so results & WS events are immediately fresh."""
+    """Schedule debounced Arq match recompute when available, or run inline immediately."""
+    if arq_pool is not None and redis is not None:
+        resolved_settings = settings or get_settings()
+        debounce_sec = max(0.0, float(resolved_settings.match_debounce_seconds))
+        debounce_key = f"debounce:match:{journey_instance_id}"
+        dirty_key = f"lock:match:dirty:{journey_instance_id}"
+        try:
+            if debounce_sec > 0.0:
+                px_ms = max(100, int(round(debounce_sec * 1000)))
+                scheduled = bool(
+                    await redis.set(debounce_key, "1", nx=True, px=px_ms)
+                )
+            else:
+                scheduled = True
+            if scheduled:
+                await arq_pool.enqueue_job(
+                    "recompute_matches_job",
+                    str(journey_instance_id),
+                    _defer_by=timedelta(seconds=debounce_sec),
+                )
+            else:
+                await redis.set(dirty_key, "1", ex=15)
+            return
+        except Exception:
+            logger.warning(
+                "match_arq_schedule_failed_falling_back_inline",
+                journey_instance_id=str(journey_instance_id),
+            )
+
     await recompute_journey_matches(
         db=db,
         redis=redis,

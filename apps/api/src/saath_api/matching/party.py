@@ -6,6 +6,7 @@ from uuid import UUID
 from saath_api.matching.graph import (
     SeatNode,
     SwapGraph,
+    _matches_preferred_seats,
     check_segment_overlap,
     is_seated_and_unlocked,
     is_verified_female,
@@ -149,12 +150,14 @@ def plan_party_bay_swaps(
                 need_move = [m for m in movers if (m.coach or "").upper() != target_coach]
 
             if not need_move:
-                need_move = movers[:1]
+                continue
 
             # Candidate external helpers/seekers near target
             externals: list[SeatNode] = []
             for ext in all_active_externals:
                 if ext.party_id == party_id:
+                    continue
+                if ext.goal_type != "open_to_help" and ext.seat_holder_id not in ext.movers:
                     continue
                 if not ext.coach or ext.coach.upper() != target_coach:
                     continue
@@ -195,18 +198,31 @@ def plan_party_bay_swaps(
                         continue
 
                     # Check if external accepts mover's seat (open_to_help or compatible goal)
+                    m_coach = (m.coach or "").upper()
+                    m_stype = (m.seat_type or "").upper()
                     ext_accepts = False
                     if ext.goal_type == "open_to_help":
                         ext_accepts = True
-                    elif ext.goal_type == "lower" and (m.seat_type or "").upper() in ("LB", "SL"):
+                    elif ext.goal_type == "lower" and m_stype in ("LB", "SL"):
                         ext_accepts = True
-                    elif ext.goal_type == "upper" and (m.seat_type or "").upper() in ("UB", "SU"):
+                    elif ext.goal_type == "upper" and m_stype in ("UB", "SU"):
                         ext_accepts = True
-                    elif ext.goal_type == "same_coach" and (m.coach or "").upper() == (ext.coach or "").upper():
+                    elif ext.goal_type == "window" and m_stype == "WS":
                         ext_accepts = True
-                    elif ext.goal_type == "window" and (m.seat_type or "").upper() == "WS":
+                    elif ext.goal_type == "aisle" and m_stype == "AS":
                         ext_accepts = True
-                    elif ext.goal_type == "aisle" and (m.seat_type or "").upper() == "AS":
+                    elif ext.goal_type == "specific_seats" and _matches_preferred_seats(
+                        m, ext.preferred_seats
+                    ):
+                        ext_accepts = True
+                    elif ext.goal_type == "legroom" and (
+                        m.is_exit_row or m_stype in ("SL", "LB")
+                    ):
+                        ext_accepts = True
+                    elif ext.goal_type == "together" and (
+                        (m.bay is not None and (m_coach, m.bay) in ext.party_coach_bays)
+                        or (m_coach in ext.party_coaches)
+                    ):
                         ext_accepts = True
 
                     if not ext_accepts:

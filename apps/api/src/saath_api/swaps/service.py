@@ -9,7 +9,9 @@ from uuid import UUID
 import structlog
 from fastapi import status
 from redis.asyncio import Redis
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import bindparam, delete, select, text, update
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,7 +127,9 @@ async def _build_swap_detail_dto(
     parts = list(
         (
             await db.execute(
-                select(SwapParticipant).where(SwapParticipant.proposal_id == proposal.id)
+                select(SwapParticipant)
+                .where(SwapParticipant.proposal_id == proposal.id)
+                .order_by(SwapParticipant.seat_holder_id)
             )
         )
         .scalars()
@@ -172,7 +176,15 @@ async def _build_swap_detail_dto(
     you_give = (
         ", ".join(p.gives_seat for p in my_parts)
         if my_parts
-        else (parts[0].gives_seat if parts else "")
+        else (
+            (
+                parts[0].gives_seat
+                if revealed
+                else _mask_seat(parts[0].gives_coach, parts[0].gives_seat_type)
+            )
+            if parts
+            else ""
+        )
     )
     you_get_summary = (
         ", ".join(_mask_seat(p.gets_coach, p.gets_seat_type) for p in my_parts)
@@ -244,7 +256,9 @@ async def _require_proposal_access(
     parts = list(
         (
             await db.execute(
-                select(SwapParticipant).where(SwapParticipant.proposal_id == proposal.id)
+                select(SwapParticipant)
+                .where(SwapParticipant.proposal_id == proposal.id)
+                .order_by(SwapParticipant.seat_holder_id)
             )
         )
         .scalars()
@@ -707,17 +721,41 @@ async def accept_swap(
                 )
             )
 
-            # Hook for M4 conversations.unmasked when conversations table exists
+            # Hook for M4 conversations.unmasked when conversations & conversation_members exist
             has_convos = (
                 await db.execute(text("SELECT to_regclass('public.conversations')"))
             ).scalar_one_or_none()
-            if has_convos is not None and participant_user_ids:
+            has_convo_members = (
                 await db.execute(
-                    text(
-                        "UPDATE conversations SET unmasked = true "
-                        "WHERE journey_instance_id = :ji_id"
-                    ),
-                    {"ji_id": str(ji.id)},
+                    text("SELECT to_regclass('public.conversation_members')")
+                )
+            ).scalar_one_or_none()
+            if (
+                has_convos is not None
+                and has_convo_members is not None
+                and participant_user_ids
+            ):
+                unmask_stmt = text(
+                    "UPDATE conversations "
+                    "SET unmasked = true "
+                    "WHERE journey_instance_id = :ji_id "
+                    "AND id IN ("
+                    "  SELECT cm.conversation_id "
+                    "  FROM conversation_members cm "
+                    "  GROUP BY cm.conversation_id "
+                    "  HAVING COUNT(*) >= 2 "
+                    "  AND BOOL_AND(cm.user_id = ANY(:participant_uids))"
+                    ")"
+                ).bindparams(
+                    bindparam("ji_id", type_=PG_UUID(as_uuid=True)),
+                    bindparam("participant_uids", type_=PG_ARRAY(PG_UUID(as_uuid=True))),
+                )
+                await db.execute(
+                    unmask_stmt,
+                    {
+                        "ji_id": ji.id,
+                        "participant_uids": sorted(participant_user_ids),
+                    },
                 )
 
             for uid in participant_user_ids:
@@ -761,6 +799,8 @@ async def decline_swap(
     actor: Actor,
     swap_id: UUID,
     req: DeclineSwapRequest,
+    arq_pool: Any | None = None,
+    settings: Settings | None = None,
 ) -> SwapDetailDTO:
     if actor.kind != "user" or actor.user_id is None:
         raise ProblemDetailError(
@@ -770,8 +810,8 @@ async def decline_swap(
             detail="Verify your phone number to decline a swap.",
         )
 
-    await _begin_serializable(db)
     try:
+        await _begin_serializable(db)
         proposal, parts = await _require_proposal_access(db, swap_id, actor)
         my_parts = [p for p in parts if p.user_id == actor.user_id]
         if not my_parts:
@@ -823,13 +863,30 @@ async def decline_swap(
                 )
             )
         await db.commit()
+    except ProblemDetailError:
+        await db.rollback()
+        raise
+    except (IntegrityError, DBAPIError) as exc:
+        await db.rollback()
+        if _is_conflict_db_error(exc):
+            raise ProblemDetailError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="version_conflict",
+                title="Swap Updated",
+                detail="This swap was modified concurrently. Please refresh and try again.",
+            ) from exc
+        raise
     except Exception:
         await db.rollback()
         raise
 
     await db.refresh(proposal)
     await schedule_or_run_match_recompute(
-        db=db, redis=redis, journey_instance_id=proposal.journey_instance_id
+        db=db,
+        redis=redis,
+        journey_instance_id=proposal.journey_instance_id,
+        arq_pool=arq_pool,
+        settings=settings,
     )
     await _publish_swap_updated(redis, proposal=proposal, user_ids=participant_user_ids)
     return await _build_swap_detail_dto(db, proposal, actor)
@@ -841,6 +898,8 @@ async def cancel_swap(
     redis: Redis | None,
     actor: Actor,
     swap_id: UUID,
+    arq_pool: Any | None = None,
+    settings: Settings | None = None,
 ) -> SwapDetailDTO:
     if actor.kind != "user" or actor.user_id is None:
         raise ProblemDetailError(
@@ -850,8 +909,8 @@ async def cancel_swap(
             detail="Verify your phone number to cancel a swap.",
         )
 
-    await _begin_serializable(db)
     try:
+        await _begin_serializable(db)
         proposal, parts = await _require_proposal_access(db, swap_id, actor)
         if proposal.initiator_user_id != actor.user_id and actor.kind != "admin":
             raise ProblemDetailError(
@@ -895,13 +954,30 @@ async def cancel_swap(
                 )
             )
         await db.commit()
+    except ProblemDetailError:
+        await db.rollback()
+        raise
+    except (IntegrityError, DBAPIError) as exc:
+        await db.rollback()
+        if _is_conflict_db_error(exc):
+            raise ProblemDetailError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="version_conflict",
+                title="Swap Updated",
+                detail="This swap was modified concurrently. Please refresh and try again.",
+            ) from exc
+        raise
     except Exception:
         await db.rollback()
         raise
 
     await db.refresh(proposal)
     await schedule_or_run_match_recompute(
-        db=db, redis=redis, journey_instance_id=proposal.journey_instance_id
+        db=db,
+        redis=redis,
+        journey_instance_id=proposal.journey_instance_id,
+        arq_pool=arq_pool,
+        settings=settings,
     )
     await _publish_swap_updated(redis, proposal=proposal, user_ids=participant_user_ids)
     return await _build_swap_detail_dto(db, proposal, actor)
@@ -923,76 +999,95 @@ async def confirm_completion(
             detail="Verify your phone number to confirm swap completion.",
         )
 
-    proposal, parts = await _require_proposal_access(db, swap_id, actor)
-    my_parts = [p for p in parts if p.user_id == actor.user_id]
-    if not my_parts:
-        raise ProblemDetailError(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="forbidden",
-            title="Forbidden",
-            detail="Only swap participants can confirm completion.",
-        )
+    try:
+        await _begin_serializable(db)
+        proposal, parts = await _require_proposal_access(db, swap_id, actor)
+        my_parts = [p for p in parts if p.user_id == actor.user_id]
+        if not my_parts:
+            raise ProblemDetailError(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="forbidden",
+                title="Forbidden",
+                detail="Only swap participants can confirm completion.",
+            )
 
-    if proposal.status not in ("confirmed", "awaiting_confirmation"):
-        raise ProblemDetailError(
-            status_code=status.HTTP_409_CONFLICT,
-            code="invalid_swap_state",
-            title="Swap Not Confirmable",
-            detail=f"Cannot confirm completion for swap in state {proposal.status!r}.",
-        )
-
-    for p in my_parts:
-        if p.post_confirm is not None and p.post_confirm != req.answer:
+        if proposal.status not in ("confirmed", "awaiting_confirmation"):
             raise ProblemDetailError(
                 status_code=status.HTTP_409_CONFLICT,
-                code="conflicting_confirmation",
-                title="Conflicting Confirmation",
-                detail="You have already submitted a different completion answer.",
+                code="invalid_swap_state",
+                title="Swap Not Confirmable",
+                detail=f"Cannot confirm completion for swap in state {proposal.status!r}.",
             )
 
-    now = datetime.now(UTC)
-    for p in my_parts:
-        p.post_confirm = req.answer
-        p.post_confirmed_at = now
-
-    proposal.version += 1
-    participant_user_ids = {p.user_id for p in parts if p.user_id is not None}
-
-    if req.answer in ("no", "did_not_board"):
-        proposal.status = "not_completed"
-        for uid in participant_user_ids:
-            db.add(
-                NotificationsOutbox(
-                    user_id=uid,
-                    event="SwapNotCompleted",
-                    payload={"swap_id": str(proposal.id), "reason": req.answer},
-                    idempotency_key=f"swap_not_completed:{proposal.id}:{uid}",
+        for p in my_parts:
+            if p.post_confirm is not None and p.post_confirm != req.answer:
+                raise ProblemDetailError(
+                    status_code=status.HTTP_409_CONFLICT,
+                    code="conflicting_confirmation",
+                    title="Conflicting Confirmation",
+                    detail="You have already submitted a different completion answer.",
                 )
-            )
-    elif all(p.post_confirm == "yes" for p in parts):
-        proposal.status = "completed"
-        if participant_user_ids:
-            await db.execute(
-                update(User)
-                .where(User.id.in_(participant_user_ids))
-                .values(reliability_completed=User.reliability_completed + 1)
-            )
-        for uid in participant_user_ids:
-            db.add(
-                NotificationsOutbox(
-                    user_id=uid,
-                    event="SwapCompleted",
-                    payload={
-                        "swap_id": str(proposal.id),
-                        "journey_instance_id": str(proposal.journey_instance_id),
-                    },
-                    idempotency_key=f"swap_completed:{proposal.id}:{uid}",
-                )
-            )
-    else:
-        proposal.status = "awaiting_confirmation"
 
-    await db.commit()
+        now = datetime.now(UTC)
+        for p in my_parts:
+            p.post_confirm = req.answer
+            p.post_confirmed_at = now
+
+        proposal.version += 1
+        participant_user_ids = {p.user_id for p in parts if p.user_id is not None}
+
+        if req.answer in ("no", "did_not_board"):
+            proposal.status = "not_completed"
+            for uid in participant_user_ids:
+                db.add(
+                    NotificationsOutbox(
+                        user_id=uid,
+                        event="SwapNotCompleted",
+                        payload={"swap_id": str(proposal.id), "reason": req.answer},
+                        idempotency_key=f"swap_not_completed:{proposal.id}:{uid}",
+                    )
+                )
+        elif all(p.post_confirm == "yes" for p in parts):
+            proposal.status = "completed"
+            if participant_user_ids:
+                await db.execute(
+                    update(User)
+                    .where(User.id.in_(participant_user_ids))
+                    .values(reliability_completed=User.reliability_completed + 1)
+                )
+            for uid in participant_user_ids:
+                db.add(
+                    NotificationsOutbox(
+                        user_id=uid,
+                        event="SwapCompleted",
+                        payload={
+                            "swap_id": str(proposal.id),
+                            "journey_instance_id": str(proposal.journey_instance_id),
+                        },
+                        idempotency_key=f"swap_completed:{proposal.id}:{uid}",
+                    )
+                )
+        else:
+            proposal.status = "awaiting_confirmation"
+
+        await db.commit()
+    except ProblemDetailError:
+        await db.rollback()
+        raise
+    except (IntegrityError, DBAPIError) as exc:
+        await db.rollback()
+        if _is_conflict_db_error(exc):
+            raise ProblemDetailError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="version_conflict",
+                title="Swap Updated",
+                detail="This swap was modified concurrently. Please refresh and try again.",
+            ) from exc
+        raise
+    except Exception:
+        await db.rollback()
+        raise
+
     await db.refresh(proposal)
     await _publish_swap_updated(redis, proposal=proposal, user_ids=participant_user_ids)
     return await _build_swap_detail_dto(db, proposal, actor)

@@ -58,10 +58,24 @@ def create_app(
         app.state.rail_router = rail_router or build_rail_router(
             resolved_settings, redis_client
         )
+        arq_pool = None
+        if resolved_settings.env != "test":
+            try:
+                from arq import create_pool
+                from arq.connections import RedisSettings
+
+                arq_pool = await create_pool(
+                    RedisSettings.from_dsn(resolved_settings.redis_url)
+                )
+            except Exception:
+                arq_pool = None
+        app.state.arq_pool = arq_pool
 
         try:
             yield
         finally:
+            if arq_pool is not None:
+                await arq_pool.aclose()
             await redis_client.aclose()
             await db_engine.dispose()
 

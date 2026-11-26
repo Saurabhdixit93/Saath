@@ -142,6 +142,7 @@ async def post_v1_swap_accept(
 async def post_v1_swap_decline(
     swap_id: UUID,
     body: DeclineSwapRequest,
+    request: Request,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
@@ -152,6 +153,8 @@ async def post_v1_swap_decline(
         actor=actor,
         swap_id=swap_id,
         req=body,
+        arq_pool=getattr(request.app.state, "arq_pool", None),
+        settings=get_request_settings(request),
     )
 
 
@@ -167,6 +170,7 @@ async def post_v1_swap_decline(
 )
 async def post_v1_swap_cancel(
     swap_id: UUID,
+    request: Request,
     actor: Actor = Depends(current_actor),
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
@@ -176,6 +180,8 @@ async def post_v1_swap_cancel(
         redis=redis,
         actor=actor,
         swap_id=swap_id,
+        arq_pool=getattr(request.app.state, "arq_pool", None),
+        settings=get_request_settings(request),
     )
 
 

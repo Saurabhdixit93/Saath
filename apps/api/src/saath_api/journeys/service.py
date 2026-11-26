@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -950,6 +950,7 @@ async def verify_journey(
     req: VerifyJourneyRequest,
     client_ip: str,
     simulate_provider_failure: bool = False,
+    arq_pool: Any | None = None,
 ) -> VerifyJourneyResponse:
     ji, booking, seat_holders, party = await verify_and_persist_booking(
         settings=settings,
@@ -985,7 +986,11 @@ async def verify_journey(
     from saath_api.matching.service import schedule_or_run_match_recompute
 
     await schedule_or_run_match_recompute(
-        db=db, redis=redis, journey_instance_id=ji.id
+        db=db,
+        redis=redis,
+        journey_instance_id=ji.id,
+        arq_pool=arq_pool,
+        settings=settings,
     )
 
     return VerifyJourneyResponse(
@@ -1225,6 +1230,7 @@ async def reverify_journey(
     actor: Actor,
     journey_id: UUID,
     simulate_chart_change: bool = False,
+    arq_pool: Any | None = None,
 ) -> JourneyHubResponse:
     ji, booking, party = await _load_actor_journey_context(
         db=db, actor=actor, journey_id=journey_id
@@ -1362,8 +1368,11 @@ async def _prune_goal_movers(
 async def delete_journey_booking(
     *,
     db: AsyncSession,
+    redis: Redis | None = None,
     actor: Actor,
     journey_id: UUID,
+    arq_pool: Any | None = None,
+    settings: Settings | None = None,
 ) -> DeleteJourneyResponse:
     ji, booking, party = await _load_actor_journey_context(
         db=db, actor=actor, journey_id=journey_id
@@ -1385,6 +1394,16 @@ async def delete_journey_booking(
         .scalars()
         .all()
     )
+    if deleted_sh_ids:
+        from saath_api.swaps.service import invalidate_swaps_for_berth_change
+
+        await invalidate_swaps_for_berth_change(
+            db=db,
+            journey_instance_id=ji.id,
+            affected_seat_holder_ids=list(deleted_sh_ids),
+            reason="booking_deleted",
+        )
+
     await db.delete(booking)
     await db.flush()
 
@@ -1416,9 +1435,19 @@ async def delete_journey_booking(
         await _prune_goal_movers(
             db=db, party_id=party.id, removed_seat_holder_ids=deleted_sh_ids
         )
-        ji.match_version += 1
 
+    ji.match_version += 1
     await db.commit()
+
+    from saath_api.matching.service import schedule_or_run_match_recompute
+
+    await schedule_or_run_match_recompute(
+        db=db,
+        redis=redis,
+        journey_instance_id=ji.id,
+        arq_pool=arq_pool,
+        settings=settings,
+    )
     return DeleteJourneyResponse(ok=True, deleted_booking_id=deleted_id)
 
 

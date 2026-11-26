@@ -4,7 +4,12 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from saath_api.matching.graph import SeatNode, SwapEdge, SwapGraph
+from saath_api.matching.graph import (
+    SeatNode,
+    SwapEdge,
+    SwapGraph,
+    is_verified_female,
+)
 from saath_api.matching.scoring import score_directed_edge
 
 
@@ -50,13 +55,26 @@ def build_swap_graph(
     return SwapGraph(nodes=node_map, edges=edges, blocks=blocks)
 
 
+def _has_block_between(
+    node_a: SeatNode,
+    node_b: SeatNode,
+    blocks: frozenset[tuple[UUID, UUID]],
+) -> bool:
+    if node_a.owner_user_id is None or node_b.owner_user_id is None:
+        return False
+    return (node_a.owner_user_id, node_b.owner_user_id) in blocks or (
+        node_b.owner_user_id,
+        node_a.owner_user_id,
+    ) in blocks
+
+
 def enumerate_bounded_cycles(
     graph: SwapGraph,
     *,
     max_cycle_len: int = 4,
     max_cycles_per_root: int = 40,
 ) -> list[CandidateCycle]:
-    """Bounded simple cycle enumeration (2..4 nodes) with declared-tier restriction."""
+    """Bounded simple cycle enumeration (2..4 nodes) with cycle-wide safety & party invariants."""
     seen: set[tuple[UUID, ...]] = set()
     cycles: list[CandidateCycle] = []
 
@@ -72,6 +90,7 @@ def enumerate_bounded_cycles(
         path_nodes: list[UUID] = [root]
         path_edges: list[SwapEdge] = []
         visited: set[UUID] = {root}
+        visited_parties: set[UUID] = {graph.nodes[root].party_id}
 
         def _dfs(curr: UUID) -> None:
             nonlocal root_found
@@ -87,8 +106,26 @@ def enumerate_bounded_cycles(
                     )
                     if has_declared and cyc_len > 2:
                         continue
-                    # Enforce distinct parties? Allow distinct seat_holders (already guaranteed by visited)
+                    # Enforce distinct seat_holders and distinct party_ids across the cycle
                     if len(set(path_nodes)) != cyc_len:
+                        continue
+                    if len({graph.nodes[uid].party_id for uid in path_nodes}) != cyc_len:
+                        continue
+                    # Cycle-wide women_only invariant: if ANY member requires women_only, ALL must be verified female
+                    if any(graph.nodes[uid].women_only for uid in path_nodes) and not all(
+                        is_verified_female(graph.nodes[uid]) for uid in path_nodes
+                    ):
+                        continue
+                    # Cycle-wide blocks invariant: no pair of members in the cycle may have a block
+                    if any(
+                        _has_block_between(
+                            graph.nodes[path_nodes[i]],
+                            graph.nodes[path_nodes[j]],
+                            graph.blocks,
+                        )
+                        for i in range(cyc_len)
+                        for j in range(i + 1, cyc_len)
+                    ):
                         continue
                     all_edges = [*path_edges, edge]
                     rot_nodes, rot_edges = _canonical_cycle_rotation(path_nodes, all_edges)
@@ -137,19 +174,40 @@ def enumerate_bounded_cycles(
                         )
                     )
                 elif nxt not in visited and len(path_nodes) < max_cycle_len:
+                    nxt_node = graph.nodes[nxt]
+                    # Reject extending a cycle with a seat_holder from a party already in path_nodes
+                    if nxt_node.party_id in visited_parties:
+                        continue
                     # Also forbid declared intermediates before extending past 2
                     if len(path_nodes) >= 2 and (
                         graph.nodes[root].trust_tier == "declared"
-                        or graph.nodes[nxt].trust_tier == "declared"
+                        or nxt_node.trust_tier == "declared"
                         or any(graph.nodes[uid].trust_tier == "declared" for uid in path_nodes)
                     ):
                         continue
+                    # Cycle-wide women_only check during DFS extension
+                    if any(graph.nodes[uid].women_only for uid in path_nodes) and not is_verified_female(
+                        nxt_node
+                    ):
+                        continue
+                    if nxt_node.women_only and any(
+                        not is_verified_female(graph.nodes[uid]) for uid in path_nodes
+                    ):
+                        continue
+                    # Cycle-wide blocks check during DFS extension
+                    if any(
+                        _has_block_between(nxt_node, graph.nodes[uid], graph.blocks)
+                        for uid in path_nodes
+                    ):
+                        continue
                     visited.add(nxt)
+                    visited_parties.add(nxt_node.party_id)
                     path_nodes.append(nxt)
                     path_edges.append(edge)
                     _dfs(nxt)
                     path_edges.pop()
                     path_nodes.pop()
+                    visited_parties.remove(nxt_node.party_id)
                     visited.remove(nxt)
 
         _dfs(root)

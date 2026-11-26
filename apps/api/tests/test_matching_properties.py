@@ -107,8 +107,9 @@ def test_matching_graph_and_cycle_invariants(
     for cyc in cycles:
         n = len(cyc.nodes)
         assert 2 <= n <= 4
-        # No duplicate nodes
+        # No duplicate nodes and no duplicate party_ids
         assert len(set(cyc.nodes)) == n
+        assert len({graph.nodes[uid].party_id for uid in cyc.nodes}) == n
         # Score bounds
         assert 0 <= cyc.score <= 100
 
@@ -116,14 +117,22 @@ def test_matching_graph_and_cycle_invariants(
         if any(graph.nodes[uid].trust_tier == "declared" for uid in cyc.nodes):
             assert n == 2
 
+        # Cycle-wide women_only: if ANY node has women_only, ALL must be verified female
+        if any(graph.nodes[uid].women_only for uid in cyc.nodes):
+            assert all(is_verified_female(graph.nodes[uid]) for uid in cyc.nodes)
+
+        # Cycle-wide blocks: no pair (i, j) in the cycle may have a block
+        for i in range(n):
+            for j in range(i + 1, n):
+                u_i = graph.nodes[cyc.nodes[i]]
+                u_j = graph.nodes[cyc.nodes[j]]
+                if u_i.owner_user_id and u_j.owner_user_id:
+                    assert (u_i.owner_user_id, u_j.owner_user_id) not in blocks
+                    assert (u_j.owner_user_id, u_i.owner_user_id) not in blocks
+
         for idx, uid in enumerate(cyc.nodes):
             u = graph.nodes[uid]
             v = graph.nodes[cyc.nodes[(idx + 1) % n]]
-
-            # Blocks excluded
-            if u.owner_user_id and v.owner_user_id:
-                assert (u.owner_user_id, v.owner_user_id) not in blocks
-                assert (v.owner_user_id, u.owner_user_id) not in blocks
 
             # Segment overlap must be non-empty
             if u.from_seq is not None and u.to_seq is not None and v.from_seq is not None and v.to_seq is not None:
@@ -138,3 +147,81 @@ def test_matching_graph_and_cycle_invariants(
                 assert (u.coach or "") == (v.coach or "")
             if u.verified_only:
                 assert v.trust_tier != "declared"
+
+
+def _make_node(
+    idx: int,
+    *,
+    party_idx: int | None = None,
+    seat_type: str = "LB",
+    seat_no: str | None = None,
+    gender_band: str = "F",
+    user_gender_self: str = "female",
+    goal_type: str = "open_to_help",
+    women_only: bool = False,
+    preferred_seats: frozenset[str] = frozenset(),
+) -> SeatNode:
+    sh_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"reg-sh-{idx}")
+    return SeatNode(
+        seat_holder_id=sh_id,
+        party_id=uuid.uuid5(uuid.NAMESPACE_DNS, f"reg-party-{party_idx if party_idx is not None else idx}"),
+        booking_id=uuid.uuid5(uuid.NAMESPACE_DNS, f"reg-bk-{idx}"),
+        owner_user_id=uuid.uuid5(uuid.NAMESPACE_DNS, f"reg-user-{idx}"),
+        owner_anon_id=None,
+        coach="B3",
+        seat_no=seat_no or str(idx),
+        seat_type=seat_type,
+        bay=1,
+        age_band="adult",
+        gender_band=gender_band,
+        user_gender_self=user_gender_self,
+        trust_tier="verified_provider",
+        from_seq=1,
+        to_seq=5,
+        goal_type=goal_type,
+        movers=frozenset({sh_id}),
+        preferred_seats=preferred_seats,
+        women_only=women_only,
+        standing_give_to="anyone" if goal_type == "open_to_help" else None,
+    )
+
+
+def test_3way_women_only_rejects_male_non_adjacent_node() -> None:
+    # A (F, women_only=True) -> B (F, women_only=False) -> C (M) -> A
+    # Even though direct edges A->B, B->C, C->A are locally valid, A requires women_only cycle-wide.
+    n_a = _make_node(1, seat_type="UB", seat_no="3", gender_band="F", user_gender_self="female", goal_type="lower", women_only=True)
+    n_b = _make_node(2, seat_type="LB", seat_no="1", gender_band="F", user_gender_self="female", goal_type="specific_seats", preferred_seats=frozenset({"B3-2"}))
+    n_c = _make_node(3, seat_type="MB", seat_no="2", gender_band="M", user_gender_self="male", goal_type="upper")
+    graph = build_swap_graph([n_a, n_b, n_c])
+    cycles = enumerate_bounded_cycles(graph)
+    assert all(
+        not (any(graph.nodes[u].women_only for u in c.nodes) and any(not is_verified_female(graph.nodes[u]) for u in c.nodes))
+        for c in cycles
+    )
+    assert len(cycles) == 0
+
+
+def test_4way_blocks_rejects_non_adjacent_blocked_pair() -> None:
+    # 1 -> 2 -> 3 -> 4 -> 1 where user 1 blocked user 3 (non-adjacent)
+    n1 = _make_node(1, seat_no="1", goal_type="specific_seats", preferred_seats=frozenset({"B3-2"}))
+    n2 = _make_node(2, seat_no="2", goal_type="specific_seats", preferred_seats=frozenset({"B3-3"}))
+    n3 = _make_node(3, seat_no="3", goal_type="specific_seats", preferred_seats=frozenset({"B3-4"}))
+    n4 = _make_node(4, seat_no="4", goal_type="specific_seats", preferred_seats=frozenset({"B3-1"}))
+    assert n1.owner_user_id is not None and n3.owner_user_id is not None
+    blocks = frozenset({(n1.owner_user_id, n3.owner_user_id)})
+    graph = build_swap_graph([n1, n2, n3, n4], blocks=blocks)
+    cycles = enumerate_bounded_cycles(graph)
+    assert cycles == []
+
+
+def test_4way_same_party_id_never_mixed_in_non_plan_cycle() -> None:
+    # A1 (party 0) -> B1 (party 1) -> A2 (party 0) -> B2 (party 2) -> A1
+    a1 = _make_node(1, party_idx=0, seat_no="1", goal_type="specific_seats", preferred_seats=frozenset({"B3-2"}))
+    b1 = _make_node(2, party_idx=1, seat_no="2", goal_type="specific_seats", preferred_seats=frozenset({"B3-3"}))
+    a2 = _make_node(3, party_idx=0, seat_no="3", goal_type="specific_seats", preferred_seats=frozenset({"B3-4"}))
+    b2 = _make_node(4, party_idx=2, seat_no="4", goal_type="specific_seats", preferred_seats=frozenset({"B3-1"}))
+    graph = build_swap_graph([a1, b1, a2, b2])
+    cycles = enumerate_bounded_cycles(graph)
+    for cyc in cycles:
+        assert len({graph.nodes[u].party_id for u in cyc.nodes}) == len(cyc.nodes)
+    assert cycles == []
