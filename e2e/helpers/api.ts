@@ -761,6 +761,10 @@ export class SaathApiClient {
     });
   }
 
+  async getConsents<T = Record<string, unknown>>(token: string): Promise<ApiResponse<T>> {
+    return this.request('GET', '/v1/me/consents', { token });
+  }
+
   async saveConsents<T = Record<string, unknown>>(
     token: string,
     consents: Array<{ purpose: string; notice_version: string; granted: boolean }>,
@@ -949,6 +953,33 @@ export class SaathApiClient {
   // Admin Portal APIs (#31)
   // ---------------------------------------------------------------------------
 
+  async createAdminSession<
+    T = {
+      access?: string;
+      token?: string;
+      token_type?: string;
+      expires_in?: number;
+      email?: string;
+      scopes?: string[];
+      [key: string]: unknown;
+    },
+  >(
+    email?: string,
+    opts?: { id_token?: string; code?: string },
+  ): Promise<ApiResponse<T>> {
+    const body: Record<string, unknown> = {};
+    if (email !== undefined) {
+      body.email = email;
+    }
+    if (opts?.id_token !== undefined) {
+      body.id_token = opts.id_token;
+    }
+    if (opts?.code !== undefined) {
+      body.code = opts.code;
+    }
+    return this.request('POST', '/v1/admin/auth/session', { body });
+  }
+
   async getAdminFunnel<T = Record<string, unknown>>(
     token: string,
     query?: Record<string, string | number | boolean | undefined>,
@@ -964,18 +995,20 @@ export class SaathApiClient {
 
   async getAdminModerationQueue<T = Record<string, unknown>>(
     token: string,
+    query?: Record<string, string | number | boolean | undefined>,
   ): Promise<ApiResponse<T>> {
-    return this.request('GET', '/v1/admin/moderation/queue', { token });
+    return this.request('GET', '/v1/admin/moderation/queue', { token, query });
   }
 
   async actOnModeration<T = Record<string, unknown>>(
     token: string,
     reportId: string,
     action: 'dismiss' | 'hide' | 'restrict' | 'ban' | string,
+    note?: string,
   ): Promise<ApiResponse<T>> {
     return this.request('POST', `/v1/admin/moderation/${reportId}/action`, {
       token,
-      body: { action },
+      body: note !== undefined ? { action, note } : { action },
     });
   }
 
@@ -995,11 +1028,52 @@ export class SaathApiClient {
     token: string,
     key: string,
     value: unknown,
+    description?: string,
   ): Promise<ApiResponse<T>> {
     return this.request('PATCH', `/v1/admin/flags/${encodeURIComponent(key)}`, {
       token,
-      body: { value },
+      body: description !== undefined ? { value, description } : { value },
     });
+  }
+
+  async getAdminDisputes<T = Record<string, unknown>>(
+    token: string,
+    query?: Record<string, string | number | boolean | undefined>,
+  ): Promise<ApiResponse<T>> {
+    return this.request('GET', '/v1/admin/disputes', { token, query });
+  }
+
+  async overrideAdminDispute<T = Record<string, unknown>>(
+    token: string,
+    disputeId: string,
+    body: Record<string, unknown>,
+  ): Promise<ApiResponse<T>> {
+    return this.request('POST', `/v1/admin/disputes/${encodeURIComponent(disputeId)}/override`, {
+      token,
+      body,
+    });
+  }
+
+  async getAdminRedemptions<T = Record<string, unknown>>(
+    token: string,
+    query?: Record<string, string | number | boolean | undefined>,
+  ): Promise<ApiResponse<T>> {
+    return this.request('GET', '/v1/admin/redemptions', { token, query });
+  }
+
+  async reviewAdminRedemption<T = Record<string, unknown>>(
+    token: string,
+    redemptionId: string,
+    body: Record<string, unknown>,
+  ): Promise<ApiResponse<T>> {
+    return this.request(
+      'POST',
+      `/v1/admin/redemptions/${encodeURIComponent(redemptionId)}/review`,
+      {
+        token,
+        body,
+      },
+    );
   }
 
   async getAdminAuditLog<T = Record<string, unknown>>(

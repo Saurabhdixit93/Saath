@@ -9,6 +9,13 @@ function asArray(value: unknown, label: string): unknown[] {
   return value;
 }
 
+function asRecord(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`Expected object for ${label}`);
+  }
+  return value as Record<string, unknown>;
+}
+
 function extractIds(payload: Record<string, unknown>): {
   partyId: string;
   holderId: string;
@@ -107,11 +114,7 @@ test.describe('@tier3 P10: Chat Report -> Admin Moderation Queue -> Audit Log & 
     expect([403, 429]).toContain(sendAfterRestrict.status);
 
     // Admin portal moderation queue + hide action + audit_log verification
-    const adminSession = await api.request<{ access?: string; token?: string }>(
-      'POST',
-      '/v1/admin/auth/session',
-      { body: { email: E2E_ENV.adminTestEmail } },
-    );
+    const adminSession = await api.createAdminSession(E2E_ENV.adminTestEmail);
     expect([200, 201]).toContain(adminSession.status);
     const adminToken = adminSession.data.access ?? adminSession.data.token ?? '';
     expect(adminToken.length).toBeGreaterThan(0);
@@ -130,26 +133,40 @@ test.describe('@tier3 P10: Chat Report -> Admin Moderation Queue -> Audit Log & 
             'audit before',
           ).length;
 
-    const queue = await api.getAdminModerationQueue(adminToken);
+    const queue = await api.getAdminModerationQueue<{ items?: unknown[] }>(adminToken, {
+      status: 'open',
+    });
     expect(queue.status).toBe(200);
+    const queueItems = asArray(queue.data.items, 'moderation queue items');
+    expect(
+      queueItems.some((item) => {
+        const rec = asRecord(item, 'queue item');
+        return rec.id === firstReportId || rec.report_id === firstReportId;
+      }),
+    ).toBe(true);
 
-    const hideRes = await api.actOnModeration(adminToken, firstReportId, 'hide');
+    const hideRes = await api.actOnModeration(adminToken, firstReportId, 'hide', 'P10 hide action');
     expect(hideRes.status).toBe(200);
 
     const auditAfter = await api.getAdminAuditLog<{
       total?: number;
       items?: unknown[];
       entries?: unknown[];
-    }>(adminToken);
+    }>(adminToken, { limit: 20 });
     expect(auditAfter.status).toBe(200);
+    const afterItems = asArray(
+      auditAfter.data.items ?? auditAfter.data.entries ?? auditAfter.data,
+      'audit after',
+    );
     const afterCount =
-      typeof auditAfter.data.total === 'number'
-        ? auditAfter.data.total
-        : asArray(
-            auditAfter.data.items ?? auditAfter.data.entries ?? auditAfter.data,
-            'audit after',
-          ).length;
+      typeof auditAfter.data.total === 'number' ? auditAfter.data.total : afterItems.length;
     expect(afterCount).toBeGreaterThan(beforeCount);
+
+    const actionsText = afterItems
+      .map((entry) => String(asRecord(entry, 'audit entry').action ?? ''))
+      .join(' ');
+    expect(actionsText).toMatch(/moderation|queue/i);
+    expect(actionsText).toMatch(/hide/i);
   });
 
   test('Non-admin user cannot access admin moderation queue or audit log (403)', async () => {

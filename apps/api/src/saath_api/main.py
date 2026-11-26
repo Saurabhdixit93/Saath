@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi.openapi.utils import get_openapi
+from saath_api.admin.router import router as admin_router
 from saath_api.ai.router import router as ai_router
 from saath_api.auth.router import router as auth_router
 from saath_api.core.config import Settings, YamlConfigBundle, get_settings, load_yaml_configs
@@ -153,6 +154,7 @@ def create_app(
     app.include_router(notifications_router)
     app.include_router(build_pricing_router(resolved_settings))
     app.include_router(public_router)
+    app.include_router(admin_router)
 
     def custom_openapi() -> dict[str, object]:
         if app.openapi_schema is not None:

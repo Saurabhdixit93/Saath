@@ -75,6 +75,9 @@ test.describe('F20: ISR SEO Utility Pages & Sitemap @tier1', () => {
     const sitemapText = await sitemapRes.text();
     expect(sitemapText).toContain('<urlset');
     expect(sitemapText).toContain('/pnr-status');
+    expect(sitemapText).toContain('/legal/privacy');
+    expect(sitemapText).toContain('/legal/terms');
+    expect(sitemapText).toContain('/grievance');
 
     const robotsRes = await fetch(`${E2E_ENV.webUrl}/robots.txt`);
     expect(robotsRes.status).toBe(200);

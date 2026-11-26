@@ -98,8 +98,10 @@ test.describe('S07: Mobile 360x800 Bilingual, Themes, WCAG 2.2 AA & Offline PWA 
 
       // Switch to dark theme + Hindi
       await page.getByRole('button', { name: /theme|dark|light|☾|☀/i }).click();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
       await assertThemeTokens(page, 'dark');
       await page.getByRole('button', { name: /हिं|EN|Language/i }).click();
+      await expect(page.locator('html')).toHaveAttribute('lang', /^hi/i);
       await assertLocale(page, 'hi', { latinDigitTexts: ['12951'] });
       await assertWcagAA(page);
 

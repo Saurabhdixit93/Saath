@@ -204,6 +204,11 @@ class Settings(BaseSettings):
     jwt_anon_ttl_seconds: int = 7200
     refresh_token_ttl_days: int = 30
 
+    admin_sso_client_id: str = ""
+    admin_sso_client_secret: str = ""
+    admin_sso_allowed_emails: str = ""
+    admin_jwt_ttl_seconds: int = 3600
+
     swap_card_signing_private_key: str = ""
     swap_card_signing_public_key: str = ""
     match_debounce_seconds: float = 1.0
@@ -274,6 +279,8 @@ class Settings(BaseSettings):
 
         _validate_b64_32bytes(self.phone_aes_key, "PHONE_AES_KEY")
         _validate_b64_32bytes(self.phone_blind_index_key, "PHONE_BLIND_INDEX_KEY")
+        if self.admin_jwt_ttl_seconds <= 0:
+            raise ValueError("ADMIN_JWT_TTL_SECONDS must be positive")
 
         if self.env == "production":
             if not self.jwt_private_key.strip() or not self.jwt_public_key.strip():
@@ -395,6 +402,10 @@ class Settings(BaseSettings):
     @property
     def trusted_proxy_list(self) -> list[str]:
         return [p.strip() for p in self.trusted_proxies.split(",") if p.strip()]
+
+    @property
+    def admin_sso_allowed_email_list(self) -> list[str]:
+        return [e.strip().lower() for e in self.admin_sso_allowed_emails.split(",") if e.strip()]
 
     @property
     def is_production(self) -> bool:

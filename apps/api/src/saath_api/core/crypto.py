@@ -142,6 +142,28 @@ def create_access_token(
     return token, ttl
 
 
+def create_admin_token(
+    settings: Settings,
+    *,
+    email: str,
+    scopes: tuple[str, ...] = ("admin",),
+) -> tuple[str, int]:
+    now = datetime.now(UTC)
+    ttl = settings.admin_jwt_ttl_seconds
+    normalized_email = email.strip().lower()
+    payload: dict[str, Any] = {
+        "sub": f"admin:{normalized_email}",
+        "email": normalized_email,
+        "kind": "admin",
+        "scopes": list(scopes),
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=ttl)).timestamp()),
+        "jti": str(uuid7()),
+    }
+    token = jwt.encode(payload, settings.jwt_private_key, algorithm="EdDSA")
+    return token, ttl
+
+
 def decode_jwt(token: str, public_key_pem: str, *, verify_exp: bool = True) -> dict[str, Any]:
     decoded = jwt.decode(
         token,

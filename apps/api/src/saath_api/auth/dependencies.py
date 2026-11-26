@@ -29,6 +29,7 @@ class Actor:
     anon_id: str | None
     device_id: UUID | None
     scopes: frozenset[str]
+    admin_email: str | None = None
 
 
 def _parse_actor_from_token(token: str, settings: Settings) -> Actor:
@@ -84,12 +85,20 @@ def _parse_actor_from_token(token: str, settings: Settings) -> Actor:
         )
 
     if kind == "admin" and isinstance(sub, str):
+        raw_email = claims.get("email")
+        if isinstance(raw_email, str) and raw_email.strip():
+            admin_email: str | None = raw_email.strip().lower()
+        elif sub.startswith("admin:") and sub.removeprefix("admin:").strip():
+            admin_email = sub.removeprefix("admin:").strip().lower()
+        else:
+            admin_email = None
         return Actor(
             kind="admin",
             user_id=None,
             anon_id=None,
             device_id=None,
             scopes=scopes,
+            admin_email=admin_email,
         )
 
     raise ProblemDetailError(
@@ -182,6 +191,38 @@ async def require_user_actor(
             code="account_disabled",
             title="Account Disabled",
             detail="This account is not permitted to perform this action.",
+        )
+    return actor
+
+
+async def require_admin_actor(
+    request: Request,
+    actor: Actor = Depends(current_actor),
+) -> Actor:
+    if actor.kind != "admin" or "admin" not in actor.scopes or not actor.admin_email:
+        raise ProblemDetailError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="admin_auth_required",
+            title="Admin Authentication Required",
+            detail="This endpoint requires an authenticated operator session.",
+        )
+
+    settings = get_request_settings(request)
+    allowed = set(settings.admin_sso_allowed_email_list)
+    if settings.is_production:
+        if not allowed or actor.admin_email not in allowed:
+            raise ProblemDetailError(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="admin_not_allowlisted",
+                title="Operator Not Allowlisted",
+                detail="Your operator account is not allowlisted for admin access.",
+            )
+    elif allowed and actor.admin_email not in allowed:
+        raise ProblemDetailError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="admin_not_allowlisted",
+            title="Operator Not Allowlisted",
+            detail="Your operator account is not allowlisted for admin access.",
         )
     return actor
 

@@ -27,6 +27,7 @@ test.describe('F24 Tier 2: Dark/Hindi Axe, 200% Zoom & Reduced Motion A11y @tier
   }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: /theme|dark|light|☾|☀/i }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await assertThemeTokens(page, 'dark');
     await assertWcagAA(page);
 
@@ -39,13 +40,18 @@ test.describe('F24 Tier 2: Dark/Hindi Axe, 200% Zoom & Reduced Motion A11y @tier
   }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: /हिं|EN|Language/i }).click();
+    await expect(page.locator('html')).toHaveAttribute('lang', /^hi/i);
     await assertLocale(page, 'hi');
     await assertWcagAA(page);
   });
 
-  test('200% text scale at 360x800 mobile width causes zero horizontal overflow', async ({
+  test('200% text scale at 360x800 mobile width causes zero horizontal overflow across Home, Profile, and Privacy', async ({
     browser,
+    createIsolatedPassenger,
   }) => {
+    const helper = await createIsolatedPassenger('zoom-helper');
+    const auth = await helper.api.loginWithOtp(uniquePhone(242_002));
+
     const context = await browser.newContext({
       viewport: { width: 360, height: 800 },
       hasTouch: true,
@@ -53,31 +59,74 @@ test.describe('F24 Tier 2: Dark/Hindi Axe, 200% Zoom & Reduced Motion A11y @tier
     const page = await context.newPage();
 
     try {
-      await page.goto('/', { waitUntil: 'domcontentloaded' });
-      await page.evaluate(() => {
-        document.documentElement.style.fontSize = '200%';
-      });
+      const checkOverflow = async (url: string) => {
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+        await page.evaluate(() => {
+          document.documentElement.style.fontSize = '200%';
+        });
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        );
+        expect(overflow).toBeLessThanOrEqual(2);
+      };
 
-      const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth - window.innerWidth,
-      );
-      expect(overflow).toBeLessThanOrEqual(2);
+      await checkOverflow('/');
+      await checkOverflow('/legal/privacy');
+
+      await injectAuthSession(page, auth);
+      await checkOverflow('/profile');
     } finally {
       await context.close();
     }
   });
 
-  test('prefers-reduced-motion media query suppresses transition/animation motion', async ({
+  test('prefers-reduced-motion media query suppresses computed transition/animation durations', async ({
     browser,
   }) => {
     const context = await browser.newContext({ reducedMotion: 'reduce' });
     const page = await context.newPage();
     try {
       await page.goto('/', { waitUntil: 'domcontentloaded' });
-      const matchesReduced = await page.evaluate(
-        () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-      );
-      expect(matchesReduced).toBe(true);
+      const motionReport = await page.evaluate(() => {
+        const matchesReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const parseDurationSec = (raw: string): number => {
+          return raw
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .reduce((max, item) => {
+              if (item.endsWith('ms')) {
+                return Math.max(max, Number.parseFloat(item) / 1000);
+              }
+              if (item.endsWith('s')) {
+                return Math.max(max, Number.parseFloat(item));
+              }
+              return max;
+            }, 0);
+        };
+
+        const violations: Array<{ tag: string; transition: string; animation: string }> = [];
+        const nodes = Array.from(document.querySelectorAll<HTMLElement>('*'));
+        for (const el of nodes) {
+          const style = window.getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') {
+            continue;
+          }
+          const tSec = parseDurationSec(style.transitionDuration);
+          const aSec = parseDurationSec(style.animationDuration);
+          if (tSec > 0.01 || aSec > 0.01) {
+            violations.push({
+              tag: el.tagName.toLowerCase(),
+              transition: style.transitionDuration,
+              animation: style.animationDuration,
+            });
+          }
+        }
+        return { matchesReduced, violations: violations.slice(0, 10) };
+      });
+
+      expect(motionReport.matchesReduced).toBe(true);
+      expect(motionReport.violations).toEqual([]);
     } finally {
       await context.close();
     }
