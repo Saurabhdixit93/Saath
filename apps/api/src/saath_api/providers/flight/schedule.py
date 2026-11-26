@@ -113,7 +113,7 @@ class LiveFlightScheduleProvider:
         if not cleaned_url:
             raise ValueError("PROVIDER_FLIGHT_BASE_URL is required for LiveFlightScheduleProvider")
         self._base_url = cleaned_url
-        self._api_key = api_key
+        self._api_key = api_key.strip()
         self._timeout_seconds = timeout_seconds
         self._breaker = CircuitBreaker(name="flight_schedule")
 

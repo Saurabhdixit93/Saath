@@ -122,11 +122,12 @@ class AnthropicClaudeAdapter:
         fast_model: str = "claude-haiku-5-5",
         timeout_seconds: float = 4.0,
     ) -> None:
-        if not api_key:
+        cleaned_api_key = api_key.strip()
+        if not cleaned_api_key:
             raise ValueError("ANTHROPIC_API_KEY is required when AI_MODE=anthropic")
         import anthropic
 
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        self._client = anthropic.AsyncAnthropic(api_key=cleaned_api_key)
         self._fast_model = fast_model
         self._timeout_seconds = timeout_seconds
         self._breaker = CircuitBreaker(name="anthropic_llm")

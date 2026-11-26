@@ -275,33 +275,68 @@ class Settings(BaseSettings):
         _validate_b64_32bytes(self.phone_blind_index_key, "PHONE_BLIND_INDEX_KEY")
 
         if self.env == "production":
-            if not self.jwt_private_key or not self.jwt_public_key:
+            if not self.jwt_private_key.strip() or not self.jwt_public_key.strip():
                 raise ValueError(
                     "JWT_PRIVATE_KEY and JWT_PUBLIC_KEY are mandatory when ENV=production"
                 )
-            if not self.swap_card_signing_private_key or not self.swap_card_signing_public_key:
+            if (
+                not self.swap_card_signing_private_key.strip()
+                or not self.swap_card_signing_public_key.strip()
+            ):
                 raise ValueError(
                     "SWAP_CARD_SIGNING_PRIVATE_KEY and SWAP_CARD_SIGNING_PUBLIC_KEY "
                     "are mandatory when ENV=production"
                 )
-            if self.phone_aes_key == _DEV_PHONE_AES_KEY:
+            if self.phone_aes_key.strip() == _DEV_PHONE_AES_KEY:
                 raise ValueError("PHONE_AES_KEY dev default is forbidden when ENV=production")
-            if self.phone_blind_index_key == _DEV_PHONE_BLIND_INDEX_KEY:
+            if self.phone_blind_index_key.strip() == _DEV_PHONE_BLIND_INDEX_KEY:
                 raise ValueError(
                     "PHONE_BLIND_INDEX_KEY dev default is forbidden when ENV=production"
                 )
-            if not self.pnr_pepper or self.pnr_pepper == _DEV_PNR_PEPPER:
+            if not self.pnr_pepper.strip() or self.pnr_pepper.strip() == _DEV_PNR_PEPPER:
                 raise ValueError("PNR_PEPPER dev default is forbidden when ENV=production")
-            if not self.invite_token_secret or self.invite_token_secret == _DEV_INVITE_TOKEN_SECRET:
+            if (
+                not self.invite_token_secret.strip()
+                or self.invite_token_secret.strip() == _DEV_INVITE_TOKEN_SECRET
+            ):
                 raise ValueError("INVITE_TOKEN_SECRET dev default is forbidden when ENV=production")
             if self.turnstile_mode == "fake":
                 raise ValueError("TURNSTILE_MODE=fake is forbidden when ENV=production")
+            if self.turnstile_mode == "cloudflare" and not self.turnstile_secret_key.strip():
+                raise ValueError(
+                    "TURNSTILE_SECRET_KEY is mandatory when ENV=production and TURNSTILE_MODE=cloudflare"
+                )
             if self.whatsapp_mode == "fake":
                 raise ValueError("WHATSAPP_MODE=fake is forbidden when ENV=production")
+            if self.whatsapp_mode == "live" and (
+                not self.whatsapp_access_token.strip()
+                or not self.whatsapp_phone_number_id.strip()
+                or not self.whatsapp_app_secret.strip()
+            ):
+                raise ValueError(
+                    "WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, and WHATSAPP_APP_SECRET "
+                    "are mandatory when ENV=production and WHATSAPP_MODE=live"
+                )
             if self.sms_mode == "fake":
                 raise ValueError("SMS_MODE=fake is forbidden when ENV=production")
+            if self.sms_mode == "msg91" and (
+                not self.msg91_auth_key.strip() or not self.msg91_dlt_te_id_otp.strip()
+            ):
+                raise ValueError(
+                    "MSG91_AUTH_KEY and MSG91_DLT_TE_ID_OTP are mandatory "
+                    "when ENV=production and SMS_MODE=msg91"
+                )
             if self.rail_provider_mode == "fake":
                 raise ValueError("RAIL_PROVIDER_MODE=fake is forbidden when ENV=production")
+            if (
+                self.rail_provider_mode == "live"
+                and not self.provider_rail_a_base_url.strip()
+                and not self.provider_rail_b_base_url.strip()
+            ):
+                raise ValueError(
+                    "At least one of PROVIDER_RAIL_A_BASE_URL or PROVIDER_RAIL_B_BASE_URL "
+                    "is mandatory when ENV=production and RAIL_PROVIDER_MODE=live"
+                )
             if self.flight_provider_mode == "fake":
                 raise ValueError("FLIGHT_PROVIDER_MODE=fake is forbidden when ENV=production")
             if not self.provider_flight_base_url.strip():
@@ -319,23 +354,30 @@ class Settings(BaseSettings):
                 )
             if self.ai_mode == "fake":
                 raise ValueError("AI_MODE=fake is forbidden when ENV=production")
+            if self.ai_mode == "anthropic" and not self.anthropic_api_key.strip():
+                raise ValueError(
+                    "ANTHROPIC_API_KEY is mandatory when ENV=production and AI_MODE=anthropic"
+                )
             if self.payment_provider == "sandbox":
                 raise ValueError("PAYMENT_PROVIDER=sandbox is forbidden when ENV=production")
             if self.payment_provider == "razorpay" and (
-                not self.razorpay_key_id
-                or not self.razorpay_key_secret
-                or not self.razorpay_webhook_secret
+                not self.razorpay_key_id.strip()
+                or not self.razorpay_key_secret.strip()
+                or not self.razorpay_webhook_secret.strip()
             ):
                 raise ValueError(
                     "RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET "
                     "are mandatory when ENV=production and PAYMENT_PROVIDER=razorpay"
                 )
         else:
-            if not self.jwt_private_key or not self.jwt_public_key:
+            if not self.jwt_private_key.strip() or not self.jwt_public_key.strip():
                 priv, pub = _get_dev_ed25519_pair()
                 self.jwt_private_key = priv
                 self.jwt_public_key = pub
-            if not self.swap_card_signing_private_key or not self.swap_card_signing_public_key:
+            if (
+                not self.swap_card_signing_private_key.strip()
+                or not self.swap_card_signing_public_key.strip()
+            ):
                 card_priv, card_pub = _get_dev_swap_card_ed25519_pair()
                 self.swap_card_signing_private_key = card_priv
                 self.swap_card_signing_public_key = card_pub

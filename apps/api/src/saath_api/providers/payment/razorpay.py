@@ -20,10 +20,18 @@ class RazorpayPaymentAdapter:
         webhook_secret: str,
         base_url: str = "https://api.razorpay.com/v1",
     ) -> None:
-        self._key_id = key_id
-        self._key_secret = key_secret
-        self._webhook_secret = webhook_secret
-        self._base_url = base_url.rstrip("/")
+        cleaned_key_id = key_id.strip()
+        cleaned_key_secret = key_secret.strip()
+        cleaned_webhook_secret = webhook_secret.strip()
+        if not cleaned_key_id or not cleaned_key_secret or not cleaned_webhook_secret:
+            raise ValueError(
+                "RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET are required "
+                "for RazorpayPaymentAdapter"
+            )
+        self._key_id = cleaned_key_id
+        self._key_secret = cleaned_key_secret
+        self._webhook_secret = cleaned_webhook_secret
+        self._base_url = base_url.strip().rstrip("/")
 
     async def create_order(
         self,

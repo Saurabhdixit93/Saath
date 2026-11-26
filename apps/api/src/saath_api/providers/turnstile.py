@@ -28,9 +28,10 @@ class CloudflareTurnstileVerifier:
     SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
     def __init__(self, secret_key: str, *, timeout_seconds: float = 3.0) -> None:
-        if not secret_key:
+        cleaned_secret_key = secret_key.strip()
+        if not cleaned_secret_key:
             raise ValueError("TURNSTILE_SECRET_KEY is required for CloudflareTurnstileVerifier")
-        self._secret_key = secret_key
+        self._secret_key = cleaned_secret_key
         self._timeout_seconds = timeout_seconds
         self._breaker = CircuitBreaker(name="cloudflare_turnstile")
 

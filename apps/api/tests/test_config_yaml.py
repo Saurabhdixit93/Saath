@@ -17,11 +17,18 @@ from saath_api.providers.flight.schedule import (
 from saath_api.providers.llm import AnthropicClaudeAdapter, build_llm_provider
 from saath_api.providers.messaging import (
     ChannelRoutingMessagingProvider,
+    MSG91SMSAdapter,
+    WhatsAppCloudAdapter,
     build_messaging_provider,
 )
 from saath_api.providers.payment import RazorpayPaymentAdapter, build_payment_provider
 from saath_api.providers.push import VAPIDPushAdapter, build_web_push_provider
-from saath_api.providers.rail import FakeRailProvider, RailProviderA, build_rail_router
+from saath_api.providers.rail import (
+    FakeRailProvider,
+    RailProviderA,
+    RailProviderB,
+    build_rail_router,
+)
 from saath_api.providers.turnstile import (
     CloudflareTurnstileVerifier,
     build_turnstile_verifier,
@@ -40,15 +47,23 @@ def _prod_base_kwargs() -> dict[str, str]:
         "pnr_pepper": "prod-pnr-pepper-secret-32-bytes-long",
         "invite_token_secret": "prod-invite-secret-32-bytes-long",
         "turnstile_mode": "cloudflare",
+        "turnstile_secret_key": "ts-prod-secret",
         "whatsapp_mode": "live",
+        "whatsapp_access_token": "wa-prod-token",
+        "whatsapp_phone_number_id": "wa-phone-id",
+        "whatsapp_app_secret": "wa-app-secret",
         "sms_mode": "msg91",
+        "msg91_auth_key": "msg91-prod-key",
+        "msg91_dlt_te_id_otp": "dlt-otp-tpl",
         "push_mode": "vapid",
         "vapid_public_key": "vapid-pub-key",
         "vapid_private_key": "vapid-priv-key",
         "rail_provider_mode": "live",
+        "provider_rail_a_base_url": "https://rail-a.example",
         "flight_provider_mode": "live",
         "provider_flight_base_url": "https://flight.api.example",
         "ai_mode": "anthropic",
+        "anthropic_api_key": "sk-ant-prod-test",
         "payment_provider": "razorpay",
         "razorpay_key_id": "rzp_live_123",
         "razorpay_key_secret": "rzp_secret_123",
@@ -78,26 +93,53 @@ def test_production_forbids_missing_keys_and_fake_modes() -> None:
         Settings(env="production", jwt_private_key="", jwt_public_key="")
 
     for field, bad_val in (
+        ("jwt_private_key", "   "),
+        ("jwt_public_key", "   "),
         ("swap_card_signing_private_key", ""),
+        ("swap_card_signing_private_key", "   "),
         ("swap_card_signing_public_key", ""),
+        ("swap_card_signing_public_key", "   "),
         ("turnstile_mode", "fake"),
+        ("turnstile_secret_key", ""),
+        ("turnstile_secret_key", "   "),
         ("whatsapp_mode", "fake"),
+        ("whatsapp_access_token", ""),
+        ("whatsapp_access_token", "   "),
+        ("whatsapp_phone_number_id", ""),
+        ("whatsapp_phone_number_id", "   "),
+        ("whatsapp_app_secret", ""),
+        ("whatsapp_app_secret", "   "),
         ("sms_mode", "fake"),
+        ("msg91_auth_key", ""),
+        ("msg91_auth_key", "   "),
+        ("msg91_dlt_te_id_otp", ""),
+        ("msg91_dlt_te_id_otp", "   "),
         ("push_mode", "fake"),
         ("vapid_private_key", ""),
+        ("vapid_private_key", "   "),
         ("vapid_public_key", ""),
+        ("vapid_public_key", "   "),
         ("rail_provider_mode", "fake"),
+        ("provider_rail_a_base_url", ""),
+        ("provider_rail_a_base_url", "   "),
         ("flight_provider_mode", "fake"),
         ("provider_flight_base_url", ""),
         ("provider_flight_base_url", "   "),
         ("ai_mode", "fake"),
+        ("anthropic_api_key", ""),
+        ("anthropic_api_key", "   "),
         ("payment_provider", "sandbox"),
         ("razorpay_key_id", ""),
+        ("razorpay_key_id", "   "),
         ("razorpay_key_secret", ""),
+        ("razorpay_key_secret", "   "),
         ("razorpay_webhook_secret", ""),
+        ("razorpay_webhook_secret", "   "),
         ("phone_aes_key", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="),
         ("phone_blind_index_key", "YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk="),
+        ("pnr_pepper", "   "),
         ("pnr_pepper", "dev-pnr-pepper-change-in-production-32b"),
+        ("invite_token_secret", "   "),
         ("invite_token_secret", "dev-invite-token-secret-change-in-production"),
     ):
         kwargs = _prod_base_kwargs()
@@ -286,3 +328,34 @@ def test_startup_validates_base64_32byte_keys() -> None:
             env="test",
             phone_blind_index_key=base64.b64encode(b"short-key").decode("ascii"),
         )
+
+
+def test_live_adapters_reject_whitespace_credentials() -> None:
+    with pytest.raises(ValueError):
+        RazorpayPaymentAdapter(key_id="   ", key_secret="sec", webhook_secret="wh")
+    with pytest.raises(ValueError):
+        RazorpayPaymentAdapter(key_id="id", key_secret="   ", webhook_secret="wh")
+    with pytest.raises(ValueError):
+        RazorpayPaymentAdapter(key_id="id", key_secret="sec", webhook_secret="   ")
+    with pytest.raises(ValueError):
+        WhatsAppCloudAdapter(access_token="   ", phone_number_id="123")
+    with pytest.raises(ValueError):
+        WhatsAppCloudAdapter(access_token="tok", phone_number_id="   ")
+    with pytest.raises(ValueError):
+        MSG91SMSAdapter(auth_key="   ", sender_id="SAATHI", template_id="tpl")
+    with pytest.raises(ValueError):
+        MSG91SMSAdapter(auth_key="key", sender_id="SAATHI", template_id="   ")
+    with pytest.raises(ValueError):
+        VAPIDPushAdapter(vapid_private_key="   ", vapid_subject="mailto:a@b.com")
+    with pytest.raises(ValueError):
+        VAPIDPushAdapter(vapid_private_key="priv", vapid_subject="   ")
+    with pytest.raises(ValueError):
+        AnthropicClaudeAdapter(api_key="   ")
+    with pytest.raises(ValueError):
+        CloudflareTurnstileVerifier(secret_key="   ")
+    with pytest.raises(ValueError):
+        RailProviderA(base_url="   ", api_key="k")
+    with pytest.raises(ValueError):
+        RailProviderB(base_url="   ", api_key="k")
+    with pytest.raises(ValueError):
+        LiveFlightScheduleProvider(base_url="   ", api_key="k")

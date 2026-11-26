@@ -125,9 +125,12 @@ class _HttpRailAdapter:
         api_key: str,
         timeout_seconds: float = 3.0,
     ) -> None:
+        cleaned_url = base_url.strip().rstrip("/")
+        if not cleaned_url:
+            raise ValueError(f"{name} base_url is required")
         self.name = name
-        self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
+        self._base_url = cleaned_url
+        self._api_key = api_key.strip()
         self._timeout = timeout_seconds
 
     def _headers(self) -> dict[str, str]:

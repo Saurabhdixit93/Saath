@@ -153,10 +153,12 @@ class WhatsAppCloudAdapter:
         phone_number_id: str,
         timeout_seconds: float = 3.0,
     ) -> None:
-        if not access_token or not phone_number_id:
+        cleaned_token = access_token.strip()
+        cleaned_phone_number_id = phone_number_id.strip()
+        if not cleaned_token or not cleaned_phone_number_id:
             raise ValueError("WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID are required")
-        self._access_token = access_token
-        self._phone_number_id = phone_number_id
+        self._access_token = cleaned_token
+        self._phone_number_id = cleaned_phone_number_id
         self._timeout_seconds = timeout_seconds
         self._breaker = CircuitBreaker(name="whatsapp_cloud")
 
@@ -279,12 +281,15 @@ class MSG91SMSAdapter:
         notify_template_id: str = "",
         timeout_seconds: float = 3.0,
     ) -> None:
-        if not auth_key or not template_id:
+        cleaned_auth_key = auth_key.strip()
+        cleaned_template_id = template_id.strip()
+        cleaned_notify_template_id = notify_template_id.strip()
+        if not cleaned_auth_key or not cleaned_template_id:
             raise ValueError("MSG91_AUTH_KEY and MSG91_DLT_TE_ID_OTP are required")
-        self._auth_key = auth_key
-        self._sender_id = sender_id
-        self._template_id = template_id
-        self._notify_template_id = notify_template_id or template_id
+        self._auth_key = cleaned_auth_key
+        self._sender_id = sender_id.strip()
+        self._template_id = cleaned_template_id
+        self._notify_template_id = cleaned_notify_template_id or cleaned_template_id
         self._timeout_seconds = timeout_seconds
         self._breaker = CircuitBreaker(name="msg91_sms")
 

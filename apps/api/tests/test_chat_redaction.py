@@ -52,6 +52,17 @@ ADVERSARIAL_SHOULD_REDACT: list[tuple[str, str]] = [
     ("नौ आठ सात छह पाँच चार तीन दो एक", "phone"),
     ("नौ\u200fआठ\u2060सात 6\u200e5 4\u200b3 2 1 0", "phone"),
     ("न\u200bौ\u200fआठ\u2060सात 6\u200e5 4\u200b3 2 1 0", "phone"),
+    ("नौआठसात\u200b6543210", "phone"),
+    ("nineeightseven\u200b6543210", "phone"),
+    ("9\u200bनौआठसात654321", "phone"),
+    ("नौआठसात 6543210", "phone"),
+    ("nineeightseven 6543210", "phone"),
+    ("9\u034f8\u034f7\u034f6\u034f5\u034f4\u034f3\u034f2\u034f1\u034f0", "phone"),
+    ("9\u180e8\u180e7\u180e6\u180e5\u180e4\u180e3\u180e2\u180e1\u180e0", "phone"),
+    ("98/76/5432/10", "phone"),
+    ("9~8~7~6~5~4~3~2~1~0", "phone"),
+    ("9;8;7;6;5;4;3;2;1;0", "phone"),
+    ("98765~43210", "phone"),
     ("nau aath saat chhe paanch char teen do ek shunya", "phone"),
     ("ek do teen char paanch chhe saat aath nau shunya", "phone"),
     ("double nau aath saat chhe paanch char teen do", "phone"),
@@ -80,6 +91,8 @@ ADVERSARIAL_SHOULD_REDACT: list[tuple[str, str]] = [
     ("check my profile at mysite.in/me", "url"),
     ("reach me on chatbox.app/asha", "url"),
     ("b.tech/asha", "url"),
+    ("find me on x.com", "url"),
+    ("link on t.co", "url"),
     # 8. UPI IDs (standard, alphanumeric PSP, and obfuscated)
     ("asha@okicici", "upi"),
     ("rahul.k@ybl", "upi"),
@@ -93,6 +106,7 @@ ADVERSARIAL_SHOULD_REDACT: list[tuple[str, str]] = [
     ("user [at] sbi", "upi"),
     ("user(at)kotak811", "upi"),
     ("user@kotak811", "upi"),
+    ("user at kotak811", "upi"),
 ]
 
 BENIGN_MESSAGES: list[str] = [
@@ -113,9 +127,13 @@ BENIGN_MESSAGES: list[str] = [
     "Meet at SBI counter",
     "Wait at Airtel kiosk",
     "Meet at bob window",
+    "Meet at kotak811 desk",
     "Look at slice 2 of pizza",
     "I completed B.Tech last year",
     "I completed B.Com last year",
+    "I did B.Tech / M.Tech",
+    "I studied B.Com / Economics",
+    "Train from 12.to 14 hours",
 ]
 
 

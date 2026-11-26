@@ -496,14 +496,14 @@ async def process_whatsapp_webhook(
     raw_body: bytes,
     signature_header: str | None,
 ) -> WhatsAppWebhookResponse:
-    if settings.is_production and not settings.whatsapp_app_secret:
+    if settings.is_production and not settings.whatsapp_app_secret.strip():
         raise ProblemDetailError(
             status_code=status.HTTP_403_FORBIDDEN,
             code="whatsapp_secret_missing",
             title="WhatsApp webhook secret not configured",
             detail="WhatsApp webhook secret is not configured.",
         )
-    if settings.whatsapp_app_secret or settings.is_production:
+    if settings.whatsapp_app_secret.strip() or settings.is_production:
         if not signature_header or not signature_header.startswith("sha256="):
             raise ProblemDetailError(
                 status_code=status.HTTP_403_FORBIDDEN,
