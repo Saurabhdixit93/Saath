@@ -46,3 +46,5 @@
 ## [Unreleased] — Docker build fixes
 - Fixed `apps/admin` production build: removed `any` usages (`adminFetch<T = unknown>`), surfaced the overview `loading` state via `aria-busy`, and added the missing `@types/node` devDependency.
 - Fixed `apps/web` production build: swap-card PNG fonts now resolve from the app root at runtime so webpack no longer tries to bundle `.woff` files.
+- `docker-compose.yml` now passes `NEXT_PUBLIC_*` as web/admin build args so browser bundles use the deploy's URLs instead of `localhost`.
+- Added `scripts/vm-env.sh` to generate a single-VM `.env` with fresh JWT/swap-card/VAPID keys, phone/PNR secrets, admin allowlist, and the correct Turnstile test secret.
