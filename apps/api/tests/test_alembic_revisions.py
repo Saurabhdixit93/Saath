@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import re
 from pathlib import Path
 
 from alembic.config import Config
@@ -28,3 +30,27 @@ def test_revision_ids_fit_alembic_version_column() -> None:
 
 def test_migrations_have_single_head() -> None:
     assert len(_script_directory().get_heads()) == 1
+
+
+# sa.text() / op.execute() treat ":name" as a bind param, e.g. '{"push":true}' renders as NULL.
+_BIND_PARAM = re.compile(r"(?<![:\w\\]):\w")
+
+
+def test_migration_sql_has_no_accidental_bind_params() -> None:
+    offenders = []
+    for path in sorted((API_ROOT / "alembic" / "versions").glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            func_name = getattr(node.func, "attr", getattr(node.func, "id", ""))
+            if func_name not in ("text", "execute"):
+                continue
+            for arg in node.args:
+                for const in ast.walk(arg):
+                    if (
+                        isinstance(const, ast.Constant)
+                        and isinstance(const.value, str)
+                        and _BIND_PARAM.search(const.value)
+                    ):
+                        offenders.append(f"{path.name}:{const.lineno}")
+    assert offenders == []

@@ -49,3 +49,4 @@
 - `docker-compose.yml` now passes `NEXT_PUBLIC_*` as web/admin build args so browser bundles use the deploy's URLs instead of `localhost`.
 - Added `scripts/vm-env.sh` to generate a single-VM `.env` with fresh JWT/swap-card/VAPID keys, phone/PNR secrets, admin allowlist, and the correct Turnstile test secret.
 - Fixed `alembic upgrade head` failing on a fresh database: revision `0002_journeys_parties_goals_pricing` (35 chars) overflowed `alembic_version.version_num VARCHAR(32)`; renamed to `0002_journeys_parties_goals` and added `tests/test_alembic_revisions.py` to guard id length and a single head.
+- Fixed `0004_messaging_moderation` failing on Postgres: `users.notification_prefs` default `'{"push":true,...}'` inside `sa.text()` turned each `:true` into a bind param (rendered `NULL`). Added spaces after the JSON colons (migration + `User` model) and a test that flags `:word` in migration `text()`/`execute()` SQL.
