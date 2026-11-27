@@ -55,6 +55,8 @@ packages = ["src/saath_api"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# Lets tests import shared helpers via `from tests.<module> import ...`.
+pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py312"

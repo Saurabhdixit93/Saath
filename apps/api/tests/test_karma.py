@@ -10,7 +10,7 @@ from sqlalchemy import select
 from saath_api.admin.models import FeatureFlag
 from saath_api.auth.models import AuditLog, Device, User
 from saath_api.core.config import load_yaml_configs
-from saath_api.core.crypto import blind_index, encrypt_phone
+from saath_api.core.crypto import blind_index_phone, encrypt_phone
 from saath_api.core.ids import uuid7
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
 from saath_api.karma.models import KarmaLedger, RewardItem, RewardRedemption
@@ -842,7 +842,7 @@ async def test_all_five_badges_and_leaderboard_opt_in_zero_pii(
         deleted_opt_in = User(
             id=uuid7(),
             phone_enc=encrypt_phone("9876543699", app.state.settings.phone_aes_key),
-            phone_bidx=blind_index("9876543699", app.state.settings.phone_blind_index_key),
+            phone_bidx=blind_index_phone("9876543699", app.state.settings.phone_blind_index_key),
             display_alias="ErasedUser",
             leaderboard_opt_in=True,
             status="deleted",
