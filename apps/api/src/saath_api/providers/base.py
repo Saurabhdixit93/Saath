@@ -4,9 +4,6 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TypeVar
-
-T = TypeVar("T")
 
 
 class ProviderError(Exception):
@@ -40,7 +37,7 @@ class CircuitBreaker:
             self._opened_at = time.monotonic()
 
 
-async def call_with_retry_and_timeout(
+async def call_with_retry_and_timeout[T](
     fn: Callable[[], Awaitable[T]],
     *,
     timeout_seconds: float = 3.0,

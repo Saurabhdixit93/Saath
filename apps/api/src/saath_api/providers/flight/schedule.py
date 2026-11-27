@@ -190,7 +190,8 @@ def build_flight_schedule_provider(settings: Settings) -> FlightScheduleProvider
             )
         if settings.is_production:
             raise RuntimeError(
-                "PROVIDER_FLIGHT_BASE_URL is required when ENV=production and FLIGHT_PROVIDER_MODE=live"
+                "PROVIDER_FLIGHT_BASE_URL is required when ENV=production and "
+                "FLIGHT_PROVIDER_MODE=live"
             )
     elif settings.is_production:
         raise RuntimeError("FakeFlightScheduleProvider cannot be used when ENV=production")

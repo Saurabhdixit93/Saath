@@ -96,51 +96,51 @@ async def test_ws_auth_ping_pong_typing_and_pubsub_fanout(
     app = client.app  # type: ignore[attr-defined]
     redis = app.state.redis
 
-    with TestClient(app) as sync_client:
-        with (
-            sync_client.websocket_connect("/v1/ws") as ws_a,
-            sync_client.websocket_connect("/v1/ws") as ws_b,
-        ):
-            ws_a.send_text(json.dumps({"type": "auth", "token": tok_a}))
-            ws_b.send_text(json.dumps({"type": "auth", "token": tok_b}))
-            assert ws_a.receive_json() == {"type": "ready"}
-            assert ws_b.receive_json() == {"type": "ready"}
+    with (
+        TestClient(app) as sync_client,
+        sync_client.websocket_connect("/v1/ws") as ws_a,
+        sync_client.websocket_connect("/v1/ws") as ws_b,
+    ):
+        ws_a.send_text(json.dumps({"type": "auth", "token": tok_a}))
+        ws_b.send_text(json.dumps({"type": "auth", "token": tok_b}))
+        assert ws_a.receive_json() == {"type": "ready"}
+        assert ws_b.receive_json() == {"type": "ready"}
 
-            ws_a.send_text(json.dumps({"type": "ping"}))
-            assert ws_a.receive_json() == {"type": "pong"}
+        ws_a.send_text(json.dumps({"type": "ping"}))
+        assert ws_a.receive_json() == {"type": "pong"}
 
-            ws_a.send_text(json.dumps({"type": "typing", "conversation_id": convo_id}))
-            typing_evt = ws_b.receive_json()
-            assert typing_evt["type"] == "typing"
-            assert typing_evt["conversation_id"] == convo_id
-            assert "user_id" not in typing_evt
-            assert typing_evt["alias"].startswith("Passenger ")
+        ws_a.send_text(json.dumps({"type": "typing", "conversation_id": convo_id}))
+        typing_evt = ws_b.receive_json()
+        assert typing_evt["type"] == "typing"
+        assert typing_evt["conversation_id"] == convo_id
+        assert "user_id" not in typing_evt
+        assert typing_evt["alias"].startswith("Passenger ")
 
-            await publish_user_event(
-                redis,
-                uid_a,
-                {
-                    "type": "journey.chart",
-                    "journey_id": va["journey"]["id"],
-                    "state": "final",
-                    "changed": True,
-                },
-            )
-            chart_evt = ws_a.receive_json()
-            assert chart_evt["type"] == "journey.chart"
-            assert chart_evt["journey_id"] == va["journey"]["id"]
+        await publish_user_event(
+            redis,
+            uid_a,
+            {
+                "type": "journey.chart",
+                "journey_id": va["journey"]["id"],
+                "state": "final",
+                "changed": True,
+            },
+        )
+        chart_evt = ws_a.receive_json()
+        assert chart_evt["type"] == "journey.chart"
+        assert chart_evt["journey_id"] == va["journey"]["id"]
 
-            await publish_conversation_event(
-                redis,
-                convo_id,
-                {
-                    "type": "message.new",
-                    "conversation_id": convo_id,
-                    "message": {"id": "m1", "body": "hi"},
-                },
-            )
-            msg_evt = ws_b.receive_json()
-            assert msg_evt["type"] in ("typing", "message.new")
+        await publish_conversation_event(
+            redis,
+            convo_id,
+            {
+                "type": "message.new",
+                "conversation_id": convo_id,
+                "message": {"id": "m1", "body": "hi"},
+            },
+        )
+        msg_evt = ws_b.receive_json()
+        assert msg_evt["type"] in ("typing", "message.new")
 
 
 async def test_sse_stream_requires_auth_and_streams_events(

@@ -1010,7 +1010,8 @@ async def test_flags_disputes_redemptions_and_audit_filters(
         404,
     )
 
-    # Redemptions review: approve -> double-approve 409 -> fulfill; reject restores stock and blocks repeat review (409)
+    # Redemptions review: approve -> double-approve 409 -> fulfill; reject restores stock and
+    # blocks repeat review (409)
     reds = await client.get("/v1/admin/redemptions", headers=admin_headers)
     assert reds.status_code == 200
     assert reds.json()["total"] == 2

@@ -236,7 +236,8 @@ async def test_party_invite_join_expiry_cross_journey_and_women_only_guard(
     assert rejoin.status_code == 200
     assert rejoin.json()["party"]["member_count"] == 2
 
-    # If leader deletes their journey while other member remains, leadership transfers & Goal.movers prunes
+    # If leader deletes their journey while other member remains, leadership transfers &
+    # Goal.movers prunes
     del_leader = await client.delete(f"/v1/journeys/{j1_id}", headers=leader_h)
     assert del_leader.status_code == 200
     joiner_hub = await client.get(f"/v1/journeys/{j1_id}", headers=joiner_h)

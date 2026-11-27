@@ -5,7 +5,7 @@ from uuid import UUID
 from saath_api.core.crypto import hmac_sha256_hex, verify_hmac_sha256_hex
 from saath_api.providers.payment.base import GatewayOrderDTO
 
-_SANDBOX_FALLBACK_SECRET = "saath-sandbox-webhook-secret"
+_SANDBOX_FALLBACK_SECRET = "saath-sandbox-webhook-secret"  # noqa: S105
 
 
 class SandboxPaymentAdapter:

@@ -27,7 +27,8 @@ ADVERSARIAL_SHOULD_REDACT: list[tuple[str, str]] = [
     ("+91 98 76 54 32 10", "phone"),
     ("987_654_3210", "phone"),
     ("+1 415 555 0199", "phone"),
-    # 3. Zero-width / Cf invisible character evasion, typographic dashes, :/* separators & Devanagari digits
+    # 3. Zero-width / Cf invisible character evasion, typographic dashes, :/* separators &
+    #    Devanagari digits
     ("9\u200b8\u200b7\u200b6\u200b5\u200b4\u200b3\u200b2\u200b1\u200b0", "phone"),
     ("98765\u206043210", "phone"),
     ("98765\u200e43210", "phone"),
@@ -87,7 +88,8 @@ ADVERSARIAL_SHOULD_REDACT: list[tuple[str, str]] = [
     ("nau aath saat chhe paanch char teen do ek shunya", "phone"),
     ("ek do teen char paanch chhe saat aath nau shunya", "phone"),
     ("double nau aath saat chhe paanch char teen do", "phone"),
-    # 5b. Unicode Nd digits, Hinglish variants, #/! separators, decoy prefix/suffix digits & phone-context overrides
+    # 5b. Unicode Nd digits, Hinglish variants, #/! separators, decoy prefix/suffix digits &
+    #     phone-context overrides
     ("٩٨٧٦٥٤٣٢١٠", "phone"),
     ("৯৮৭৬৫৪৩২১০", "phone"),
     ("nau aath saat cheh paanch char tin do ek sunna", "phone"),

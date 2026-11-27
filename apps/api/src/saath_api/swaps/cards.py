@@ -89,39 +89,52 @@ def render_swap_card_svg(payload: dict[str, Any], qr_url: str) -> str:
         to_s = html.escape(str(p.get("to_seat", "")))
         alias = html.escape(str(p.get("alias", "")))
         rows_svg.append(
-            f'<text x="28" y="{y}" font-family="monospace" font-size="16" font-weight="700" fill="#1C1A17">{from_s} &#8644; {to_s}</text>'
+            f'<text x="28" y="{y}" font-family="monospace" font-size="16" font-weight="700" '
+            f'fill="#1C1A17">{from_s} &#8644; {to_s}</text>'
         )
         rows_svg.append(
-            f'<text x="28" y="{y + 18}" font-family="sans-serif" font-size="11" fill="#6B645A">{alias}</text>'
+            f'<text x="28" y="{y + 18}" font-family="sans-serif" font-size="11" '
+            f'fill="#6B645A">{alias}</text>'
         )
         y += 42
 
     card_h = max(300, y + 68)
     status_badge = (
         '<rect x="420" y="22" width="132" height="28" rx="14" fill="#C2362F"/>'
-        '<text x="486" y="40" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">REVOKED</text>'
+        '<text x="486" y="40" text-anchor="middle" font-family="sans-serif" font-size="12" '
+        'font-weight="700" fill="#FFFFFF">REVOKED</text>'
         if revoked
         else '<rect x="420" y="22" width="132" height="28" rx="14" fill="#2E8B57"/>'
-        '<text x="486" y="40" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="700" fill="#FFFFFF">VERIFIED</text>'
+        '<text x="486" y="40" text-anchor="middle" font-family="sans-serif" font-size="12" '
+        'font-weight="700" fill="#FFFFFF">VERIFIED</text>'
     )
 
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="580" height="{card_h}" viewBox="0 0 580 {card_h}" role="img" aria-label="Saath Swap Card {public_code}">'
-        f'<rect width="580" height="{card_h}" rx="18" fill="#FAF7F2" stroke="#E4DDD2" stroke-width="2"/>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="580" height="{card_h}" '
+        f'viewBox="0 0 580 {card_h}" role="img" aria-label="Saath Swap Card {public_code}">'
+        f'<rect width="580" height="{card_h}" rx="18" fill="#FAF7F2" stroke="#E4DDD2" '
+        f'stroke-width="2"/>'
         f'<rect x="0" y="0" width="580" height="72" rx="18" fill="#1F6F78"/>'
         f'<rect x="0" y="54" width="580" height="18" fill="#1F6F78"/>'
-        f'<text x="28" y="34" font-family="sans-serif" font-size="13" font-weight="700" letter-spacing="1.5" fill="#FAF7F2">SAATH SWAP CARD</text>'
-        f'<text x="28" y="56" font-family="monospace" font-size="18" font-weight="700" fill="#FFFFFF">#{public_code}</text>'
+        f'<text x="28" y="34" font-family="sans-serif" font-size="13" font-weight="700" '
+        f'letter-spacing="1.5" fill="#FAF7F2">SAATH SWAP CARD</text>'
+        f'<text x="28" y="56" font-family="monospace" font-size="18" font-weight="700" '
+        f'fill="#FFFFFF">#{public_code}</text>'
         f"{status_badge}"
-        f'<text x="28" y="102" font-family="sans-serif" font-size="15" font-weight="700" fill="#1C1A17">{service} &#183; {svc_date}</text>'
+        f'<text x="28" y="102" font-family="sans-serif" font-size="15" font-weight="700" '
+        f'fill="#1C1A17">{service} &#183; {svc_date}</text>'
         f'<line x1="28" y1="116" x2="400" y2="116" stroke="#E4DDD2" stroke-width="1"/>'
         f"{''.join(rows_svg)}"
         f'<g transform="translate(425, 92) scale(1.1)">'
-        f'<rect x="-6" y="-6" width="128" height="128" rx="8" fill="#FFFFFF" stroke="#E4DDD2"/>'
+        f'<rect x="-6" y="-6" width="128" height="128" rx="8" fill="#FFFFFF" '
+        f'stroke="#E4DDD2"/>'
         f"{qr_path}"
         f"</g>"
-        f'<text x="28" y="{card_h - 32}" font-family="sans-serif" font-size="12" font-weight="600" fill="#1F6F78">Subject to TTE approval &#183; No personal data shown</text>'
-        f'<text x="28" y="{card_h - 14}" font-family="monospace" font-size="10" fill="#6B645A">{html.escape(qr_url)}</text>'
+        f'<text x="28" y="{card_h - 32}" font-family="sans-serif" font-size="12" '
+        f'font-weight="600" fill="#1F6F78">'
+        f"Subject to TTE approval &#183; No personal data shown</text>"
+        f'<text x="28" y="{card_h - 14}" font-family="monospace" font-size="10" '
+        f'fill="#6B645A">{html.escape(qr_url)}</text>'
         f"</svg>"
     )
 

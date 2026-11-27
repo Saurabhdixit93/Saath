@@ -185,9 +185,9 @@ async def _build_swap_detail_dto(
         part_dtos.append(
             SwapParticipantViewDTO(
                 alias=p.alias,
-                decision=p.decision,  # type: ignore[arg-type]
+                decision=p.decision,
                 decided_at=p.decided_at,
-                post_confirm=p.post_confirm,  # type: ignore[arg-type]
+                post_confirm=p.post_confirm,
                 is_me=is_me,
                 gives_seat=gives_val,
                 gets_seat=gets_val,
@@ -238,8 +238,8 @@ async def _build_swap_detail_dto(
     return SwapDetailDTO(
         id=proposal.id,
         journey_instance_id=proposal.journey_instance_id,
-        kind=proposal.kind,  # type: ignore[arg-type]
-        status=proposal.status,  # type: ignore[arg-type]
+        kind=proposal.kind,
+        status=proposal.status,
         version=proposal.version,
         expires_at=proposal.expires_at,
         created_at=proposal.created_at,
@@ -248,7 +248,7 @@ async def _build_swap_detail_dto(
         decline_reason=proposal.decline_reason,
         service=f"{ji.carrier_code} {ji.service_no}".strip(),
         date=ji.service_date.isoformat(),
-        mode=ji.mode,  # type: ignore[arg-type]
+        mode=ji.mode,
         you_give=you_give,
         you_get_summary=you_get_summary,
         participants=part_dtos,
@@ -256,7 +256,7 @@ async def _build_swap_detail_dto(
         can_accept=can_accept,
         can_cancel=can_cancel,
         can_confirm_completion=can_confirm,
-        my_post_confirm=my_post_confirm,  # type: ignore[arg-type]
+        my_post_confirm=my_post_confirm,
     )
 
 
@@ -392,7 +392,7 @@ async def create_swap_proposal(
             .limit(1)
         )
     ).scalar_one_or_none()
-    if party_bookings is None and actor.kind != "admin":
+    if party_bookings is None:
         raise ProblemDetailError(
             status_code=status.HTTP_403_FORBIDDEN,
             code="forbidden",
@@ -405,7 +405,9 @@ async def create_swap_proposal(
             status_code=status.HTTP_409_CONFLICT,
             code="stale_match_version",
             title="Matches Updated",
-            detail="Your matches updated after a recent change. Please pick from the latest matches.",
+            detail=(
+                "Your matches updated after a recent change. Please pick from the latest matches."
+            ),
         )
 
     # Resolve ordered cycles from MatchCandidate
@@ -1034,7 +1036,7 @@ async def cancel_swap(
     try:
         await _begin_serializable(db)
         proposal, parts = await _require_proposal_access(db, swap_id, actor)
-        if proposal.initiator_user_id != actor.user_id and actor.kind != "admin":
+        if proposal.initiator_user_id != actor.user_id:
             raise ProblemDetailError(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="forbidden",
@@ -1550,7 +1552,8 @@ async def verify_public_swap_card(
     )
 
     seats_parts = [
-        f"{p.get('gives_seat', p.get('from_seat', ''))} ⇄ {p.get('gets_seat', p.get('to_seat', ''))}"
+        f"{p.get('gives_seat', p.get('from_seat', ''))} ⇄ "
+        f"{p.get('gets_seat', p.get('to_seat', ''))}"
         for p in payload.get("participants", [])
     ]
     seats_summary = " · ".join(seats_parts)

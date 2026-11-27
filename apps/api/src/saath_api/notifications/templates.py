@@ -98,8 +98,7 @@ def render_notification(
                 f"{service} पर आपकी सीट के लिए नया मिलान मिला है।"
                 if is_hi
                 else (
-                    "A new verified seat swap match is ready"
-                    f"{' on ' + service if service else ''}."
+                    f"A new verified seat swap match is ready{' on ' + service if service else ''}."
                 )
             ),
             url=url,

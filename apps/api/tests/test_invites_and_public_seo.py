@@ -94,7 +94,7 @@ async def test_m5_models_imported_and_feature_flags_accessible(client: AsyncClie
         assert cls.__tablename__
     resp = await client.get("/v1/public/stats")
     assert resp.status_code == 200
-    assert "cache-control" in {k.lower() for k in resp.headers.keys()}
+    assert "cache-control" in {k.lower() for k in resp.headers}
     body = resp.json()
     assert body["active_trains_catalog_count"] == 3000
     assert body["flight_layouts_count"] == 25

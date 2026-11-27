@@ -328,7 +328,8 @@ async def test_whatsapp_webhook_hmac_dedupe_and_pnr_bot(
     assert dup_res.json()["deduped"] == 1
     assert len(fake_messaging.sent_whatsapp_replies) == 1
 
-    # Interactive "Find me a lower" reply -> sets goal_type="lower" with party movers and returns 200
+    # Interactive "Find me a lower" reply -> sets goal_type="lower" with party movers and
+    # returns 200
     lower_body = json.dumps(
         {
             "entry": [

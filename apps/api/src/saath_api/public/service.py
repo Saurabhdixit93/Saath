@@ -89,8 +89,7 @@ async def create_seat_invite(
                 code="invalid_seat_target",
                 title="Invalid Coach Target",
                 detail=(
-                    "Coach code must be a valid Indian Railways coach "
-                    "such as B5, S3, A1, or C2."
+                    "Coach code must be a valid Indian Railways coach such as B5, S3, A1, or C2."
                 ),
             )
         if target_seat_no is not None:

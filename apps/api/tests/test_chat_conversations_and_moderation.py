@@ -403,7 +403,8 @@ async def test_block_by_partner_alias_match_alias_and_rejects_foreign_or_raw_use
     assert post_blk_send.status_code == 403
     assert len({uid_a, uid_b, uid_c}) == 3
 
-    # Repeat POST /v1/users/block is idempotent and does not bump match_version or duplicate AuditLog
+    # Repeat POST /v1/users/block is idempotent and does not bump match_version or duplicate
+    # AuditLog
     app: Any = client.app  # type: ignore[attr-defined]
     ji_id = UUID(va["journey"]["id"])
     async with app.state.session_factory() as db:

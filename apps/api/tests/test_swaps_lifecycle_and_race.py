@@ -131,7 +131,8 @@ async def test_concurrent_accept_race_and_stale_version_conflict(
     assert cancelled.json()["status"] == "cancelled"
 
     winner_card_id = matches[0]["card_id"] if r1.status_code == 200 else matches[1]["card_id"]
-    # After winner is also declined, the original deterministic card_id works without re-fetching matches
+    # After winner is also declined, the original deterministic card_id works without
+    # re-fetching matches
     dec_winner = await client.post(
         f"/v1/swaps/{winner['id']}/decline", headers=h_a, json={"reason": "Reset"}
     )
@@ -530,7 +531,8 @@ async def test_block_invalidates_pending_swap_releases_locks_and_blocks_create_o
         )
         assert len(locks_before) == 1
 
-    # 2. A blocks partner 1 -> pending swap invalidated, SeatLock released, neutral SwapInvalidated outbox written
+    # 2. A blocks partner 1 -> pending swap invalidated, SeatLock released, neutral
+    #    SwapInvalidated outbox written
     blk_res = await client.post("/v1/users/block", headers=h_a, json={"alias_ref": alias_0})
     assert blk_res.status_code == 200
     assert blk_res.json()["blocked"] is True
@@ -566,7 +568,8 @@ async def test_block_invalidates_pending_swap_releases_locks_and_blocks_create_o
             assert rendered_en.title == "Swap proposal closed"
             assert "चार्ट" not in rendered_hi.body
 
-    # 3. Race-window guard: Block created after match card fetch rejects accept & create with 403 user_blocked
+    # 3. Race-window guard: Block created after match card fetch rejects accept & create with
+    #    403 user_blocked
     matches_after_p1 = (
         await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
     ).json()["items"]
@@ -578,7 +581,8 @@ async def test_block_invalidates_pending_swap_releases_locks_and_blocks_create_o
         db.add(Block(blocker=UUID(uid_p2), blocked=UUID(uid_a)))
         await db.commit()
 
-    # accept_swap detects block in SERIALIZABLE tx -> invalidates proposal & returns 403 user_blocked
+    # accept_swap detects block in SERIALIZABLE tx -> invalidates proposal & returns
+    # 403 user_blocked
     acc_p2_blocked = await client.post(
         f"/v1/swaps/{swap_p2['id']}/accept",
         headers=h_p2,
