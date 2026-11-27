@@ -17,3 +17,28 @@
 - Hardened `Settings` (`ENV=production` checks for `flight_provider_mode` and dev AES/HMAC/pepper/invite secrets + 32-byte base64 startup validation), `_client_ip` trusted-proxy `X-Forwarded-For` parsing, ASCII-only phone/OTP matching, monotonic `uuid7()`, unhandled 500 logging, and OpenAPI `application/problem+json` schema refs.
 - Made `SlidingWindowRateLimiter` atomic via Redis Lua script (with `fakeredis` lock fallback), guarded `verify_otp` with a per-`request_id` lock + `ON CONFLICT (phone_bidx)` user upsert + `pttl > 0` updates, and set `otp:cd` only after `MessagingProvider.send_otp` succeeds (`503` on `ProviderError`).
 - Added dark-mode WCAG 2.2 AA `--danger-text` token, fixed `SeatLegendBadge` foreground ink, stabilized `BottomSheet`/`Toast` effect hooks, fixed `+91` paste truncation and `PNR` keyword priority, added `/profile` loading/error states, and added `.dockerignore` + `NEXT_PUBLIC_*` Dockerfile build args.
+
+## [0.5.0] — Milestone M5 (Growth, Karma Economy, AI Concierge & Admin API)
+- Implemented Alembic `0005_m5_schema` with `seat_invites`, `karma_ledger`, `badges`, `feature_flags`, `rewards`, `ai_usage_logs`, and user consent/erasure columns.
+- Built Invite-the-Seat growth mechanism (`/j/[token]`) with WhatsApp share cards and public SEO pages (`/pnr-status`, `/train/[no]/coach-position`, `/train/[no]/chart-time`, `/train/[no]/live`, `/flights/seat-map`, `/blog`).
+- Implemented double-entry Karma ledger, anti-fraud velocity capping, tiered badges, and rewards redemption catalog.
+- Integrated Anthropic Claude Sonnet/Haiku AI Swap Concierge with streaming SSE, smart pitch drafting, and pre-accept PII/scam guardrails.
+- Added Backend Admin API (`/v1/admin/`) covering funnel analytics, provider health, moderation actions, fraud graph, and audit log.
+- Delivered k6 load test suites (200 RPS verification, 5,000 concurrent WebSockets, match recompute storm) and chaos engineering verification scripts.
+
+## [0.6.0] — Milestone M6 (DPDP Act Compliance, Admin UI & Final Production Hardening)
+- Implemented end-to-end DPDP Act 2023 compliance:
+  - Itemized consent notice and ledger API (`GET /v1/me/consents`, `POST /v1/me/consents`).
+  - Right to data portability export (`GET /v1/me/export`) generating standard 8-file ZIP archive with zero PII leaks (`phone_enc`, `phone_bidx`, `raw_pnr`, `pnr_hash` strictly suppressed).
+  - Right to erasure (`DELETE /v1/me`) with immediate token revocation, pending swap cancellation, seat lock releases, and 24-hour retention sweep.
+  - Nightly ARQ retention purge job (`nightly_retention_purge_tick`) cleaning expired invites, stale bookings, and executing 24-hour erasure sweeps.
+- Developed full-featured Admin Portal UI (`apps/admin` on port 3001):
+  - Overview dashboard with route funnel conversion and provider/outbox health metrics.
+  - Moderation queue with report filtering and Dismiss, Hide, Restrict, and Ban actions.
+  - Feature flag management with interactive toggle switches and real-time PATCH API integration.
+  - Fraud collusion graph visualizing circular karma pairs and dispute resolution with force-complete overrides.
+  - Immutable DPDP audit log viewer with live action filtering.
+- Re-exported typed DPDP contracts in `packages/contracts`.
+- Verified complete Python AST compilation across all modules and tests (`python3 -m compileall`).
+- Containerized full production stack in `docker-compose.yml` (`postgres:16`, `redis:7`, `api`, `worker`, `scheduler`, `web:3000`, `admin:3001`).
+

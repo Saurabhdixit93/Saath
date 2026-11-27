@@ -18,6 +18,7 @@ from saath_api.core.ids import uuid7
 from saath_api.core.logging import configure_logging, request_id_ctx
 from saath_api.core.redis import create_redis_client
 from saath_api.core.telemetry import configure_telemetry
+from saath_api.dpdp.router import router as dpdp_router
 from saath_api.journeys.router import router as journeys_router
 from saath_api.karma.router import router as karma_router
 from saath_api.matching.router import router as matching_router
@@ -154,6 +155,7 @@ def create_app(
     app.include_router(notifications_router)
     app.include_router(build_pricing_router(resolved_settings))
     app.include_router(public_router)
+    app.include_router(dpdp_router)
     app.include_router(admin_router)
 
     def custom_openapi() -> dict[str, object]:

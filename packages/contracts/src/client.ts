@@ -105,6 +105,38 @@ export type ConciergeRequest = components["schemas"]["ConciergeRequest"];
 export type DraftRequestBody = components["schemas"]["DraftRequestBody"];
 export type DraftRequestResponse = components["schemas"]["DraftRequestResponse"];
 
+export interface ConsentItemInput {
+  purpose: "verification" | "matching" | "notifications" | "analytics" | "whatsapp" | string;
+  notice_version: string;
+  granted: boolean;
+}
+
+export interface ConsentRecordDTO {
+  purpose: string;
+  notice_version: string;
+  granted: boolean;
+  at?: string | null;
+}
+
+export interface ConsentsListResponse {
+  notice_version: string;
+  purposes: string[];
+  consents: ConsentRecordDTO[];
+}
+
+export interface SaveConsentsRequest {
+  consents: ConsentItemInput[];
+}
+
+export interface SaveConsentsResponse {
+  consents: ConsentRecordDTO[];
+}
+
+export interface DeleteAccountResponse {
+  status: string;
+  scheduled_within_hours: number;
+}
+
 export interface SaathClientOptions {
   baseUrl: string;
   getAccessToken: () => string | null;
