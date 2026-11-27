@@ -195,7 +195,7 @@ def upgrade() -> None:
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=False,
             server_default=sa.text(
-                "'{\"push\":true,\"whatsapp\":true,\"sms\":true,\"quiet_hours_enabled\":true}'::jsonb"
+                "'{\"push\": true, \"whatsapp\": true, \"sms\": true, \"quiet_hours_enabled\": true}'::jsonb"
             ),
         ),
     )
