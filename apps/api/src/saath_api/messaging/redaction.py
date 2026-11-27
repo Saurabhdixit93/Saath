@@ -18,7 +18,19 @@ def redaction_hint_for_locale(locale: str = "en") -> str:
 _ZERO_WIDTH_CHARS: frozenset[str] = frozenset(
     {"\u200b", "\u200c", "\u200d", "\ufeff", "\u00ad", "\u034f", "\u180e"}
 )
-_KEYCAP_VARIATION_CHARS: frozenset[str] = frozenset({"\ufe0e", "\ufe0f", "\u20e3"})
+_KEYCAP_VARIATION_CHARS: frozenset[str] = frozenset(
+    {
+        *(chr(cp) for cp in range(0xFE00, 0xFE10)),
+        *(chr(cp) for cp in range(0xE0100, 0xE01F0)),
+        "\u20dd",
+        "\u20de",
+        "\u20df",
+        "\u20e0",
+        "\u20e2",
+        "\u20e3",
+        "\u20e4",
+    }
+)
 _DEVANAGARI_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 
 _DIGIT_WORDS: dict[str, int] = {
@@ -334,15 +346,18 @@ def _prepare_scan_views(raw: str) -> tuple[str, str, str, list[int]]:
 
 def _extend_trailing_keycap_marks(nfkc: str, end: int) -> int:
     n = len(nfkc)
-    while end < n and (
-        nfkc[end] in _KEYCAP_VARIATION_CHARS
-        or (
-            _is_invisible_format_char(nfkc[end])
-            and end + 1 < n
-            and nfkc[end + 1] in _KEYCAP_VARIATION_CHARS
-        )
-    ):
-        end += 1
+    while end < n:
+        if nfkc[end] in _KEYCAP_VARIATION_CHARS:
+            end += 1
+            continue
+        if _is_invisible_format_char(nfkc[end]):
+            probe = end + 1
+            while probe < n and _is_invisible_format_char(nfkc[probe]):
+                probe += 1
+            if probe < n and nfkc[probe] in _KEYCAP_VARIATION_CHARS:
+                end = probe + 1
+                continue
+        break
     return end
 
 
@@ -679,13 +694,16 @@ def _collect_tagged_spans(
             sub = scan[m.start() : m.end()].strip()
             if _DATE_LIKE_RE.fullmatch(sub):
                 continue
+            prefix = scan[max(0, m.start() - 32) : m.start()]
+            if regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE, _PHONE_INTL_RE) and _is_benign_date_span(
+                sub, prefix=prefix
+            ):
+                continue
             if regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE):
-                prefix = scan[max(0, m.start() - 32) : m.start()]
                 suffix = scan[m.end() : min(len(scan), m.end() + 32)]
                 num_tokens = re.findall(r"\d+", sub)
                 if (
-                    _is_benign_date_span(sub, prefix=prefix)
-                    or _is_benign_seat_list(sub, num_tokens, prefix, suffix)
+                    _is_benign_seat_list(sub, num_tokens, prefix, suffix)
                     or _is_benign_train_pair(sub, num_tokens, prefix)
                 ):
                     continue
@@ -778,7 +796,7 @@ def scrub_separated_ten_digit_pnrs(text: str) -> str:
         if _is_benign_date_span(m.group(0)):
             continue
         orig_start = scan_to_orig[m.start()]
-        orig_end = scan_to_orig[m.end() - 1] + 1
+        orig_end = _extend_trailing_keycap_marks(text, scan_to_orig[m.end() - 1] + 1)
         spans.append((orig_start, orig_end))
     if not spans:
         return text
