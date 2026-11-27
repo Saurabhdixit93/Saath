@@ -19,7 +19,7 @@ export default function AdminLoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await adminFetch<{ access?: string; token?: string }>("/v1/admin/auth/session", {
+      const res = await adminFetch<{ access?: string; token?: string; detail?: string }>("/v1/admin/auth/session", {
         method: "POST",
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
@@ -30,8 +30,8 @@ export default function AdminLoginPage() {
       } else {
         setError(res.data?.detail || "Sign in failed. Check your email allowlist.");
       }
-    } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }

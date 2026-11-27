@@ -25,7 +25,7 @@ export function clearAdminToken(): void {
   document.cookie = "saath_admin_token=; path=/; max-age=0";
 }
 
-export async function adminFetch<T = any>(
+export async function adminFetch<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ ok: boolean; status: number; data: T }> {
@@ -44,7 +44,7 @@ export async function adminFetch<T = any>(
     headers,
   });
 
-  let data: any = null;
+  let data: unknown = null;
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     try {
@@ -59,6 +59,6 @@ export async function adminFetch<T = any>(
   return {
     ok: res.ok,
     status: res.status,
-    data,
+    data: data as T,
   };
 }

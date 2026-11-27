@@ -42,3 +42,7 @@
 - Verified complete Python AST compilation across all modules and tests (`python3 -m compileall`).
 - Containerized full production stack in `docker-compose.yml` (`postgres:16`, `redis:7`, `api`, `worker`, `scheduler`, `web:3000`, `admin:3001`).
 
+
+## [Unreleased] — Docker build fixes
+- Fixed `apps/admin` production build: removed `any` usages (`adminFetch<T = unknown>`), surfaced the overview `loading` state via `aria-busy`, and added the missing `@types/node` devDependency.
+- Fixed `apps/web` production build: swap-card PNG fonts now resolve from the app root at runtime so webpack no longer tries to bundle `.woff` files.

@@ -88,7 +88,7 @@ export default function AdminOverviewPage() {
     <div className="min-h-dvh bg-[var(--bg)]">
       <meta name="robots" content="noindex, nofollow" />
       <AdminHeader />
-      <main className="mx-auto max-w-7xl space-y-8 px-6 py-8">
+      <main aria-busy={loading} className="mx-auto max-w-7xl space-y-8 px-6 py-8">
         <div>
           <h1
             className="text-2xl font-bold text-[var(--text)]"

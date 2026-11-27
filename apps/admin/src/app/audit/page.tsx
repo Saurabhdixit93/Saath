@@ -10,7 +10,7 @@ interface AuditEntry {
   action: string;
   resource: string;
   at: string;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 }
 
 export default function AuditLogPage() {

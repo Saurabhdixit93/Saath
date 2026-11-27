@@ -1,11 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import QRCode from "qrcode";
 import satori, { type Font } from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import type { SwapCardDTO } from "@saath/contracts";
 
-const require = createRequire(import.meta.url);
+// Resolve from the app root at runtime: `createRequire(import.meta.url)` makes webpack
+// try to bundle the .woff files, which it has no loader for.
+const require = createRequire(join(process.cwd(), "package.json"));
 
 let cachedFonts: Font[] | null = null;
 
