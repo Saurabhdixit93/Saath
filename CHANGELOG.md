@@ -48,3 +48,4 @@
 - Fixed `apps/web` production build: swap-card PNG fonts now resolve from the app root at runtime so webpack no longer tries to bundle `.woff` files.
 - `docker-compose.yml` now passes `NEXT_PUBLIC_*` as web/admin build args so browser bundles use the deploy's URLs instead of `localhost`.
 - Added `scripts/vm-env.sh` to generate a single-VM `.env` with fresh JWT/swap-card/VAPID keys, phone/PNR secrets, admin allowlist, and the correct Turnstile test secret.
+- Fixed `alembic upgrade head` failing on a fresh database: revision `0002_journeys_parties_goals_pricing` (35 chars) overflowed `alembic_version.version_num VARCHAR(32)`; renamed to `0002_journeys_parties_goals` and added `tests/test_alembic_revisions.py` to guard id length and a single head.

@@ -1,7 +1,7 @@
 """Matching candidates, swap proposals, seat locks, swap cards, and blocks
 
 Revision ID: 0003_matching_swaps_cards
-Revises: 0002_journeys_parties_goals_pricing
+Revises: 0002_journeys_parties_goals
 Create Date: 2026-11-25 16:45:00.000000
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0003_matching_swaps_cards"
-down_revision: str | Sequence[str] | None = "0002_journeys_parties_goals_pricing"
+down_revision: str | Sequence[str] | None = "0002_journeys_parties_goals"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

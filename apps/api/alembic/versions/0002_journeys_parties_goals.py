@@ -1,6 +1,6 @@
 """Journeys, parties, goals, outbox, and R3 pricing tables
 
-Revision ID: 0002_journeys_parties_goals_pricing
+Revision ID: 0002_journeys_parties_goals
 Revises: 0001_identity_and_audit
 Create Date: 2026-11-25 15:25:00.000000
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0002_journeys_parties_goals_pricing"
+revision: str = "0002_journeys_parties_goals"
 down_revision: str | Sequence[str] | None = "0001_identity_and_audit"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
