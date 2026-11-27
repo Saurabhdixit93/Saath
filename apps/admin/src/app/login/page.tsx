@@ -28,7 +28,8 @@ export default function AdminLoginPage() {
         setAdminToken(token);
         router.push("/");
       } else {
-        setError(res.data?.detail || "Sign in failed. Check your email allowlist.");
+        const detail = (res.data as Record<string, unknown>)?.detail;
+        setError(typeof detail === "string" ? detail : "Sign in failed. Check your email allowlist.");
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "An unexpected error occurred.");
