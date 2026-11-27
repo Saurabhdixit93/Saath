@@ -26,7 +26,7 @@ interface ProviderHealthData {
 export default function AdminOverviewPage() {
   const [funnel, setFunnel] = useState<FunnelData | null>(null);
   const [health, setHealth] = useState<ProviderHealthData | null>(null);
-  const [_loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
