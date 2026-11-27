@@ -5,6 +5,7 @@ Revises: 0003_matching_swaps_cards
 Create Date: 2026-11-26 05:30:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -195,7 +196,8 @@ def upgrade() -> None:
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=False,
             server_default=sa.text(
-                "'{\"push\": true, \"whatsapp\": true, \"sms\": true, \"quiet_hours_enabled\": true}'::jsonb"
+                '\'{"push": true, "whatsapp": true, "sms": true, '
+                '"quiet_hours_enabled": true}\'::jsonb'
             ),
         ),
     )

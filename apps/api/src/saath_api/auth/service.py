@@ -18,9 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.dependencies import Actor, authorize
 from saath_api.auth.models import AuditLog, Device, RefreshToken, User
-from saath_api.journeys.models import Booking, SeatHolder
-from saath_api.parties.models import Party
-from saath_api.public.models import SeatInvite
 from saath_api.auth.schemas import (
     AnonymousAuthResponse,
     OtpStartRequest,
@@ -45,9 +42,12 @@ from saath_api.core.crypto import (
 from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import generate_opaque_token, uuid7
 from saath_api.core.redis import SlidingWindowRateLimiter
+from saath_api.journeys.models import Booking, SeatHolder
+from saath_api.parties.models import Party
 from saath_api.providers.base import ProviderError
 from saath_api.providers.messaging import MessagingProvider
 from saath_api.providers.turnstile import TurnstileVerifier
+from saath_api.public.models import SeatInvite
 
 _RELEASE_LOCK_LUA = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -81,7 +81,7 @@ async def _acquire_otp_lock(redis: Redis, request_id: str) -> AsyncIterator[None
         yield
     finally:
         try:
-            await redis.eval(_RELEASE_LOCK_LUA, 1, lock_key, lock_token)  # type: ignore[misc,no-untyped-call]
+            await redis.eval(_RELEASE_LOCK_LUA, 1, lock_key, lock_token)  # type: ignore[misc]
         except ResponseError:
             current = await redis.get(lock_key)
             if current == lock_token:
@@ -444,9 +444,7 @@ async def refresh_session(
 ) -> TokenPairResponse:
     token_digest = hash_token(raw_refresh)
     result = await db.execute(
-        select(RefreshToken)
-        .where(RefreshToken.token_hash == token_digest)
-        .with_for_update()
+        select(RefreshToken).where(RefreshToken.token_hash == token_digest).with_for_update()
     )
     token_row = result.scalar_one_or_none()
     if token_row is None:

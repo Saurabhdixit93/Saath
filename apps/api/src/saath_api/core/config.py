@@ -20,10 +20,14 @@ def _generate_dev_ed25519_pair() -> tuple[str, str]:
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode("utf-8")
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
     return private_pem, public_pem
 
 
@@ -149,7 +153,8 @@ def load_yaml_configs(config_dir: Path | None = None) -> YamlConfigBundle:
     for plan_code, plan in plans_bundle.plans.items():
         if plan.priority_seat_bump:
             raise ValueError(
-                f"Plan {plan_code!r} violates anti-seat-sale invariant: priority_seat_bump must be false"
+                f"Plan {plan_code!r} violates anti-seat-sale invariant: "
+                "priority_seat_bump must be false"
             )
 
     return YamlConfigBundle(
@@ -163,8 +168,8 @@ def load_yaml_configs(config_dir: Path | None = None) -> YamlConfigBundle:
 _DEV_PNR_PEPPER = "dev-pnr-pepper-change-in-production-32b"
 _DEV_PHONE_AES_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
 _DEV_PHONE_BLIND_INDEX_KEY = "YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODk="
-_DEV_INVITE_TOKEN_SECRET = "dev-invite-token-secret-change-in-production"
-_DEV_WHATSAPP_APP_SECRET = "dev-whatsapp-secret"
+_DEV_INVITE_TOKEN_SECRET = "dev-invite-token-secret-change-in-production"  # noqa: S105
+_DEV_WHATSAPP_APP_SECRET = "dev-whatsapp-secret"  # noqa: S105
 
 
 def _validate_b64_32bytes(value: str, field_name: str) -> None:
@@ -312,7 +317,8 @@ class Settings(BaseSettings):
                 raise ValueError("TURNSTILE_MODE=fake is forbidden when ENV=production")
             if self.turnstile_mode == "cloudflare" and not self.turnstile_secret_key.strip():
                 raise ValueError(
-                    "TURNSTILE_SECRET_KEY is mandatory when ENV=production and TURNSTILE_MODE=cloudflare"
+                    "TURNSTILE_SECRET_KEY is mandatory when ENV=production and "
+                    "TURNSTILE_MODE=cloudflare"
                 )
             if self.whatsapp_mode == "fake":
                 raise ValueError("WHATSAPP_MODE=fake is forbidden when ENV=production")

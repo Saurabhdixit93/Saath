@@ -31,7 +31,9 @@ class ConsentItemInput(BaseModel):
 
 
 class SaveConsentsRequest(BaseModel):
-    consents: list[ConsentItemInput] = Field(..., min_length=1, description="List of consent items to record")
+    consents: list[ConsentItemInput] = Field(
+        ..., min_length=1, description="List of consent items to record"
+    )
 
 
 class ConsentRecordDTO(BaseModel):

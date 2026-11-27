@@ -51,19 +51,57 @@ async def test_concurrent_accept_race_and_stale_version_conflict(
     h_b = {"Authorization": f"Bearer {tok_b}"}
     h_c = {"Authorization": f"Bearer {tok_c}"}
 
-    v_a = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
-    v_b = (await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})).json()
-    v_c = (await client.post("/v1/journeys/verify", headers=h_c, json={"mode": "train", "pnr": "4333333333"})).json()
+    v_a = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    v_b = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+    v_c = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_c, json={"mode": "train", "pnr": "4333333333"}
+        )
+    ).json()
 
-    await client.put(f"/v1/parties/{v_b['party']['id']}/goal", headers=h_b, json={"goal_type": "open_to_help", "movers": [v_b["seat_holders"][0]["id"]], "constraints": {}})
-    await client.put(f"/v1/parties/{v_c['party']['id']}/goal", headers=h_c, json={"goal_type": "open_to_help", "movers": [v_c["seat_holders"][0]["id"]], "constraints": {}})
-    await client.put(f"/v1/parties/{v_a['party']['id']}/goal", headers=h_a, json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}})
+    await client.put(
+        f"/v1/parties/{v_b['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_b["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{v_c['party']['id']}/goal",
+        headers=h_c,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_c["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{v_a['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}},
+    )
 
-    matches = (await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)).json()["items"]
+    matches = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
     assert len(matches) >= 2
 
-    s1 = (await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})).json()
-    s2 = (await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[1]["card_id"]})).json()
+    s1 = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})
+    ).json()
+    s2 = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[1]["card_id"]})
+    ).json()
 
     r1, r2 = await asyncio.gather(
         client.post(f"/v1/swaps/{s1['id']}/accept", headers=h_a, json={"version": s1["version"]}),
@@ -118,55 +156,112 @@ async def test_3way_decline_expiry_chart_invalidation_card_and_completion(
     h_b = {"Authorization": f"Bearer {tok_b}"}
     h_c = {"Authorization": f"Bearer {tok_c}"}
 
-    v_a = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
-    v_b = (await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})).json()
-    v_c = (await client.post("/v1/journeys/verify", headers=h_c, json={"mode": "train", "pnr": "4333333333"})).json()
+    v_a = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    v_b = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+    v_c = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_c, json={"mode": "train", "pnr": "4333333333"}
+        )
+    ).json()
 
-    await client.put(f"/v1/parties/{v_b['party']['id']}/goal", headers=h_b, json={"goal_type": "upper", "movers": [v_b["seat_holders"][0]["id"]], "constraints": {}})
+    await client.put(
+        f"/v1/parties/{v_b['party']['id']}/goal",
+        headers=h_b,
+        json={"goal_type": "upper", "movers": [v_b["seat_holders"][0]["id"]], "constraints": {}},
+    )
     await client.put(
         f"/v1/parties/{v_c['party']['id']}/goal",
         headers=h_c,
-        json={"goal_type": "specific_seats", "movers": [v_c["seat_holders"][0]["id"]], "preferred_seats": ["B3-20"], "constraints": {}},
+        json={
+            "goal_type": "specific_seats",
+            "movers": [v_c["seat_holders"][0]["id"]],
+            "preferred_seats": ["B3-20"],
+            "constraints": {},
+        },
     )
-    await client.put(f"/v1/parties/{v_a['party']['id']}/goal", headers=h_a, json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}})
+    await client.put(
+        f"/v1/parties/{v_a['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}},
+    )
 
-    c3_items = (await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=cycle", headers=h_a)).json()["items"]
+    c3_items = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=cycle", headers=h_a)
+    ).json()["items"]
     assert any(m["kind"] == "cycle3" for m in c3_items)
     c3_card = next(m for m in c3_items if m["kind"] == "cycle3")
 
     # 3-way proposal -> B accepts -> C declines -> locks released
-    p_dec = (await client.post("/v1/swaps", headers=h_a, json={"card_id": c3_card["card_id"]})).json()
-    b_acc = await client.post(f"/v1/swaps/{p_dec['id']}/accept", headers=h_b, json={"version": p_dec["version"]})
+    p_dec = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": c3_card["card_id"]})
+    ).json()
+    b_acc = await client.post(
+        f"/v1/swaps/{p_dec['id']}/accept", headers=h_b, json={"version": p_dec["version"]}
+    )
     assert b_acc.status_code == 200
-    c_dec = await client.post(f"/v1/swaps/{p_dec['id']}/decline", headers=h_c, json={"reason": "No thanks"})
+    c_dec = await client.post(
+        f"/v1/swaps/{p_dec['id']}/decline", headers=h_c, json={"reason": "No thanks"}
+    )
     assert c_dec.status_code == 200
     assert c_dec.json()["status"] == "declined"
 
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
-        locks = (await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(p_dec["id"])))).scalars().all()
+        locks = (
+            (await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(p_dec["id"]))))
+            .scalars()
+            .all()
+        )
         assert locks == []
 
     # Re-propose & test expiry job
-    p_exp = (await client.post("/v1/swaps", headers=h_a, json={"card_id": c3_card["card_id"]})).json()
+    p_exp = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": c3_card["card_id"]})
+    ).json()
     async with app.state.session_factory() as db:
-        prop = (await db.execute(select(SwapProposal).where(SwapProposal.id == UUID(p_exp["id"])))).scalar_one()
+        prop = (
+            await db.execute(select(SwapProposal).where(SwapProposal.id == UUID(p_exp["id"])))
+        ).scalar_one()
         prop.expires_at = datetime.now(UTC) - timedelta(minutes=1)
         await db.commit()
         expired_count = await expire_pending_swaps(db=db, redis=app.state.redis)
         assert expired_count == 1
 
     # Re-propose & confirm all 3 -> Ed25519 SwapCard + SVG/PNG + public verify
-    p_ok = (await client.post("/v1/swaps", headers=h_a, json={"card_id": c3_card["card_id"]})).json()
-    a1 = (await client.post(f"/v1/swaps/{p_ok['id']}/accept", headers=h_a, json={"version": p_ok["version"]})).json()
-    a2 = (await client.post(f"/v1/swaps/{p_ok['id']}/accept", headers=h_b, json={"version": a1["version"]})).json()
-    a3 = (await client.post(f"/v1/swaps/{p_ok['id']}/accept", headers=h_c, json={"version": a2["version"]})).json()
+    p_ok = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": c3_card["card_id"]})
+    ).json()
+    a1 = (
+        await client.post(
+            f"/v1/swaps/{p_ok['id']}/accept", headers=h_a, json={"version": p_ok["version"]}
+        )
+    ).json()
+    a2 = (
+        await client.post(
+            f"/v1/swaps/{p_ok['id']}/accept", headers=h_b, json={"version": a1["version"]}
+        )
+    ).json()
+    a3 = (
+        await client.post(
+            f"/v1/swaps/{p_ok['id']}/accept", headers=h_c, json={"version": a2["version"]}
+        )
+    ).json()
     assert a3["status"] == "confirmed"
 
     card_json = (await client.get(f"/v1/swaps/{p_ok['id']}/card?format=json", headers=h_a)).json()
     assert card_json["public_code"].startswith("SW-")
     async with app.state.session_factory() as db:
-        sc = (await db.execute(select(SwapCard).where(SwapCard.proposal_id == UUID(p_ok["id"])))).scalar_one()
+        sc = (
+            await db.execute(select(SwapCard).where(SwapCard.proposal_id == UUID(p_ok["id"])))
+        ).scalar_one()
         assert verify_swap_card_signature(
             sc.payload_json, bytes(sc.signature), app.state.settings.swap_card_signing_public_key
         )
@@ -185,13 +280,21 @@ async def test_3way_decline_expiry_chart_invalidation_card_and_completion(
     assert pub_ok.json()["revoked"] is False
 
     # Post-journey confirmation -> completed & reliability incremented
-    await client.post(f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_a, json={"answer": "yes"})
+    await client.post(
+        f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_a, json={"answer": "yes"}
+    )
     # Conflicting answer rejected
-    conflict = await client.post(f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_a, json={"answer": "no"})
+    conflict = await client.post(
+        f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_a, json={"answer": "no"}
+    )
     assert conflict.status_code == 409
 
-    await client.post(f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_b, json={"answer": "yes"})
-    fin = await client.post(f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_c, json={"answer": "yes"})
+    await client.post(
+        f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_b, json={"answer": "yes"}
+    )
+    fin = await client.post(
+        f"/v1/swaps/{p_ok['id']}/confirm-completion", headers=h_c, json={"answer": "yes"}
+    )
     assert fin.status_code == 200
     assert fin.json()["status"] == "completed"
 
@@ -210,19 +313,53 @@ async def test_chart_change_invalidates_confirmed_swap_and_revokes_card(
     h_a = {"Authorization": f"Bearer {tok_a}"}
     h_b = {"Authorization": f"Bearer {tok_b}"}
 
-    v_a = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
-    v_b = (await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})).json()
+    v_a = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    v_b = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
 
-    await client.put(f"/v1/parties/{v_b['party']['id']}/goal", headers=h_b, json={"goal_type": "open_to_help", "movers": [v_b["seat_holders"][0]["id"]], "constraints": {}})
-    await client.put(f"/v1/parties/{v_a['party']['id']}/goal", headers=h_a, json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}})
+    await client.put(
+        f"/v1/parties/{v_b['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_b["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{v_a['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}},
+    )
 
-    matches = (await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)).json()["items"]
-    swap = (await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})).json()
-    a1 = (await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]})).json()
-    a2 = (await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": a1["version"]})).json()
+    matches = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    swap = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})
+    ).json()
+    a1 = (
+        await client.post(
+            f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]}
+        )
+    ).json()
+    a2 = (
+        await client.post(
+            f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": a1["version"]}
+        )
+    ).json()
     assert a2["status"] == "confirmed"
 
-    code = (await client.get(f"/v1/swaps/{swap['id']}/card?format=json", headers=h_a)).json()["public_code"]
+    code = (await client.get(f"/v1/swaps/{swap['id']}/card?format=json", headers=h_a)).json()[
+        "public_code"
+    ]
 
     rev = await client.post(
         f"/v1/journeys/{v_a['journey']['id']}/reverify",
@@ -247,13 +384,25 @@ async def test_delete_journey_booking_invalidates_active_swap_and_revokes_card(
     h_a = {"Authorization": f"Bearer {tok_a}"}
     h_b = {"Authorization": f"Bearer {tok_b}"}
 
-    v_a = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
-    v_b = (await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})).json()
+    v_a = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    v_b = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
 
     await client.put(
         f"/v1/parties/{v_b['party']['id']}/goal",
         headers=h_b,
-        json={"goal_type": "open_to_help", "movers": [v_b["seat_holders"][0]["id"]], "constraints": {}},
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_b["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
     )
     await client.put(
         f"/v1/parties/{v_a['party']['id']}/goal",
@@ -261,13 +410,27 @@ async def test_delete_journey_booking_invalidates_active_swap_and_revokes_card(
         json={"goal_type": "lower", "movers": [v_a["seat_holders"][0]["id"]], "constraints": {}},
     )
 
-    matches = (await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)).json()["items"]
-    swap = (await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})).json()
-    a1 = (await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]})).json()
-    a2 = (await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": a1["version"]})).json()
+    matches = (
+        await client.get(f"/v1/parties/{v_a['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    swap = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})
+    ).json()
+    a1 = (
+        await client.post(
+            f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]}
+        )
+    ).json()
+    a2 = (
+        await client.post(
+            f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": a1["version"]}
+        )
+    ).json()
     assert a2["status"] == "confirmed"
 
-    code = (await client.get(f"/v1/swaps/{swap['id']}/card?format=json", headers=h_a)).json()["public_code"]
+    code = (await client.get(f"/v1/swaps/{swap['id']}/card?format=json", headers=h_a)).json()[
+        "public_code"
+    ]
 
     del_res = await client.delete(f"/v1/journeys/{v_a['journey']['id']}", headers=h_a)
     assert del_res.status_code == 200
@@ -277,7 +440,11 @@ async def test_delete_journey_booking_invalidates_active_swap_and_revokes_card(
 
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
-        locks = (await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap["id"])))).scalars().all()
+        locks = (
+            (await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap["id"]))))
+            .scalars()
+            .all()
+        )
         assert locks == []
 
     pub_after = (await client.get(f"/v1/public/swap-cards/{code}")).json()
@@ -315,12 +482,20 @@ async def test_block_invalidates_pending_swap_releases_locks_and_blocks_create_o
     await client.put(
         f"/v1/parties/{v_b['party']['id']}/goal",
         headers=h_b,
-        json={"goal_type": "open_to_help", "movers": [v_b["seat_holders"][0]["id"]], "constraints": {}},
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_b["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
     )
     await client.put(
         f"/v1/parties/{v_c['party']['id']}/goal",
         headers=h_c,
-        json={"goal_type": "open_to_help", "movers": [v_c["seat_holders"][0]["id"]], "constraints": {}},
+        json={
+            "goal_type": "open_to_help",
+            "movers": [v_c["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
     )
     await client.put(
         f"/v1/parties/{v_a['party']['id']}/goal",
@@ -349,8 +524,10 @@ async def test_block_invalidates_pending_swap_releases_locks_and_blocks_create_o
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
         locks_before = (
-            await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap_0["id"])))
-        ).scalars().all()
+            (await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap_0["id"]))))
+            .scalars()
+            .all()
+        )
         assert len(locks_before) == 1
 
     # 2. A blocks partner 1 -> pending swap invalidated, SeatLock released, neutral SwapInvalidated outbox written
@@ -363,24 +540,30 @@ async def test_block_invalidates_pending_swap_releases_locks_and_blocks_create_o
 
     async with app.state.session_factory() as db:
         locks_after = (
-            await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap_0["id"])))
-        ).scalars().all()
+            (await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap_0["id"]))))
+            .scalars()
+            .all()
+        )
         assert locks_after == []
         outbox_rows = (
-            await db.execute(
-                select(NotificationsOutbox).where(
-                    NotificationsOutbox.event == "SwapInvalidated",
-                    NotificationsOutbox.user_id.in_([UUID(uid_a), UUID(uid_p1)]),
+            (
+                await db.execute(
+                    select(NotificationsOutbox).where(
+                        NotificationsOutbox.event == "SwapInvalidated",
+                        NotificationsOutbox.user_id.in_([UUID(uid_a), UUID(uid_p1)]),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(outbox_rows) == 2
         for row in outbox_rows:
             assert row.payload.get("reason") == "user_blocked"
             rendered_en = render_notification(event=row.event, payload=row.payload, locale="en")
             rendered_hi = render_notification(event=row.event, payload=row.payload, locale="hi")
             assert "Train chart updated" not in rendered_en.body
-            assert "Swap proposal closed" == rendered_en.title
+            assert rendered_en.title == "Swap proposal closed"
             assert "चार्ट" not in rendered_hi.body
 
     # 3. Race-window guard: Block created after match card fetch rejects accept & create with 403 user_blocked
@@ -491,8 +674,10 @@ async def test_block_does_not_invalidate_confirmed_swap_or_release_locks(
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
         locks = (
-            await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap["id"])))
-        ).scalars().all()
+            (await db.execute(select(SeatLock).where(SeatLock.proposal_id == UUID(swap["id"]))))
+            .scalars()
+            .all()
+        )
         assert len(locks) == 2
         res = await invalidate_pending_swaps_for_user_pair(
             db=db, user_a=UUID(uid_a), user_b=UUID(uid_b)

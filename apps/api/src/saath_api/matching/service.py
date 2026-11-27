@@ -56,7 +56,7 @@ from saath_api.matching.scoring import (
     format_reliability_text,
     score_to_label,
 )
-from saath_api.parties.models import Goal, Party, PartyMember
+from saath_api.parties.models import Goal, PartyMember
 from saath_api.parties.service import _load_party_and_actor_membership
 from saath_api.providers.flight.layouts import (
     _seat_type_for_column,
@@ -94,9 +94,7 @@ def compute_matches_in_memory(
     all_cycles = enumerate_bounded_cycles(
         graph, max_cycle_len=4, max_cycles_per_root=max_cycles_per_root
     )
-    packed_cycles = pack_disjoint_cycles(
-        all_cycles, graph.nodes, time_limit_seconds=cp_sat_limit
-    )
+    packed_cycles = pack_disjoint_cycles(all_cycles, graph.nodes, time_limit_seconds=cp_sat_limit)
 
     by_party: dict[UUID, list[SeatNode]] = defaultdict(list)
     for n in nodes:
@@ -158,9 +156,7 @@ async def _load_journey_nodes(
         users_by_id = {u.id: u for u in u_res.scalars().all()}
 
         b_res = await db.execute(
-            select(Block).where(
-                Block.blocker.in_(user_ids) | Block.blocked.in_(user_ids)
-            )
+            select(Block).where(Block.blocker.in_(user_ids) | Block.blocked.in_(user_ids))
         )
         for blk in b_res.scalars().all():
             blocks_set.add((blk.blocker, blk.blocked))
@@ -214,9 +210,7 @@ async def _load_journey_nodes(
                 no_middle=bool(constraints.get("no_middle", False)),
                 same_coach_only=bool(constraints.get("same_coach_only", False)),
                 verified_only=bool(constraints.get("verified_only", False)),
-                standing_give_to=str(standing.get("give_to"))
-                if standing.get("give_to")
-                else None,
+                standing_give_to=str(standing.get("give_to")) if standing.get("give_to") else None,
                 reliability_accepted=user_obj.reliability_accepted if user_obj else 0,
                 reliability_completed=user_obj.reliability_completed if user_obj else 0,
                 is_locked=sh.id in locked_ids,
@@ -241,7 +235,7 @@ return 0
 
 async def _release_match_lock(redis: Redis, lock_key: str, lock_token: str) -> None:
     try:
-        await redis.eval(_UNLOCK_LOCK_LUA, 1, lock_key, lock_token)  # type: ignore[misc,no-untyped-call]
+        await redis.eval(_UNLOCK_LOCK_LUA, 1, lock_key, lock_token)  # type: ignore[misc]
     except ResponseError as exc:
         if "lupa" not in str(exc).lower() and "unknown command" not in str(exc).lower():
             return
@@ -250,9 +244,9 @@ async def _release_match_lock(redis: Redis, lock_key: str, lock_token: str) -> N
             if current == lock_token:
                 await redis.delete(lock_key)
         except Exception:
-            pass
+            logger.warning("match_lock_release_fallback_failed", lock_key=lock_key)
     except Exception:
-        pass
+        logger.warning("match_lock_release_failed", lock_key=lock_key)
 
 
 async def recompute_journey_matches(
@@ -263,9 +257,7 @@ async def recompute_journey_matches(
     publish_events: bool = True,
 ) -> int:
     ji = (
-        await db.execute(
-            select(JourneyInstance).where(JourneyInstance.id == journey_instance_id)
-        )
+        await db.execute(select(JourneyInstance).where(JourneyInstance.id == journey_instance_id))
     ).scalar_one_or_none()
     if ji is None:
         return 0
@@ -284,9 +276,7 @@ async def recompute_journey_matches(
                 await redis.set(dirty_key, "1", ex=15)
                 for _ in range(40):
                     await asyncio.sleep(0.05)
-                    lock_acquired = bool(
-                        await redis.set(lock_key, lock_token, nx=True, ex=10)
-                    )
+                    lock_acquired = bool(await redis.set(lock_key, lock_token, nx=True, ex=10))
                     if lock_acquired:
                         break
         except Exception:
@@ -309,13 +299,14 @@ async def recompute_journey_matches(
                     await redis.delete(dirty_key)
                     await redis.delete(debounce_key)
                 except Exception:
-                    pass
+                    logger.warning(
+                        "match_dirty_key_clear_failed",
+                        journey_instance_id=str(journey_instance_id),
+                    )
 
             ji_curr = (
                 await db.execute(
-                    select(JourneyInstance).where(
-                        JourneyInstance.id == journey_instance_id
-                    )
+                    select(JourneyInstance).where(JourneyInstance.id == journey_instance_id)
                 )
             ).scalar_one_or_none()
             if ji_curr is None:
@@ -341,7 +332,8 @@ async def recompute_journey_matches(
                 )
             )
 
-            # Group cycles per party (packed global cycles boosted to top, plus up to 20 alternatives)
+            # Group cycles per party (packed global cycles boosted to top,
+            # plus up to 20 alternatives)
             party_cycles: dict[UUID, list[CandidateCycle]] = defaultdict(list)
             for cyc in computed.all_cycles:
                 involved_parties = {computed.graph.nodes[uid].party_id for uid in cyc.nodes}
@@ -354,9 +346,7 @@ async def recompute_journey_matches(
 
             # Emit party bay plans first for together/same_coach parties
             for plan in computed.party_plans:
-                plan_card_id = _deterministic_card_id(
-                    plan.party_id, "plan", plan.all_seat_holders
-                )
+                plan_card_id = _deterministic_card_id(plan.party_id, "plan", plan.all_seat_holders)
                 if plan_card_id in seen_card_ids:
                     continue
                 seen_card_ids.add(plan_card_id)
@@ -473,7 +463,10 @@ async def recompute_journey_matches(
                     if await redis.get(dirty_key):
                         continue
                 except Exception:
-                    pass
+                    logger.warning(
+                        "match_dirty_key_check_failed",
+                        journey_instance_id=str(journey_instance_id),
+                    )
             break
 
         return last_version
@@ -499,9 +492,7 @@ async def schedule_or_run_match_recompute(
         try:
             if debounce_sec > 0.0:
                 px_ms = max(100, int(round(debounce_sec * 1000)))
-                scheduled = bool(
-                    await redis.set(debounce_key, "1", nx=True, px=px_ms)
-                )
+                scheduled = bool(await redis.set(debounce_key, "1", nx=True, px=px_ms))
             else:
                 scheduled = True
             if scheduled:
@@ -537,9 +528,7 @@ async def _ensure_matches_computed_for_version(
     marker_exists = False
     if redis is not None:
         try:
-            marker_exists = bool(
-                await redis.get(f"match:computed:{ji.id}:{ji.match_version}")
-            )
+            marker_exists = bool(await redis.get(f"match:computed:{ji.id}:{ji.match_version}"))
         except Exception:
             marker_exists = False
 
@@ -591,12 +580,8 @@ async def get_party_matches(
     party_id: UUID,
     kind: Literal["pair", "cycle", "plan"] | None = None,
 ) -> MatchesResponse:
-    party, ji, _ = await _load_party_and_actor_membership(
-        db=db, actor=actor, party_id=party_id
-    )
-    await _ensure_matches_computed_for_version(
-        db=db, redis=redis, ji=ji, party_id=party.id
-    )
+    party, ji, _ = await _load_party_and_actor_membership(db=db, actor=actor, party_id=party_id)
+    await _ensure_matches_computed_for_version(db=db, redis=redis, ji=ji, party_id=party.id)
 
     stmt = (
         select(MatchCandidate)
@@ -617,9 +602,7 @@ async def get_party_matches(
     if not candidates:
         return MatchesResponse(match_version=ji.match_version, items=[])
 
-    nodes, _, _ = await _load_journey_nodes(
-        db, ji.id, mode=ji.mode, layout_ref=ji.layout_ref
-    )
+    nodes, _, _ = await _load_journey_nodes(db, ji.id, mode=ji.mode, layout_ref=ji.layout_ref)
     node_map = _node_by_seat_holder_map(nodes)
 
     items: list[MatchCardDTO] = []
@@ -632,9 +615,7 @@ async def get_party_matches(
         if not resolved_nodes:
             continue
 
-        my_indices = [
-            idx for idx, n in enumerate(resolved_nodes) if n.party_id == party.id
-        ]
+        my_indices = [idx for idx, n in enumerate(resolved_nodes) if n.party_id == party.id]
         if not my_indices:
             continue
 
@@ -679,11 +660,19 @@ async def get_party_matches(
                             )
                         )
             my_primary = node_map[resolved_nodes[my_indices[0]].seat_holder_id]
-            target_coach = str(meta.get("target_coach") or (first_partner.coach if first_partner else my_primary.coach) or "B3")
+            target_coach = str(
+                meta.get("target_coach")
+                or (first_partner.coach if first_partner else my_primary.coach)
+                or "B3"
+            )
             target_bay = meta.get("target_bay")
             if first_partner is None:
-                first_partner = next((n for n in resolved_nodes if n.party_id != party.id), my_primary)
-            you_give_str = ", ".join(my_gives[:2]) if my_gives else format_seat_descriptor(my_primary)
+                first_partner = next(
+                    (n for n in resolved_nodes if n.party_id != party.id), my_primary
+                )
+            you_give_str = (
+                ", ".join(my_gives[:2]) if my_gives else format_seat_descriptor(my_primary)
+            )
             you_get_dto = YouGetDTO(
                 coach=target_coach,
                 seat_type=(first_partner.seat_type or "LB"),
@@ -694,9 +683,7 @@ async def get_party_matches(
             my_idx = my_indices[0]
             my_node = resolved_nodes[my_idx]
             nxt_node = resolved_nodes[(my_idx + 1) % len(resolved_nodes)]
-            others_nodes = [
-                n for idx, n in enumerate(resolved_nodes) if idx != my_idx
-            ]
+            others_nodes = [n for idx, n in enumerate(resolved_nodes) if idx != my_idx]
             you_give_str = format_seat_descriptor(my_node)
             you_get_dto = YouGetDTO(
                 coach=(nxt_node.coach or "CABIN"),
@@ -723,7 +710,7 @@ async def get_party_matches(
         items.append(
             MatchCardDTO(
                 card_id=mc.card_id,
-                kind=mc.kind,  # type: ignore[arg-type]
+                kind=mc.kind,
                 score=int(mc.score),
                 label=score_to_label(int(mc.score)),
                 you_give=you_give_str,
@@ -751,29 +738,28 @@ async def get_coach_map(
     ji, booking, party = await _load_actor_journey_context(
         db=db, actor=actor, journey_id=journey_id
     )
-    await _ensure_matches_computed_for_version(
-        db=db, redis=redis, ji=ji, party_id=party.id
-    )
+    await _ensure_matches_computed_for_version(db=db, redis=redis, ji=ji, party_id=party.id)
 
-    nodes, blocks, _ = await _load_journey_nodes(
-        db, ji.id, mode=ji.mode, layout_ref=ji.layout_ref
-    )
-    node_map = _node_by_seat_holder_map(nodes)
+    nodes, blocks, _ = await _load_journey_nodes(db, ji.id, mode=ji.mode, layout_ref=ji.layout_ref)
     own_sh_ids = {n.seat_holder_id for n in nodes if n.booking_id == booking.id}
     party_sh_ids = {n.seat_holder_id for n in nodes if n.party_id == party.id}
 
     # Build match target map (seat_holder_id -> card_id) and incoming edges
     match_card_by_target: dict[UUID, str] = {}
     cand_rows = (
-        await db.execute(
-            select(MatchCandidate)
-            .where(
-                MatchCandidate.for_party_id == party.id,
-                MatchCandidate.match_version == ji.match_version,
+        (
+            await db.execute(
+                select(MatchCandidate)
+                .where(
+                    MatchCandidate.for_party_id == party.id,
+                    MatchCandidate.match_version == ji.match_version,
+                )
+                .order_by(MatchCandidate.score.desc())
             )
-            .order_by(MatchCandidate.score.desc())
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for mc in cand_rows:
         cyc = mc.cycle_seat_holders
@@ -812,7 +798,9 @@ async def get_coach_map(
                     continue
                 stype = _seat_type_for_column(spec, col_idx)
                 occ = by_seat_no.get(seat_no)
-                state: Literal["mine", "party", "match", "incoming", "occupied", "unknown"] = "unknown"
+                state: Literal["mine", "party", "match", "incoming", "occupied", "unknown"] = (
+                    "unknown"
+                )
                 card_id: str | None = None
                 alias: str | None = None
                 if occ is not None:
@@ -899,7 +887,8 @@ async def get_coach_map(
     )
     coach_spec = build_coach_layout(tclass)
 
-    # Map occupied seats in target_coach (prefer mine/party/match if multiple segments share a physical seat)
+    # Map occupied seats in target_coach (prefer mine/party/match if multiple segments
+    # share a physical seat)
     occupants_by_seat: dict[str, list[SeatNode]] = defaultdict(list)
     for n in nodes:
         if n.coach and n.coach.strip().upper() == target_coach and n.seat_no:

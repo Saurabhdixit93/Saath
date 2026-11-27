@@ -10,9 +10,7 @@ from saath_api.core.config import Settings
 from saath_api.core.crypto import decode_jwt
 
 
-async def test_anonymous_session_success(
-    client: AsyncClient, test_settings: Settings
-) -> None:
+async def test_anonymous_session_success(client: AsyncClient, test_settings: Settings) -> None:
     resp = await client.post("/v1/auth/anonymous", json={"turnstile": "fake-ok"})
     assert resp.status_code == 200
     body = resp.json()

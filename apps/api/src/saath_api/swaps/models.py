@@ -54,22 +54,16 @@ class SwapProposal(Base):
         nullable=True,
     )
     kind: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'pending'")
-    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_card_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    version: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("0")
-    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    confirmed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SwapParticipant(Base):
@@ -110,12 +104,8 @@ class SwapParticipant(Base):
     gets_seat_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     gives_bay: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     gets_bay: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
-    decision: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'pending'")
-    )
-    decided_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    decision: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     post_confirm: Mapped[str | None] = mapped_column(Text, nullable=True)
     post_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -152,9 +142,7 @@ class SwapCard(Base):
     public_code: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     payload_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     signature: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    revoked: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
+    revoked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     revoked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

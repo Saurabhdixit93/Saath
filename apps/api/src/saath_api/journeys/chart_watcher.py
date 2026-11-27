@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -27,11 +26,11 @@ _CHART_STATE_RANK: dict[str, int] = {"pending": 0, "first": 1, "final": 2}
 # Deterministic known train departure times in IST (used by public chart-time lookup)
 _KNOWN_TRAIN_DEPARTURE_IST: dict[str, time] = {
     "12009": time(6, 20),  # Mumbai Central - Ahmedabad Shatabdi (morning window)
-    "12002": time(6, 0),   # Bhopal Shatabdi
-    "22436": time(6, 0),   # Vande Bharat Express
-    "12951": time(16, 55), # Mumbai Tejas Rajdhani (evening)
+    "12002": time(6, 0),  # Bhopal Shatabdi
+    "22436": time(6, 0),  # Vande Bharat Express
+    "12951": time(16, 55),  # Mumbai Tejas Rajdhani (evening)
     "12952": time(16, 55),
-    "12627": time(19, 20), # Karnataka Express
+    "12627": time(19, 20),  # Karnataka Express
 }
 
 
@@ -75,27 +74,33 @@ def compute_public_train_chart_time(
     )
 
 
-async def _collect_journey_user_ids(
-    db: AsyncSession, journey_instance_id: UUID
-) -> set[UUID]:
+async def _collect_journey_user_ids(db: AsyncSession, journey_instance_id: UUID) -> set[UUID]:
     booking_uids = (
-        await db.execute(
-            select(Booking.owner_user_id).where(
-                Booking.journey_instance_id == journey_instance_id,
-                Booking.owner_user_id.is_not(None),
+        (
+            await db.execute(
+                select(Booking.owner_user_id).where(
+                    Booking.journey_instance_id == journey_instance_id,
+                    Booking.owner_user_id.is_not(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     sh_uids = (
-        await db.execute(
-            select(SeatHolder.linked_user_id)
-            .join(Booking, Booking.id == SeatHolder.booking_id)
-            .where(
-                Booking.journey_instance_id == journey_instance_id,
-                SeatHolder.linked_user_id.is_not(None),
+        (
+            await db.execute(
+                select(SeatHolder.linked_user_id)
+                .join(Booking, Booking.id == SeatHolder.booking_id)
+                .where(
+                    Booking.journey_instance_id == journey_instance_id,
+                    SeatHolder.linked_user_id.is_not(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     return {uid for uid in (*booking_uids, *sh_uids) if uid is not None}
 
 
@@ -205,9 +210,7 @@ async def apply_journey_chart_update(
         inv_props = list(
             (
                 await db.execute(
-                    select(SwapProposal).where(
-                        SwapProposal.id.in_(invalidated_prop_ids)
-                    )
+                    select(SwapProposal).where(SwapProposal.id.in_(invalidated_prop_ids))
                 )
             )
             .scalars()
@@ -293,9 +296,7 @@ async def run_chart_watcher_tick(
 
     updated_count = 0
     for ji in due_journeys:
-        in_final_window = bool(
-            ji.departure_at is not None and ji.departure_at <= final_cutoff
-        )
+        in_final_window = bool(ji.departure_at is not None and ji.departure_at <= final_cutoff)
         if redis is not None:
             try:
                 if in_final_window:
@@ -309,8 +310,13 @@ async def run_chart_watcher_tick(
                         ex=max(60, poll_minutes * 60),
                     ):
                         continue
-            except Exception:
-                pass
+            except Exception as exc:
+                # Dedupe is best-effort: if Redis is unavailable, poll anyway.
+                logger.warning(
+                    "chart_watcher_dedupe_failed",
+                    journey_instance_id=str(ji.id),
+                    error=str(exc),
+                )
 
         try:
             live = await rail_router.get_live_status(ji.service_no, ji.service_date)

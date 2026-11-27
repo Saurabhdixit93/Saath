@@ -45,9 +45,7 @@ def _gender_band_from_raw(raw_gender: Any) -> Literal["F", "M", "U"]:
 def _normalize_vendor_booking(provider_name: str, data: dict[str, Any]) -> BookingDTO:
     # TODO: map live vendor JSON fields when credentials are configured.
     # Passenger names are explicitly ignored and never placed into PassengerDTO.
-    travel_class = normalize_coach_class(
-        str(data.get("travel_class") or data.get("class") or "3A")
-    )
+    travel_class = normalize_coach_class(str(data.get("travel_class") or data.get("class") or "3A"))
     raw_pax = data.get("passengers") or []
     passengers: list[PassengerDTO] = []
     for idx, item in enumerate(raw_pax, start=1):
@@ -80,19 +78,9 @@ def _normalize_vendor_booking(provider_name: str, data: dict[str, Any]) -> Booki
     dep_raw = data.get("departure_at")
     arr_raw = data.get("arrival_at")
     svc_raw = data.get("service_date")
-    svc_date = (
-        date.fromisoformat(str(svc_raw)) if svc_raw else datetime.now(UTC).date()
-    )
-    dep_at = (
-        datetime.fromisoformat(str(dep_raw))
-        if dep_raw
-        else datetime.now(UTC)
-    )
-    arr_at = (
-        datetime.fromisoformat(str(arr_raw))
-        if arr_raw
-        else dep_at
-    )
+    svc_date = date.fromisoformat(str(svc_raw)) if svc_raw else datetime.now(UTC).date()
+    dep_at = datetime.fromisoformat(str(dep_raw)) if dep_raw else datetime.now(UTC)
+    arr_at = datetime.fromisoformat(str(arr_raw)) if arr_raw else dep_at
     chart_raw = str(data.get("chart_state") or "pending").lower()
     chart_state: Literal["pending", "first", "final", "na"] = (
         chart_raw  # type: ignore[assignment]

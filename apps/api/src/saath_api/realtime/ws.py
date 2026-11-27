@@ -79,12 +79,8 @@ async def _verify_convo_membership_and_not_blocked(
             blocked_row = (
                 await db.execute(
                     select(Block.blocker).where(
-                        (
-                            (Block.blocker == user_id) & Block.blocked.in_(other_ids)
-                        )
-                        | (
-                            (Block.blocked == user_id) & Block.blocker.in_(other_ids)
-                        )
+                        ((Block.blocker == user_id) & Block.blocked.in_(other_ids))
+                        | ((Block.blocked == user_id) & Block.blocker.in_(other_ids))
                     )
                 )
             ).first()
@@ -146,9 +142,7 @@ async def handle_websocket(websocket: WebSocket) -> None:
 
     channels: list[str] = []
     if actor.kind == "user" and actor.user_id is not None:
-        user_status, convo_ids = await _load_user_status_and_convos(
-            session_factory, actor.user_id
-        )
+        user_status, convo_ids = await _load_user_status_and_convos(session_factory, actor.user_id)
         if user_status in (None, "banned", "deleted"):
             with contextlib.suppress(Exception):
                 await websocket.close(code=4001, reason="unauthorized")
@@ -188,7 +182,11 @@ async def handle_websocket(websocket: WebSocket) -> None:
                 continue
             if payload.get("type") == "_sub":
                 chan = payload.get("channel")
-                if isinstance(chan, str) and chan.startswith("conversation:") and actor.user_id is not None:
+                if (
+                    isinstance(chan, str)
+                    and chan.startswith("conversation:")
+                    and actor.user_id is not None
+                ):
                     raw_cid = chan.split("conversation:", 1)[1]
                     with contextlib.suppress(ValueError):
                         cid = UUID(raw_cid)
@@ -268,7 +266,8 @@ async def handle_websocket(websocket: WebSocket) -> None:
                 task.cancel()
         with contextlib.suppress(Exception):
             await pubsub.unsubscribe()
+        # redis-py's PubSub.aclose() is unannotated.
         with contextlib.suppress(Exception):
-            await pubsub.aclose()
+            await pubsub.aclose()  # type: ignore[no-untyped-call]
         if actor.kind == "user" and actor.user_id is not None:
             await clear_presence(redis, actor.user_id)

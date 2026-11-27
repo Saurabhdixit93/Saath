@@ -63,15 +63,13 @@ class User(Base):
         JSONB,
         nullable=False,
         server_default=text(
-            "'{\"push\": true, \"whatsapp\": true, \"sms\": true, \"quiet_hours_enabled\": true}'::jsonb"
+            '\'{"push": true, "whatsapp": true, "sms": true, "quiet_hours_enabled": true}\'::jsonb'
         ),
     )
     erasure_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    erased_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    erased_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

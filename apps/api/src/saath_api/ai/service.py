@@ -29,9 +29,9 @@ from saath_api.core.redis import SlidingWindowRateLimiter
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
 from saath_api.journeys.schemas import GoalConstraintsDTO, StandingOfferDTO
 from saath_api.journeys.service import _load_actor_journey_context
-from saath_api.matching.graph import make_pseudonymous_alias
+from saath_api.matching.graph import format_seat_descriptor, make_pseudonymous_alias
 from saath_api.matching.models import MatchCandidate
-from saath_api.matching.service import _load_journey_nodes, format_seat_descriptor
+from saath_api.matching.service import _load_journey_nodes
 from saath_api.messaging.redaction import (
     redact_contact_details,
     scrub_separated_ten_digit_pnrs,
@@ -123,9 +123,7 @@ def _scrub_output_value(value: Any, *, locale: str = "en") -> Any:
 
 async def _require_ai_concierge_enabled(db: AsyncSession) -> None:
     flag = (
-        await db.execute(
-            select(FeatureFlag).where(FeatureFlag.key == "ai_concierge_enabled")
-        )
+        await db.execute(select(FeatureFlag).where(FeatureFlag.key == "ai_concierge_enabled"))
     ).scalar_one_or_none()
     enabled = False
     if flag is not None:
@@ -241,9 +239,7 @@ class _SnapshotToolExecutor:
             ]
 
         raw_seats = [
-            str(s).strip().upper()
-            for s in (payload.get("preferred_seats") or [])
-            if str(s).strip()
+            str(s).strip().upper() for s in (payload.get("preferred_seats") or []) if str(s).strip()
         ][:4]
         if goal_type == "specific_seats" and not raw_seats:
             goal_type = "together" if len(valid_movers) > 1 else "lower"
@@ -260,9 +256,7 @@ class _SnapshotToolExecutor:
             movers_all_female = all(
                 self._snapshot.member_female_map.get(uid, False) for uid in valid_movers
             )
-            if has_male_mover or (
-                not self._snapshot.user_is_female and not movers_all_female
-            ):
+            if has_male_mover or (not self._snapshot.user_is_female and not movers_all_female):
                 women_only = False
 
         constraints = GoalConstraintsDTO(
@@ -283,7 +277,7 @@ class _SnapshotToolExecutor:
             note = raw_offer.get("note")
             clean_note = scrub_pii_text(str(note), locale=self._locale)[:120] if note else None
             standing_offer = StandingOfferDTO(
-                give_to=give_to,  # type: ignore[arg-type]
+                give_to=give_to,
                 note=clean_note,
             )
 
@@ -358,9 +352,7 @@ async def _build_concierge_snapshot(
             }
         )
 
-    movers_all_female = bool(party_shs) and all(
-        sh.gender_band == "F" for sh in party_shs
-    )
+    movers_all_female = bool(party_shs) and all(sh.gender_band == "F" for sh in party_shs)
     party_women_only_eligible = not has_male_member and (user_is_female or movers_all_female)
 
     # Aggregate coach summaries (strictly zero stranger PII)
@@ -437,9 +429,7 @@ async def _build_concierge_snapshot(
 
     booking_row = (
         await db.execute(
-            select(Booking.travel_class)
-            .where(Booking.journey_instance_id == ji.id)
-            .limit(1)
+            select(Booking.travel_class).where(Booking.journey_instance_id == ji.id).limit(1)
         )
     ).scalar_one_or_none()
 
@@ -477,9 +467,7 @@ async def create_concierge_stream_response(
         actor=actor,
         journey_id=req.journey_id,
     )
-    user_row = (
-        await db.execute(select(User).where(User.id == actor.user_id))
-    ).scalar_one()
+    user_row = (await db.execute(select(User).where(User.id == actor.user_id))).scalar_one()
 
     await _enforce_ai_rate_limit(
         redis=redis,
@@ -510,8 +498,7 @@ async def create_concierge_stream_response(
                     recorded_usage = item.usage
                 safe_data = _scrub_output_value(item.data, locale=locale)
                 yield (
-                    f"event: {item.event}\n"
-                    f"data: {json.dumps(safe_data, ensure_ascii=False)}\n\n"
+                    f"event: {item.event}\ndata: {json.dumps(safe_data, ensure_ascii=False)}\n\n"
                 )
         finally:
             if recorded_usage is None:
@@ -559,9 +546,7 @@ async def draft_swap_request(
     await _require_ai_concierge_enabled(db)
 
     cand = (
-        await db.execute(
-            select(MatchCandidate).where(MatchCandidate.card_id == req.card_id)
-        )
+        await db.execute(select(MatchCandidate).where(MatchCandidate.card_id == req.card_id))
     ).scalar_one_or_none()
     if cand is None:
         raise ProblemDetailError(
@@ -597,9 +582,7 @@ async def draft_swap_request(
         user_id=actor.user_id,
     )
 
-    user_row = (
-        await db.execute(select(User).where(User.id == actor.user_id))
-    ).scalar_one()
+    user_row = (await db.execute(select(User).where(User.id == actor.user_id))).scalar_one()
     lang: Literal["en", "hi"] = req.lang or ("hi" if user_row.locale == "hi" else "en")
 
     ji = (
@@ -607,22 +590,18 @@ async def draft_swap_request(
             select(JourneyInstance).where(JourneyInstance.id == cand.journey_instance_id)
         )
     ).scalar_one()
-    nodes, _, _ = await _load_journey_nodes(
-        db, ji.id, mode=ji.mode, layout_ref=ji.layout_ref
-    )
+    nodes, _, _ = await _load_journey_nodes(db, ji.id, mode=ji.mode, layout_ref=ji.layout_ref)
     node_map = {n.seat_holder_id: n for n in nodes}
     resolved_nodes = [node_map[uid] for uid in cand.cycle_seat_holders if uid in node_map]
     my_node = next((n for n in resolved_nodes if n.party_id == cand.for_party_id), None)
     other_node = next((n for n in resolved_nodes if n.party_id != cand.for_party_id), None)
 
     you_give = format_seat_descriptor(my_node) if my_node is not None else "your seat"
-    you_get_coach = (other_node.coach if other_node and other_node.coach else "CABIN")
-    you_get_seat_type = (other_node.seat_type if other_node and other_node.seat_type else "S")
+    you_get_coach = other_node.coach if other_node and other_node.coach else "CABIN"
+    you_get_seat_type = other_node.seat_type if other_node and other_node.seat_type else "S"
     you_get_bay = other_node.bay if other_node else None
     partner_alias = (
-        make_pseudonymous_alias(
-            other_node.coach, other_node.seat_type, other_node.seat_holder_id
-        )
+        make_pseudonymous_alias(other_node.coach, other_node.seat_type, other_node.seat_holder_id)
         if other_node is not None
         else "Fellow Traveller"
     )

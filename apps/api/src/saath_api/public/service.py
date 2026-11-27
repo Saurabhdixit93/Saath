@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -73,17 +73,13 @@ async def create_seat_invite(
     journey_id: UUID,
     req: CreateSeatInviteRequest,
 ) -> SeatInviteResponse:
-    ji, booking, _ = await _load_actor_journey_context(
-        db=db, actor=actor, journey_id=journey_id
-    )
+    ji, booking, _ = await _load_actor_journey_context(db=db, actor=actor, journey_id=journey_id)
 
     target_coach: str | None = (
         req.coach.strip().upper() if req.coach is not None and req.coach.strip() else None
     )
     target_seat_no: str | None = (
-        req.seat_no.strip().upper()
-        if req.seat_no is not None and req.seat_no.strip()
-        else None
+        req.seat_no.strip().upper() if req.seat_no is not None and req.seat_no.strip() else None
     )
 
     if ji.mode == "train":
@@ -92,7 +88,10 @@ async def create_seat_invite(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 code="invalid_seat_target",
                 title="Invalid Coach Target",
-                detail="Coach code must be a valid Indian Railways coach such as B5, S3, A1, or C2.",
+                detail=(
+                    "Coach code must be a valid Indian Railways coach "
+                    "such as B5, S3, A1, or C2."
+                ),
             )
         if target_seat_no is not None:
             tclass = normalize_coach_class(booking.travel_class, target_coach)
@@ -236,7 +235,7 @@ async def get_public_seat_invite(
 
     return PublicSeatInviteResponse(
         valid=True,
-        mode=ji.mode,  # type: ignore[arg-type]
+        mode=ji.mode,
         carrier_code=ji.carrier_code,
         service_no=ji.service_no,
         service_date=ji.service_date,
@@ -501,9 +500,7 @@ async def get_public_stats(*, db: AsyncSession) -> PublicStatsResponse:
     swaps_count = int(
         (
             await db.execute(
-                select(func.count(SwapProposal.id)).where(
-                    SwapProposal.status == "completed"
-                )
+                select(func.count(SwapProposal.id)).where(SwapProposal.status == "completed")
             )
         ).scalar_one()
         or 0

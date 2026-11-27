@@ -341,9 +341,7 @@ def test_live_adapters_reject_whitespace_credentials() -> None:
     with pytest.raises(ValueError):
         RazorpayPaymentAdapter(key_id="id", key_secret="sec", webhook_secret="   ")
     with pytest.raises(ValueError):
-        RazorpayPaymentAdapter(
-            key_id="id", key_secret="sec", webhook_secret="wh", base_url="   "
-        )
+        RazorpayPaymentAdapter(key_id="id", key_secret="sec", webhook_secret="wh", base_url="   ")
     with pytest.raises(ValueError):
         WhatsAppCloudAdapter(access_token="   ", phone_number_id="123")
     with pytest.raises(ValueError):

@@ -107,21 +107,48 @@ def test_bcbp_15_plus_synthetic_cases() -> None:
     assert resolve_julian_service_date(366, reference_date=date(2024, 12, 20)) == date(2024, 12, 31)
 
     # 7-10. Compartment mappings F, J, W, Y
-    assert parse_bcbp(_make_bcbp(compartment="F"), pnr_pepper=pepper, reference_date=ref).legs[0].travel_class == "F"
-    assert parse_bcbp(_make_bcbp(compartment="J"), pnr_pepper=pepper, reference_date=ref).legs[0].travel_class == "J"
-    assert parse_bcbp(_make_bcbp(compartment="W"), pnr_pepper=pepper, reference_date=ref).legs[0].travel_class == "W"
-    assert parse_bcbp(_make_bcbp(compartment="Y"), pnr_pepper=pepper, reference_date=ref).legs[0].travel_class == "Y"
+    assert (
+        parse_bcbp(_make_bcbp(compartment="F"), pnr_pepper=pepper, reference_date=ref)
+        .legs[0]
+        .travel_class
+        == "F"
+    )
+    assert (
+        parse_bcbp(_make_bcbp(compartment="J"), pnr_pepper=pepper, reference_date=ref)
+        .legs[0]
+        .travel_class
+        == "J"
+    )
+    assert (
+        parse_bcbp(_make_bcbp(compartment="W"), pnr_pepper=pepper, reference_date=ref)
+        .legs[0]
+        .travel_class
+        == "W"
+    )
+    assert (
+        parse_bcbp(_make_bcbp(compartment="Y"), pnr_pepper=pepper, reference_date=ref)
+        .legs[0]
+        .travel_class
+        == "Y"
+    )
 
     # 11. Variable length hex block handled cleanly (including trailing space padding)
     var_bcbp = _make_bcbp()[:-2] + "04ABCD"
     assert parse_bcbp(var_bcbp, pnr_pepper=pepper, reference_date=ref).legs[0].seat_no == "14A"
 
     var_space_padded = f"  \n\t{_make_bcbp()[:-2]}04AB  \r\n"
-    assert parse_bcbp(var_space_padded, pnr_pepper=pepper, reference_date=ref).legs[0].seat_no == "14A"
+    assert (
+        parse_bcbp(var_space_padded, pnr_pepper=pepper, reference_date=ref).legs[0].seat_no == "14A"
+    )
 
-    two_leg_var_space = _make_bcbp(
-        extra_legs=[{"frm": "BOM", "to": "GOI", "carrier": "6E", "flight": "0710", "seat": "005C"}]
-    )[:-2] + "04    \r\n"
+    two_leg_var_space = (
+        _make_bcbp(
+            extra_legs=[
+                {"frm": "BOM", "to": "GOI", "carrier": "6E", "flight": "0710", "seat": "005C"}
+            ]
+        )[:-2]
+        + "04    \r\n"
+    )
     res_var2 = parse_bcbp(two_leg_var_space, pnr_pepper=pepper, reference_date=ref)
     assert res_var2.num_legs == 2
     assert res_var2.legs[1].seat_no == "5C"
@@ -244,10 +271,14 @@ async def test_flight_bcbp_duplicate_claim_409_and_declared_fallback(
         ).scalar_one()
         assert booking.claim_conflict_flagged is True
         audits = (
-            await db.execute(
-                select(AuditLog).where(AuditLog.action == "flight.duplicate_claim_flagged")
+            (
+                await db.execute(
+                    select(AuditLog).where(AuditLog.action == "flight.duplicate_claim_flagged")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(audits) == 1
 
     # Declared fallback

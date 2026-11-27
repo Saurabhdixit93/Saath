@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from saath_api.core.config import Settings
 
 _OTEL_CONFIGURED = False
+# Marker set on instrumented sync engines so each is instrumented at most once.
+_ENGINE_INSTRUMENTED_ATTR = "_saath_otel_instrumented"
 
 
 def configure_telemetry(app: FastAPI, settings: Settings) -> None:
@@ -35,6 +37,6 @@ def configure_telemetry(app: FastAPI, settings: Settings) -> None:
 
 
 def instrument_sqlalchemy_engine(engine: AsyncEngine) -> None:
-    if not getattr(engine.sync_engine, "_saath_otel_instrumented", False):
+    if not getattr(engine.sync_engine, _ENGINE_INSTRUMENTED_ATTR, False):
         SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
-        setattr(engine.sync_engine, "_saath_otel_instrumented", True)
+        setattr(engine.sync_engine, _ENGINE_INSTRUMENTED_ATTR, True)

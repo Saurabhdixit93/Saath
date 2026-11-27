@@ -51,7 +51,7 @@ def _entitlement_dto(row: Entitlement) -> EntitlementDTO:
         scope_journey_instance_id=row.scope_journey_instance_id,
         scope_party_id=row.scope_party_id,
         features=dict(row.features or {}),
-        status=row.status,  # type: ignore[arg-type]
+        status=row.status,
         valid_from=row.valid_from,
         valid_until=row.valid_until,
         created_at=row.created_at,
@@ -107,7 +107,7 @@ async def get_my_entitlements(
             key_prefix=k.key_prefix,
             scopes=list(k.scopes),
             rate_limit_rpm=k.rate_limit_rpm,
-            status=k.status,  # type: ignore[arg-type]
+            status=k.status,
             created_at=k.created_at,
         )
         for k in keys_res.scalars().all()
@@ -141,9 +141,7 @@ async def _validate_checkout_scope(
 
     resolved_ji = journey_instance_id
     if party_id is not None:
-        party = (
-            await db.execute(select(Party).where(Party.id == party_id))
-        ).scalar_one_or_none()
+        party = (await db.execute(select(Party).where(Party.id == party_id))).scalar_one_or_none()
         if party is None:
             raise ProblemDetailError(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -162,13 +160,17 @@ async def _validate_checkout_scope(
 
     if resolved_ji is not None:
         booking = (
-            await db.execute(
-                select(Booking).where(
-                    Booking.journey_instance_id == resolved_ji,
-                    Booking.owner_user_id == actor.user_id,
+            (
+                await db.execute(
+                    select(Booking).where(
+                        Booking.journey_instance_id == resolved_ji,
+                        Booking.owner_user_id == actor.user_id,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if booking is None and party_id is not None:
             # Also permit if user is a member via another booking or party leader
             party_leader_ok = (
@@ -240,21 +242,19 @@ async def create_checkout_order(
         else f"{actor.user_id}:{req.plan_code}:{uuid7().hex}"
     )
     existing = (
-        await db.execute(
-            select(PaymentOrder).where(PaymentOrder.idempotency_key == idem_key)
-        )
+        await db.execute(select(PaymentOrder).where(PaymentOrder.idempotency_key == idem_key))
     ).scalar_one_or_none()
     if existing is not None:
         return CheckoutResponse(
             order_id=existing.id,
             plan_code=existing.plan_code,
-            provider=existing.provider,  # type: ignore[arg-type]
+            provider=existing.provider,
             provider_order_id=existing.provider_order_id or "",
             amount_paise=existing.amount_paise,
             currency=existing.currency,
             checkout_mode=existing.provider,
             key_id=settings.razorpay_key_id or None,
-            status=existing.status,  # type: ignore[arg-type]
+            status=existing.status,
         )
 
     order_id = uuid7()
@@ -291,13 +291,13 @@ async def create_checkout_order(
     return CheckoutResponse(
         order_id=order.id,
         plan_code=order.plan_code,
-        provider=order.provider,  # type: ignore[arg-type]
+        provider=order.provider,
         provider_order_id=gateway_order.provider_order_id,
         amount_paise=order.amount_paise,
         currency=order.currency,
         checkout_mode=gateway_order.checkout_mode,
         key_id=settings.razorpay_key_id or None,
-        status=order.status,  # type: ignore[arg-type]
+        status=order.status,
     )
 
 
@@ -327,9 +327,7 @@ async def _activate_entitlement_for_order(
 
     plan = yaml_configs.plans.plans[order.plan_code]
     valid_until = (
-        now + timedelta(days=30)
-        if plan.billing_type == "per_trip"
-        else now + timedelta(days=365)
+        now + timedelta(days=30) if plan.billing_type == "per_trip" else now + timedelta(days=365)
     )
     entitlement = Entitlement(
         id=uuid7(),
@@ -355,13 +353,17 @@ async def _activate_entitlement_for_order(
     issued_raw_key: str | None = None
     if order.plan_code == "b2b_partner":
         existing_key = (
-            await db.execute(
-                select(B2BApiKey).where(
-                    B2BApiKey.user_id == order.user_id,
-                    B2BApiKey.status == "active",
+            (
+                await db.execute(
+                    select(B2BApiKey).where(
+                        B2BApiKey.user_id == order.user_id,
+                        B2BApiKey.status == "active",
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if existing_key is None:
             raw_key = f"sk_saath_{secrets.token_urlsafe(24)}"
             issued_raw_key = raw_key
@@ -387,9 +389,7 @@ async def _activate_entitlement_for_order(
                 "plan_code": entitlement.plan_code,
                 "order_id": str(order.id),
                 "scope_journey_instance_id": (
-                    str(order.journey_instance_id)
-                    if order.journey_instance_id
-                    else None
+                    str(order.journey_instance_id) if order.journey_instance_id else None
                 ),
                 "scope_party_id": str(order.party_id) if order.party_id else None,
             },
@@ -419,12 +419,7 @@ async def process_payment_webhook(
             detail="Webhook body must be valid JSON.",
         ) from exc
 
-    event_id = str(
-        header_event_id
-        or payload.get("event_id")
-        or payload.get("id")
-        or ""
-    ).strip()
+    event_id = str(header_event_id or payload.get("event_id") or payload.get("id") or "").strip()
     event_type = str(payload.get("event") or payload.get("event_type") or "unknown")
     if not event_id:
         event_id = f"evt_{hash_token(raw_body.decode('utf-8', errors='ignore')).hex()[:24]}"
@@ -466,7 +461,8 @@ async def process_payment_webhook(
         await db.commit()
         return WebhookAckResponse(ok=True, duplicate=True)
 
-    # Extract provider_order_id / order_id & payment_id from either Razorpay or simplified webhook shape
+    # Extract provider_order_id / order_id & payment_id from either Razorpay or
+    # simplified webhook shape
     provider_order_id: str | None = payload.get("provider_order_id")
     provider_payment_id: str | None = payload.get("provider_payment_id")
     internal_order_id: str | None = payload.get("order_id")
@@ -501,9 +497,7 @@ async def process_payment_webhook(
             oid = UUID(str(internal_order_id))
             order = (
                 await db.execute(
-                    select(PaymentOrder)
-                    .where(PaymentOrder.id == oid)
-                    .with_for_update()
+                    select(PaymentOrder).where(PaymentOrder.id == oid).with_for_update()
                 )
             ).scalar_one_or_none()
         except ValueError:
@@ -544,9 +538,7 @@ async def complete_sandbox_payment(
     authorize(actor, "pricing.sandbox_complete", resource_owner_id=actor.user_id)
     order = (
         await db.execute(
-            select(PaymentOrder)
-            .where(PaymentOrder.id == req.order_id)
-            .with_for_update()
+            select(PaymentOrder).where(PaymentOrder.id == req.order_id).with_for_update()
         )
     ).scalar_one_or_none()
     if order is None:
@@ -624,15 +616,19 @@ async def create_b2b_api_key(
 
     now = datetime.now(UTC)
     ent = (
-        await db.execute(
-            select(Entitlement).where(
-                Entitlement.user_id == actor.user_id,
-                Entitlement.plan_code == "b2b_partner",
-                Entitlement.status == "active",
-                Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
+        (
+            await db.execute(
+                select(Entitlement).where(
+                    Entitlement.user_id == actor.user_id,
+                    Entitlement.plan_code == "b2b_partner",
+                    Entitlement.status == "active",
+                    Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
+                )
             )
         )
-    ).scalars().first()
+        .scalars()
+        .first()
+    )
     if ent is None:
         raise ProblemDetailError(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -690,15 +686,19 @@ async def get_b2b_stats(
         if key_row.user_id is not None:
             now = datetime.now(UTC)
             owner_ent = (
-                await db.execute(
-                    select(Entitlement).where(
-                        Entitlement.user_id == key_row.user_id,
-                        Entitlement.plan_code == "b2b_partner",
-                        Entitlement.status == "active",
-                        Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
+                (
+                    await db.execute(
+                        select(Entitlement).where(
+                            Entitlement.user_id == key_row.user_id,
+                            Entitlement.plan_code == "b2b_partner",
+                            Entitlement.status == "active",
+                            Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if owner_ent is None:
                 raise ProblemDetailError(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -710,15 +710,19 @@ async def get_b2b_stats(
     elif actor is not None and actor.kind == "user" and actor.user_id is not None:
         now = datetime.now(UTC)
         ent = (
-            await db.execute(
-                select(Entitlement).where(
-                    Entitlement.user_id == actor.user_id,
-                    Entitlement.plan_code == "b2b_partner",
-                    Entitlement.status == "active",
-                    Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
+            (
+                await db.execute(
+                    select(Entitlement).where(
+                        Entitlement.user_id == actor.user_id,
+                        Entitlement.plan_code == "b2b_partner",
+                        Entitlement.status == "active",
+                        Entitlement.valid_until.is_(None) | (Entitlement.valid_until > now),
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if ent is None:
             raise ProblemDetailError(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -738,12 +742,8 @@ async def get_b2b_stats(
     total_journeys = int(
         (await db.execute(select(func.count(JourneyInstance.id)))).scalar_one() or 0
     )
-    verified_bookings = int(
-        (await db.execute(select(func.count(Booking.id)))).scalar_one() or 0
-    )
-    active_parties = int(
-        (await db.execute(select(func.count(Party.id)))).scalar_one() or 0
-    )
+    verified_bookings = int((await db.execute(select(func.count(Booking.id)))).scalar_one() or 0)
+    active_parties = int((await db.execute(select(func.count(Party.id)))).scalar_one() or 0)
     _ = PartyMember
 
     return B2BStatsResponse(

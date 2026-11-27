@@ -60,12 +60,8 @@ def _assert_no_pii(
         )
         for key, value in payload.items():
             norm = key.lower()
-            if norm in FORBIDDEN_PII_KEYS and not (
-                is_layout_cell and norm == "seat_no"
-            ):
-                raise AssertionError(
-                    f"Forbidden PII key {key!r} exposed at {path}.{key}"
-                )
+            if norm in FORBIDDEN_PII_KEYS and not (is_layout_cell and norm == "seat_no"):
+                raise AssertionError(f"Forbidden PII key {key!r} exposed at {path}.{key}")
             _assert_no_pii(
                 value,
                 forbidden_values=forbidden_values,

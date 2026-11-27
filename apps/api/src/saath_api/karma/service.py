@@ -341,18 +341,22 @@ async def _has_recent_same_pair_credit(
         return False
 
     prior_prop_ids = (
-        await db.execute(
-            select(KarmaLedger.proposal_id)
-            .where(
-                KarmaLedger.user_id == user_id,
-                KarmaLedger.state == "credited",
-                KarmaLedger.proposal_id.is_not(None),
-                KarmaLedger.proposal_id != current_proposal_id,
-                KarmaLedger.created_at >= cutoff,
+        (
+            await db.execute(
+                select(KarmaLedger.proposal_id)
+                .where(
+                    KarmaLedger.user_id == user_id,
+                    KarmaLedger.state == "credited",
+                    KarmaLedger.proposal_id.is_not(None),
+                    KarmaLedger.proposal_id != current_proposal_id,
+                    KarmaLedger.created_at >= cutoff,
+                )
+                .distinct()
             )
-            .distinct()
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     clean_prop_ids = [pid for pid in prior_prop_ids if pid is not None]
     if not clean_prop_ids:
@@ -531,14 +535,18 @@ async def reverse_for_proposal(
     reason: str = "swap_disputed",
 ) -> list[UUID]:
     credited_rows = (
-        await db.execute(
-            select(KarmaLedger).where(
-                KarmaLedger.proposal_id == proposal_id,
-                KarmaLedger.state == "credited",
-                KarmaLedger.user_id.is_not(None),
+        (
+            await db.execute(
+                select(KarmaLedger).where(
+                    KarmaLedger.proposal_id == proposal_id,
+                    KarmaLedger.state == "credited",
+                    KarmaLedger.user_id.is_not(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     reversed_uids: list[UUID] = []
     for row in credited_rows:
@@ -598,9 +606,8 @@ async def evaluate_and_award_badges(
     if not distinct_uids:
         return {}
 
-    has_family_group = (
-        proposal.kind == "plan"
-        or any(c.has_together_goal or c.party_size >= 2 for c in contexts)
+    has_family_group = proposal.kind == "plan" or any(
+        c.has_together_goal or c.party_size >= 2 for c in contexts
     )
     is_night_owl = _is_night_owl_timestamp(ji.departure_at) or _is_night_owl_timestamp(
         proposal.confirmed_at
@@ -636,8 +643,7 @@ async def evaluate_and_award_badges(
         my_ctxs = [c for c in contexts if c.participant.user_id == uid]
         other_ctxs = [c for c in contexts if c.participant.user_id != uid]
         gives_lower_to_senior = any(
-            (m.participant.gives_seat_type or m.seat_holder.seat_type or "").upper()
-            in ("LB", "SL")
+            (m.participant.gives_seat_type or m.seat_holder.seat_type or "").upper() in ("LB", "SL")
             and o.seat_holder.age_band == "senior"
             and (o.participant.gets_seat_type or "").upper() in ("LB", "SL")
             and bool(m.participant.gives_seat)
@@ -699,12 +705,16 @@ async def get_karma_wallet(
     locale = user.locale if user is not None and user.locale == "hi" else "en"
 
     ledger_rows = (
-        await db.execute(
-            select(KarmaLedger)
-            .where(KarmaLedger.user_id == actor.user_id)
-            .order_by(KarmaLedger.created_at.desc(), KarmaLedger.id.desc())
+        (
+            await db.execute(
+                select(KarmaLedger)
+                .where(KarmaLedger.user_id == actor.user_id)
+                .order_by(KarmaLedger.created_at.desc(), KarmaLedger.id.desc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     settled_proposal_ids: set[UUID] = {
         row.proposal_id
@@ -762,7 +772,7 @@ async def get_karma_wallet(
             proposal_id=row.proposal_id,
             delta=int(row.delta),
             points=abs(int(row.delta)),
-            state=row.state,  # type: ignore[arg-type]
+            state=row.state,
             reason=row.reason or row.state,
             created_at=row.created_at,
         )
@@ -770,21 +780,25 @@ async def get_karma_wallet(
     ]
 
     badge_rows = (
-        await db.execute(
-            select(Badge)
-            .where(Badge.user_id == actor.user_id)
-            .order_by(Badge.earned_at.asc(), Badge.code.asc())
+        (
+            await db.execute(
+                select(Badge)
+                .where(Badge.user_id == actor.user_id)
+                .order_by(Badge.earned_at.asc(), Badge.code.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     badges: list[KarmaBadgeDTO] = []
     for b in badge_rows:
         meta = BADGE_CATALOG.get(b.code)
         title = (
-            meta["title_hi"] if locale == "hi" else meta["title_en"]
-        ) if meta else b.code.replace("_", " ").title()
-        desc = (
-            meta["desc_hi"] if locale == "hi" else meta["desc_en"]
-        ) if meta else b.code
+            (meta["title_hi"] if locale == "hi" else meta["title_en"])
+            if meta
+            else b.code.replace("_", " ").title()
+        )
+        desc = (meta["desc_hi"] if locale == "hi" else meta["desc_en"]) if meta else b.code
         badges.append(
             KarmaBadgeDTO(
                 code=b.code,
@@ -831,9 +845,7 @@ async def get_karma_wallet(
     leaderboard: list[LeaderboardEntryDTO] = []
     for idx, (alias, swaps_completed, pts) in enumerate(lb_rows, start=1):
         clean_alias = (
-            alias.strip()
-            if isinstance(alias, str) and alias.strip()
-            else "Saath Traveller"
+            alias.strip() if isinstance(alias, str) and alias.strip() else "Saath Traveller"
         )
         leaderboard.append(
             LeaderboardEntryDTO(
@@ -857,9 +869,7 @@ async def get_karma_wallet(
 
 async def _is_rewards_catalogue_enabled(db: AsyncSession) -> bool:
     flag = (
-        await db.execute(
-            select(FeatureFlag).where(FeatureFlag.key == "rewards_catalogue_enabled")
-        )
+        await db.execute(select(FeatureFlag).where(FeatureFlag.key == "rewards_catalogue_enabled"))
     ).scalar_one_or_none()
     if flag is None:
         return False
@@ -897,12 +907,16 @@ async def get_rewards_catalogue(
     _require_rewards_enabled(enabled)
 
     items = (
-        await db.execute(
-            select(RewardItem)
-            .where(RewardItem.active.is_(True))
-            .order_by(RewardItem.cost_points.asc(), RewardItem.code.asc())
+        (
+            await db.execute(
+                select(RewardItem)
+                .where(RewardItem.active.is_(True))
+                .order_by(RewardItem.cost_points.asc(), RewardItem.code.asc())
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     redemptions_rows = (
         await db.execute(
@@ -962,9 +976,7 @@ async def redeem_reward(
 
     item = (
         await db.execute(
-            select(RewardItem)
-            .where(RewardItem.code == req.reward_code.strip())
-            .with_for_update()
+            select(RewardItem).where(RewardItem.code == req.reward_code.strip()).with_for_update()
         )
     ).scalar_one_or_none()
     if item is None or not item.active:

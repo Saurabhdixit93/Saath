@@ -94,20 +94,11 @@ def is_seated_and_unlocked(node: SeatNode) -> bool:
         return False
     if not node.coach or not node.seat_no or not node.seat_type:
         return False
-    if node.current_status and node.current_status.upper().startswith("WL"):
-        return False
-    return True
+    return not (node.current_status and node.current_status.upper().startswith("WL"))
 
 
-def check_segment_overlap(
-    u: SeatNode, v: SeatNode
-) -> Literal["full", "partial"] | None:
-    if (
-        u.from_seq is None
-        or u.to_seq is None
-        or v.from_seq is None
-        or v.to_seq is None
-    ):
+def check_segment_overlap(u: SeatNode, v: SeatNode) -> Literal["full", "partial"] | None:
+    if u.from_seq is None or u.to_seq is None or v.from_seq is None or v.to_seq is None:
         return "full"
     if u.to_seq <= v.from_seq or v.to_seq <= u.from_seq:
         return None
@@ -148,12 +139,15 @@ def evaluate_edge_eligibility(
     if u.goal_type != "open_to_help" and u.seat_holder_id not in u.movers:
         return False, 0.0, "full"
 
-    if u.owner_user_id is not None and v.owner_user_id is not None:
-        if (u.owner_user_id, v.owner_user_id) in blocks or (
-            v.owner_user_id,
-            u.owner_user_id,
-        ) in blocks:
-            return False, 0.0, "full"
+    if (
+        u.owner_user_id is not None
+        and v.owner_user_id is not None
+        and (
+            (u.owner_user_id, v.owner_user_id) in blocks
+            or (v.owner_user_id, u.owner_user_id) in blocks
+        )
+    ):
+        return False, 0.0, "full"
 
     overlap = check_segment_overlap(u, v)
     if overlap is None:

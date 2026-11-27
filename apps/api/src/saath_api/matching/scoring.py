@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from uuid import UUID
 
 from saath_api.core.config import KarmaConfig
 from saath_api.matching.graph import (
@@ -72,7 +73,7 @@ def score_directed_edge(
     u: SeatNode,
     v: SeatNode,
     *,
-    blocks: frozenset[tuple] = frozenset(),
+    blocks: frozenset[tuple[UUID, UUID]] = frozenset(),
 ) -> SwapEdge | None:
     allowed, goal_fit, overlap = evaluate_edge_eligibility(u, v, blocks=blocks)
     if not allowed:
@@ -88,7 +89,9 @@ def score_directed_edge(
         social_priority = 1.0
         reason_codes.append("frees_lower_for_senior")
         reasons.append("Frees a lower berth for a senior passenger")
-    elif u.goal_type == "open_to_help" and u.standing_give_to == "senior" and v.age_band == "senior":
+    elif (
+        u.goal_type == "open_to_help" and u.standing_give_to == "senior" and v.age_band == "senior"
+    ):
         social_priority = 1.0
         reason_codes.append("helps_senior_traveller")
         reasons.append("Helps a senior traveller with their preferred berth")

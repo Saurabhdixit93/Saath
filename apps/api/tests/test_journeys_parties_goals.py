@@ -39,9 +39,9 @@ async def test_anon_verify_merges_to_otp_user_and_journey_hub_crud(
     client: AsyncClient,
     fake_messaging: FakeMessagingProvider,
 ) -> None:
-    anon_token = (
-        await client.post("/v1/auth/anonymous", json={"turnstile": "ok"})
-    ).json()["access"]
+    anon_token = (await client.post("/v1/auth/anonymous", json={"turnstile": "ok"})).json()[
+        "access"
+    ]
 
     # Bus mode returns clean 422
     bus_resp = await client.post(
@@ -78,9 +78,7 @@ async def test_anon_verify_merges_to_otp_user_and_journey_hub_crud(
     assert len(vbody["seat_holders"]) == 2
 
     # Merge anonymous booking & party into OTP user
-    user_token, _ = await _otp_login(
-        client, fake_messaging, "9876543210", anon_token=anon_token
-    )
+    user_token, _ = await _otp_login(client, fake_messaging, "9876543210", anon_token=anon_token)
     user_headers = {"Authorization": f"Bearer {user_token}"}
 
     list_resp = await client.get("/v1/journeys", headers=user_headers)
@@ -113,10 +111,14 @@ async def test_anon_verify_merges_to_otp_user_and_journey_hub_crud(
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
         outbox = (
-            await db.execute(
-                select(NotificationsOutbox).where(NotificationsOutbox.event == "BerthChanged")
+            (
+                await db.execute(
+                    select(NotificationsOutbox).where(NotificationsOutbox.event == "BerthChanged")
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(outbox) == 1
 
     # Delete journey booking
@@ -173,9 +175,7 @@ async def test_party_invite_join_expiry_cross_journey_and_women_only_guard(
     assert ok_goal.json()["goal"]["goal_type"] == "lower"
 
     # Invite token + cross-journey rejection (422) + valid same-journey merge
-    inv = (
-        await client.post(f"/v1/journeys/{j1_id}/party/invite", headers=leader_h)
-    ).json()
+    inv = (await client.post(f"/v1/journeys/{j1_id}/party/invite", headers=leader_h)).json()
     invite_token = inv["invite_token"]
 
     cross = await client.post(
@@ -195,15 +195,11 @@ async def test_party_invite_join_expiry_cross_journey_and_women_only_guard(
     assert same.json()["party"]["member_count"] == 2
 
     # Non-leader cannot create party invite (403)
-    non_leader_inv = await client.post(
-        f"/v1/journeys/{j1_id}/party/invite", headers=joiner_h
-    )
+    non_leader_inv = await client.post(f"/v1/journeys/{j1_id}/party/invite", headers=joiner_h)
     assert non_leader_inv.status_code == 403
 
     # Non-leader cannot remove a member (403)
-    joined_sh_id = [
-        m["id"] for m in same.json()["party"]["members"] if m["id"] != mover_id
-    ][0]
+    joined_sh_id = [m["id"] for m in same.json()["party"]["members"] if m["id"] != mover_id][0]
     non_leader_rm = await client.delete(
         f"/v1/party/{party_id}/members/{joined_sh_id}",
         headers=joiner_h,
@@ -254,8 +250,10 @@ async def test_party_invite_join_expiry_cross_journey_and_women_only_guard(
         party = (await db.execute(select(Party).where(Party.id == party_id))).scalar_one()
         assert party.leader_user_id is not None
         goals = (
-            await db.execute(select(Goal).where(Goal.party_id == party_id, Goal.active.is_(True)))
-        ).scalars().all()
+            (await db.execute(select(Goal).where(Goal.party_id == party_id, Goal.active.is_(True))))
+            .scalars()
+            .all()
+        )
         assert goals == []
         party.invite_expires_at = datetime.now(UTC) - timedelta(minutes=1)
         await db.commit()

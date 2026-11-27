@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import math
@@ -15,7 +16,7 @@ import jwt
 import structlog
 from fastapi import Request, status
 from redis.exceptions import RedisError
-from sqlalchemy import Text, case, delete, func, or_, select, update
+from sqlalchemy import ColumnElement, Text, case, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -80,7 +81,7 @@ from saath_api.providers.turnstile import FakeTurnstileVerifier
 from saath_api.swaps.models import SeatLock, SwapCard, SwapParticipant, SwapProposal
 
 _GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
-_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
 _GOOGLE_ISSUERS = ["https://accounts.google.com", "accounts.google.com"]
 _DISPUTABLE_SWAP_STATES = ("awaiting_confirmation", "completed", "not_completed")
 
@@ -281,7 +282,9 @@ async def create_admin_session(
 ) -> AdminSessionResponse:
     verifier = oidc_verifier or verify_google_oidc_token
     allowed = _effective_allowed_emails(settings)
-    has_oidc_credential = bool((req.id_token and req.id_token.strip()) or (req.code and req.code.strip()))
+    has_oidc_credential = bool(
+        (req.id_token and req.id_token.strip()) or (req.code and req.code.strip())
+    )
 
     if settings.is_production:
         if not settings.admin_sso_client_id.strip() or not allowed:
@@ -296,16 +299,23 @@ async def create_admin_session(
                 status_code=status.HTTP_403_FORBIDDEN,
                 code="admin_sso_required",
                 title="Google Workspace SSO Required",
-                detail="Passwordless email login is disabled in production; present a Google OIDC token.",
+                detail=(
+                    "Passwordless email login is disabled in production; "
+                    "present a Google OIDC token."
+                ),
             )
         verified_email = (
-            await verifier(
-                settings,
-                id_token=req.id_token,
-                code=req.code,
-                redirect_uri=req.redirect_uri,
+            (
+                await verifier(
+                    settings,
+                    id_token=req.id_token,
+                    code=req.code,
+                    redirect_uri=req.redirect_uri,
+                )
             )
-        ).strip().lower()
+            .strip()
+            .lower()
+        )
         if req.email and req.email.strip() and req.email.strip().lower() != verified_email:
             raise ProblemDetailError(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -324,13 +334,17 @@ async def create_admin_session(
     else:
         if has_oidc_credential:
             verified_email = (
-                await verifier(
-                    settings,
-                    id_token=req.id_token,
-                    code=req.code,
-                    redirect_uri=req.redirect_uri,
+                (
+                    await verifier(
+                        settings,
+                        id_token=req.id_token,
+                        code=req.code,
+                        redirect_uri=req.redirect_uri,
+                    )
                 )
-            ).strip().lower()
+                .strip()
+                .lower()
+            )
             if req.email and req.email.strip() and req.email.strip().lower() != verified_email:
                 raise ProblemDetailError(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -378,7 +392,7 @@ async def create_admin_session(
     return AdminSessionResponse(
         access=token,
         token=token,
-        token_type="bearer",
+        token_type="bearer",  # noqa: S106
         expires_in=ttl,
         email=verified_email,
         scopes=["admin"],
@@ -718,7 +732,9 @@ async def get_providers_health(
         providers.append(
             _inspect_in_process_breaker(
                 wa_prov,
-                name="whatsapp_cloud" if not isinstance(wa_prov, FakeMessagingProvider) else "fake_whatsapp",
+                name="whatsapp_cloud"
+                if not isinstance(wa_prov, FakeMessagingProvider)
+                else "fake_whatsapp",
                 category="messaging",
                 mode="fake" if isinstance(wa_prov, FakeMessagingProvider) else "live",
             )
@@ -735,7 +751,9 @@ async def get_providers_health(
         providers.append(
             _inspect_in_process_breaker(
                 msg_prov,
-                name="fake_messaging" if isinstance(msg_prov, FakeMessagingProvider) else type(msg_prov).__name__,
+                name="fake_messaging"
+                if isinstance(msg_prov, FakeMessagingProvider)
+                else type(msg_prov).__name__,
                 category="messaging",
                 mode="fake" if isinstance(msg_prov, FakeMessagingProvider) else "live",
             )
@@ -746,7 +764,9 @@ async def get_providers_health(
         providers.append(
             _inspect_in_process_breaker(
                 push_prov,
-                name="fake_webpush" if isinstance(push_prov, FakeWebPushProvider) else "vapid_webpush",
+                name="fake_webpush"
+                if isinstance(push_prov, FakeWebPushProvider)
+                else "vapid_webpush",
                 category="push",
                 mode="fake" if isinstance(push_prov, FakeWebPushProvider) else "live",
             )
@@ -806,7 +826,9 @@ async def get_providers_health(
         )
     ).scalar_one_or_none()
     if oldest_queued is not None:
-        aware = oldest_queued if oldest_queued.tzinfo is not None else oldest_queued.replace(tzinfo=UTC)
+        aware = (
+            oldest_queued if oldest_queued.tzinfo is not None else oldest_queued.replace(tzinfo=UTC)
+        )
         lag_seconds = max(0.0, round((datetime.now(UTC) - aware).total_seconds(), 2))
     else:
         lag_seconds = 0.0
@@ -896,9 +918,7 @@ async def act_on_moderation(
     report_id: UUID,
     req: ModerationActionRequest,
 ) -> ModerationActionResponse:
-    report = (
-        await db.execute(select(Report).where(Report.id == report_id))
-    ).scalar_one_or_none()
+    report = (await db.execute(select(Report).where(Report.id == report_id))).scalar_one_or_none()
     if report is None:
         raise ProblemDetailError(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -934,9 +954,9 @@ async def act_on_moderation(
         report.status = "actioned"
         if message is not None:
             message.moderation = "hidden"
-            message.moderation_reason = (
-                req.note or report.reason or "Hidden by admin moderation"
-            )[:200]
+            message.moderation_reason = (req.note or report.reason or "Hidden by admin moderation")[
+                :200
+            ]
     elif req.action == "restrict":
         report.status = "actioned"
         if target_user.status == "active":
@@ -1089,9 +1109,9 @@ async def get_fraud_graph(
 
     users_by_prop: dict[UUID, set[UUID]] = defaultdict(set)
     prop_status: dict[UUID, str] = {}
-    for prop_id, uid, st in part_rows:
-        if uid is not None:
-            users_by_prop[prop_id].add(uid)
+    for prop_id, part_uid, st in part_rows:
+        if part_uid is not None:
+            users_by_prop[prop_id].add(part_uid)
             prop_status[prop_id] = st
 
     prop_ids = list(users_by_prop.keys())
@@ -1106,13 +1126,13 @@ async def get_fraud_graph(
                 )
             )
         ).all()
-        for prop_id, state in ledger_rows:
-            if prop_id is None:
+        for ledger_prop_id, state in ledger_rows:
+            if ledger_prop_id is None:
                 continue
             if state == "credited":
-                credited_props.add(prop_id)
+                credited_props.add(ledger_prop_id)
             elif state == "reversed":
-                reversed_props.add(prop_id)
+                reversed_props.add(ledger_prop_id)
 
     pair_stats: dict[tuple[UUID, UUID], dict[str, int]] = defaultdict(
         lambda: {"swap_count": 0, "completed_count": 0, "credited_count": 0, "reversed_count": 0}
@@ -1133,29 +1153,31 @@ async def get_fraud_graph(
                     st_bucket["reversed_count"] += 1
 
     anomaly_rows = (
-        await db.execute(
-            select(AuditLog)
-            .where(
-                AuditLog.action.in_(
-                    (
-                        "karma.collusion_blocked",
-                        "karma.same_pair_cap_blocked",
-                        "karma.daily_cap_blocked",
+        (
+            await db.execute(
+                select(AuditLog)
+                .where(
+                    AuditLog.action.in_(
+                        (
+                            "karma.collusion_blocked",
+                            "karma.same_pair_cap_blocked",
+                            "karma.daily_cap_blocked",
+                        )
                     )
                 )
+                .order_by(AuditLog.at.desc(), AuditLog.id.desc())
+                .limit(100)
             )
-            .order_by(AuditLog.at.desc(), AuditLog.id.desc())
-            .limit(100)
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     anomalies: list[FraudAnomalyDTO] = []
     for log_row in anomaly_rows:
         if isinstance(log_row.meta, dict) and log_row.meta.get("user_id"):
-            try:
+            with contextlib.suppress(ValueError):
                 involved_user_ids.add(UUID(str(log_row.meta["user_id"])))
-            except ValueError:
-                pass
         anomalies.append(
             FraudAnomalyDTO(
                 id=log_row.id,
@@ -1199,14 +1221,16 @@ async def get_fraud_graph(
     nodes: list[FraudNodeDTO] = []
     if involved_user_ids:
         user_rows = (
-            await db.execute(select(User).where(User.id.in_(involved_user_ids)))
-        ).scalars().all()
+            (await db.execute(select(User).where(User.id.in_(involved_user_ids)))).scalars().all()
+        )
         karma_sums = (
             await db.execute(
                 select(
                     KarmaLedger.user_id,
                     func.coalesce(
-                        func.sum(case((KarmaLedger.state == "credited", KarmaLedger.delta), else_=0)),
+                        func.sum(
+                            case((KarmaLedger.state == "credited", KarmaLedger.delta), else_=0)
+                        ),
                         0,
                     ),
                     func.coalesce(
@@ -1345,6 +1369,7 @@ async def list_disputes(
     swap_resource_expr = func.concat("swap:", func.cast(SwapProposal.id, Text))
     booking_resource_expr = func.concat("booking:", func.cast(Booking.id, Text))
 
+    swap_cond: ColumnElement[bool]
     if status_filter == "open":
         swap_cond = or_(
             SwapProposal.status == "not_completed",
@@ -1376,10 +1401,14 @@ async def list_disputes(
     parts_by_swap: dict[UUID, list[DisputeParticipantDTO]] = defaultdict(list)
     if swap_ids:
         part_rows = (
-            await db.execute(
-                select(SwapParticipant).where(SwapParticipant.proposal_id.in_(swap_ids))
+            (
+                await db.execute(
+                    select(SwapParticipant).where(SwapParticipant.proposal_id.in_(swap_ids))
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for part in part_rows:
             parts_by_swap[part.proposal_id].append(
                 DisputeParticipantDTO(
@@ -1407,6 +1436,7 @@ async def list_disputes(
             )
         )
 
+    booking_cond: ColumnElement[bool]
     if status_filter == "open":
         booking_cond = Booking.claim_conflict_flagged.is_(True)
     elif status_filter == "resolved":
@@ -1466,14 +1496,18 @@ async def _reverse_proposal_karma_safe(
     reason: str,
 ) -> list[UUID]:
     credited_rows = (
-        await db.execute(
-            select(KarmaLedger).where(
-                KarmaLedger.proposal_id == proposal_id,
-                KarmaLedger.state == "credited",
-                KarmaLedger.user_id.is_not(None),
+        (
+            await db.execute(
+                select(KarmaLedger).where(
+                    KarmaLedger.proposal_id == proposal_id,
+                    KarmaLedger.state == "credited",
+                    KarmaLedger.user_id.is_not(None),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if not credited_rows:
         return []
 
@@ -1669,9 +1703,7 @@ async def override_dispute(
             await db.execute(
                 update(User)
                 .where(User.id.in_(participant_user_ids))
-                .values(
-                    reliability_completed=func.greatest(0, User.reliability_completed - 1)
-                )
+                .values(reliability_completed=func.greatest(0, User.reliability_completed - 1))
             )
         reversed_users = await _reverse_proposal_karma_safe(
             db=db,
@@ -1770,9 +1802,7 @@ async def review_redemption(
 ) -> AdminRedemptionDTO:
     redemption = (
         await db.execute(
-            select(RewardRedemption)
-            .where(RewardRedemption.id == redemption_id)
-            .with_for_update()
+            select(RewardRedemption).where(RewardRedemption.id == redemption_id).with_for_update()
         )
     ).scalar_one_or_none()
     if redemption is None:
@@ -1785,9 +1815,7 @@ async def review_redemption(
 
     item = (
         await db.execute(
-            select(RewardItem)
-            .where(RewardItem.id == redemption.reward_item_id)
-            .with_for_update()
+            select(RewardItem).where(RewardItem.id == redemption.reward_item_id).with_for_update()
         )
     ).scalar_one()
 

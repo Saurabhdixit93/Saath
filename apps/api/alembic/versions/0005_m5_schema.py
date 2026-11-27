@@ -1,10 +1,12 @@
-"""M5 schema: seat_invites, karma_ledger, badges, feature_flags, rewards, ai_usage_logs, users columns
+"""M5 schema: seat_invites, karma_ledger, badges, feature_flags, rewards, ai_usage_logs,
+users columns
 
 Revision ID: 0005_m5_schema
 Revises: 0004_messaging_moderation
 Create Date: 2026-11-26 14:00:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -186,10 +188,14 @@ def upgrade() -> None:
         """
         INSERT INTO feature_flags (key, value, description, updated_by)
         VALUES
-          ('rewards_catalogue_enabled', 'false'::jsonb, 'Enable karma rewards catalogue redemption', 'migration:0005'),
-          ('ai_concierge_enabled', 'true'::jsonb, 'Enable Claude AI swap concierge and draft endpoints', 'migration:0005'),
-          ('maintenance_banner', 'false'::jsonb, 'Display maintenance banner across passenger web app', 'migration:0005'),
-          ('sms_parser_llm_fallback', 'false'::jsonb, 'Allow LLM fallback for ambiguous IRCTC SMS parsing', 'migration:0005')
+          ('rewards_catalogue_enabled', 'false'::jsonb,
+           'Enable karma rewards catalogue redemption', 'migration:0005'),
+          ('ai_concierge_enabled', 'true'::jsonb,
+           'Enable Claude AI swap concierge and draft endpoints', 'migration:0005'),
+          ('maintenance_banner', 'false'::jsonb,
+           'Display maintenance banner across passenger web app', 'migration:0005'),
+          ('sms_parser_llm_fallback', 'false'::jsonb,
+           'Allow LLM fallback for ambiguous IRCTC SMS parsing', 'migration:0005')
         ON CONFLICT (key) DO NOTHING
         """
     )

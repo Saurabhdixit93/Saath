@@ -80,11 +80,7 @@ def render_swap_card_svg(payload: dict[str, Any], qr_url: str) -> str:
     # Extract <path .../> from qrcode svg
     path_start = qr_raw.find("<path")
     path_end = qr_raw.find("/>", path_start)
-    qr_path = (
-        qr_raw[path_start : path_end + 2]
-        if path_start != -1 and path_end != -1
-        else ""
-    )
+    qr_path = qr_raw[path_start : path_end + 2] if path_start != -1 and path_end != -1 else ""
 
     rows_svg: list[str] = []
     y = 148
@@ -116,17 +112,17 @@ def render_swap_card_svg(payload: dict[str, Any], qr_url: str) -> str:
         f'<rect x="0" y="54" width="580" height="18" fill="#1F6F78"/>'
         f'<text x="28" y="34" font-family="sans-serif" font-size="13" font-weight="700" letter-spacing="1.5" fill="#FAF7F2">SAATH SWAP CARD</text>'
         f'<text x="28" y="56" font-family="monospace" font-size="18" font-weight="700" fill="#FFFFFF">#{public_code}</text>'
-        f'{status_badge}'
+        f"{status_badge}"
         f'<text x="28" y="102" font-family="sans-serif" font-size="15" font-weight="700" fill="#1C1A17">{service} &#183; {svc_date}</text>'
         f'<line x1="28" y1="116" x2="400" y2="116" stroke="#E4DDD2" stroke-width="1"/>'
-        f'{"".join(rows_svg)}'
+        f"{''.join(rows_svg)}"
         f'<g transform="translate(425, 92) scale(1.1)">'
         f'<rect x="-6" y="-6" width="128" height="128" rx="8" fill="#FFFFFF" stroke="#E4DDD2"/>'
-        f'{qr_path}'
-        f'</g>'
+        f"{qr_path}"
+        f"</g>"
         f'<text x="28" y="{card_h - 32}" font-family="sans-serif" font-size="12" font-weight="600" fill="#1F6F78">Subject to TTE approval &#183; No personal data shown</text>'
         f'<text x="28" y="{card_h - 14}" font-family="monospace" font-size="10" fill="#6B645A">{html.escape(qr_url)}</text>'
-        f'</svg>'
+        f"</svg>"
     )
 
 

@@ -9,7 +9,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import status
-from sqlalchemy import delete, desc, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.models import AuditLog, Consent, RefreshToken, User
@@ -46,11 +46,7 @@ async def get_user_consents(
     db: AsyncSession,
     user_id: UUID,
 ) -> ConsentsListResponse:
-    stmt = (
-        select(Consent)
-        .where(Consent.user_id == user_id)
-        .order_by(Consent.at.asc())
-    )
+    stmt = select(Consent).where(Consent.user_id == user_id).order_by(Consent.at.asc())
     result = await db.execute(stmt)
     rows = result.scalars().all()
 
@@ -159,7 +155,7 @@ async def export_user_data_zip(
         "reliability_completed": user.reliability_completed,
         "status": user.status,
         "leaderboard_opt_in": user.leaderboard_opt_in,
-        "notification_channels": user.notification_channels(),
+        "notification_channels": user.notification_channels,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -212,7 +208,9 @@ async def export_user_data_zip(
                 "carrier_code": instance.carrier_code,
                 "service_no": instance.service_no,
                 "service_date": instance.service_date.isoformat(),
-                "departure_at": instance.departure_at.isoformat() if instance.departure_at else None,
+                "departure_at": instance.departure_at.isoformat()
+                if instance.departure_at
+                else None,
                 "arrival_at": instance.arrival_at.isoformat() if instance.arrival_at else None,
                 "from_code": booking.from_code,
                 "to_code": booking.to_code,
@@ -223,35 +221,44 @@ async def export_user_data_zip(
             }
         )
 
-    # 4. Parties (no partner phone or PNR)
+    # 4. Parties (no partner phone or PNR). Membership is via the user's linked seat holders.
+    my_party_ids = (
+        select(PartyMember.party_id)
+        .join(SeatHolder, PartyMember.seat_holder_id == SeatHolder.id)
+        .where(SeatHolder.linked_user_id == user_id)
+    )
     parties_stmt = (
-        select(PartyMember, Party)
-        .join(Party, PartyMember.party_id == Party.id)
-        .where(PartyMember.user_id == user_id)
+        select(Party)
+        .where(or_(Party.leader_user_id == user_id, Party.id.in_(my_party_ids)))
+        .order_by(Party.created_at.asc())
     )
     parties_res = await db.execute(parties_stmt)
-    parties_rows = parties_res.all()
+    parties_rows = parties_res.scalars().all()
 
     parties_data: list[dict[str, Any]] = []
-    for member, party in parties_rows:
-        other_members_stmt = select(PartyMember).where(PartyMember.party_id == party.id)
-        other_members_res = await db.execute(other_members_stmt)
-        other_members = other_members_res.scalars().all()
+    for party in parties_rows:
+        members_stmt = (
+            select(PartyMember, SeatHolder)
+            .join(SeatHolder, PartyMember.seat_holder_id == SeatHolder.id)
+            .where(PartyMember.party_id == party.id)
+            .order_by(SeatHolder.pax_seq.asc())
+        )
+        members_res = await db.execute(members_stmt)
+        members_rows = members_res.all()
 
         parties_data.append(
             {
                 "party_id": str(party.id),
-                "name": party.name,
-                "status": party.status,
-                "my_role": member.role,
-                "members_count": len(other_members),
+                "journey_instance_id": str(party.journey_instance_id),
+                "my_role": "leader" if party.leader_user_id == user_id else "member",
+                "created_at": party.created_at.isoformat(),
+                "members_count": len(members_rows),
                 "members": [
                     {
-                        "alias": m.alias,
-                        "role": m.role,
-                        "is_me": m.user_id == user_id,
+                        "joined_at": m.joined_at.isoformat(),
+                        "is_me": h.linked_user_id == user_id,
                     }
-                    for m in other_members
+                    for m, h in members_rows
                 ],
             }
         )
@@ -278,7 +285,9 @@ async def export_user_data_zip(
                 "kind": proposal.kind,
                 "status": proposal.status,
                 "created_at": proposal.created_at.isoformat(),
-                "confirmed_at": proposal.confirmed_at.isoformat() if proposal.confirmed_at else None,
+                "confirmed_at": proposal.confirmed_at.isoformat()
+                if proposal.confirmed_at
+                else None,
                 "my_decision": participant.decision,
                 "gives_seat": participant.gives_seat,
                 "gets_seat": participant.gets_seat,
@@ -346,14 +355,17 @@ async def export_user_data_zip(
     ]
 
     # 8. Badges
-    badges_stmt = select(Badge).where(Badge.user_id == user_id).order_by(Badge.unlocked_at.asc())
+    badges_stmt = (
+        select(Badge)
+        .where(Badge.user_id == user_id)
+        .order_by(Badge.earned_at.asc(), Badge.code.asc())
+    )
     badges_res = await db.execute(badges_stmt)
     badges_rows = badges_res.scalars().all()
     badges_data = [
         {
-            "badge_key": b.badge_key,
-            "tier": b.tier,
-            "unlocked_at": b.unlocked_at.isoformat() if b.unlocked_at else None,
+            "code": b.code,
+            "earned_at": b.earned_at.isoformat() if b.earned_at else None,
         }
         for b in badges_rows
     ]

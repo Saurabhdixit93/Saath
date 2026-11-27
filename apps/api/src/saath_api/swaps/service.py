@@ -214,9 +214,7 @@ async def _build_swap_detail_dto(
     you_get_summary = (
         ", ".join(_mask_seat(p.gets_coach, p.gets_seat_type) for p in my_parts)
         if my_parts
-        else (
-            _mask_seat(parts[0].gets_coach, parts[0].gets_seat_type) if parts else ""
-        )
+        else (_mask_seat(parts[0].gets_coach, parts[0].gets_seat_type) if parts else "")
     )
 
     can_accept = (
@@ -325,9 +323,7 @@ async def create_swap_proposal(
             detail="Verify your phone number to propose a seat swap.",
         )
 
-    user_row = (
-        await db.execute(select(User).where(User.id == actor.user_id))
-    ).scalar_one_or_none()
+    user_row = (await db.execute(select(User).where(User.id == actor.user_id))).scalar_one_or_none()
     if user_row is None:
         raise ProblemDetailError(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -367,9 +363,7 @@ async def create_swap_proposal(
         )
 
     cand = (
-        await db.execute(
-            select(MatchCandidate).where(MatchCandidate.card_id == req.card_id)
-        )
+        await db.execute(select(MatchCandidate).where(MatchCandidate.card_id == req.card_id))
     ).scalar_one_or_none()
     if cand is None:
         raise ProblemDetailError(
@@ -430,10 +424,14 @@ async def create_swap_proposal(
 
     # Check none are currently locked
     locked = (
-        await db.execute(
-            select(SeatLock.seat_holder_id).where(SeatLock.seat_holder_id.in_(all_sh_ids))
+        (
+            await db.execute(
+                select(SeatLock.seat_holder_id).where(SeatLock.seat_holder_id.in_(all_sh_ids))
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     if locked:
         raise ProblemDetailError(
             status_code=status.HTTP_409_CONFLICT,
@@ -562,9 +560,7 @@ async def create_swap_proposal(
                     proposal_id=proposal.id,
                     seat_holder_id=giver_sh.id,
                     user_id=p_uid,
-                    alias=make_pseudonymous_alias(
-                        giver_sh.coach, giver_sh.seat_type, giver_sh.id
-                    ),
+                    alias=make_pseudonymous_alias(giver_sh.coach, giver_sh.seat_type, giver_sh.id),
                     gives_seat=gives_str,
                     gets_seat=gets_str,
                     gives_coach=giver_sh.coach,
@@ -610,8 +606,7 @@ async def list_swaps(
         SwapParticipant.user_id == actor.user_id
     )
     stmt = select(SwapProposal).where(
-        (SwapProposal.initiator_user_id == actor.user_id)
-        | SwapProposal.id.in_(part_prop_ids)
+        (SwapProposal.initiator_user_id == actor.user_id) | SwapProposal.id.in_(part_prop_ids)
     )
     if state == "active":
         stmt = stmt.where(SwapProposal.status.in_(_ACTIVE_STATUSES))
@@ -715,9 +710,7 @@ async def accept_swap(
         existing_locks = {
             sl.seat_holder_id: sl.proposal_id
             for sl in (
-                await db.execute(
-                    select(SeatLock).where(SeatLock.seat_holder_id.in_(my_sh_ids))
-                )
+                await db.execute(select(SeatLock).where(SeatLock.seat_holder_id.in_(my_sh_ids)))
             )
             .scalars()
             .all()
@@ -834,9 +827,7 @@ async def accept_swap(
                 "confirmed_at": now.isoformat(),
                 "participants": card_participants,
             }
-            sig_bytes = sign_swap_card(
-                signed_payload, settings.swap_card_signing_private_key
-            )
+            sig_bytes = sign_swap_card(signed_payload, settings.swap_card_signing_private_key)
             db.add(
                 SwapCard(
                     proposal_id=proposal.id,
@@ -852,15 +843,9 @@ async def accept_swap(
                 await db.execute(text("SELECT to_regclass('public.conversations')"))
             ).scalar_one_or_none()
             has_convo_members = (
-                await db.execute(
-                    text("SELECT to_regclass('public.conversation_members')")
-                )
+                await db.execute(text("SELECT to_regclass('public.conversation_members')"))
             ).scalar_one_or_none()
-            if (
-                has_convos is not None
-                and has_convo_members is not None
-                and participant_user_ids
-            ):
+            if has_convos is not None and has_convo_members is not None and participant_user_ids:
                 unmask_stmt = text(
                     "UPDATE conversations "
                     "SET unmasked = true "
@@ -1177,9 +1162,7 @@ async def confirm_completion(
                     detail="You have already submitted a different completion answer.",
                 )
 
-        if proposal.status == "completed" and all(
-            p.post_confirm == req.answer for p in my_parts
-        ):
+        if proposal.status == "completed" and all(p.post_confirm == req.answer for p in my_parts):
             await db.rollback()
             return await _build_swap_detail_dto(db, proposal, actor)
 
@@ -1190,9 +1173,7 @@ async def confirm_completion(
             .where(
                 SwapProposal.id == proposal.id,
                 SwapProposal.version == expected_version,
-                SwapProposal.status.in_(
-                    ("confirmed", "awaiting_confirmation", "completed")
-                ),
+                SwapProposal.status.in_(("confirmed", "awaiting_confirmation", "completed")),
             )
             .values(version=expected_version + 1)
         )
@@ -1218,11 +1199,7 @@ async def confirm_completion(
                 await db.execute(
                     update(User)
                     .where(User.id.in_(participant_user_ids))
-                    .values(
-                        reliability_completed=func.greatest(
-                            0, User.reliability_completed - 1
-                        )
-                    )
+                    .values(reliability_completed=func.greatest(0, User.reliability_completed - 1))
                 )
             await reverse_for_proposal(
                 db=db,
@@ -1359,11 +1336,7 @@ async def invalidate_swaps_for_berth_change(
     )
 
     parts = list(
-        (
-            await db.execute(
-                select(SwapParticipant).where(SwapParticipant.proposal_id.in_(prop_ids))
-            )
-        )
+        (await db.execute(select(SwapParticipant).where(SwapParticipant.proposal_id.in_(prop_ids))))
         .scalars()
         .all()
     )
@@ -1511,9 +1484,7 @@ async def get_swap_card_payload(
             to_seat=str(p.get("to_seat", p.get("gets_seat", ""))),
             gives_seat=str(p.get("gives_seat", p.get("from_seat", ""))),
             gets_seat=str(p.get("gets_seat", p.get("to_seat", ""))),
-            decided_at=datetime.fromisoformat(p["decided_at"])
-            if p.get("decided_at")
-            else None,
+            decided_at=datetime.fromisoformat(p["decided_at"]) if p.get("decided_at") else None,
         )
         for p in payload.get("participants", [])
     ]
@@ -1628,11 +1599,7 @@ async def expire_pending_swaps(
     await db.execute(delete(SeatLock).where(SeatLock.proposal_id.in_(prop_ids)))
 
     parts = list(
-        (
-            await db.execute(
-                select(SwapParticipant).where(SwapParticipant.proposal_id.in_(prop_ids))
-            )
-        )
+        (await db.execute(select(SwapParticipant).where(SwapParticipant.proposal_id.in_(prop_ids))))
         .scalars()
         .all()
     )
@@ -1665,9 +1632,7 @@ async def expire_pending_swaps(
     from saath_api.matching.service import schedule_or_run_match_recompute
 
     for ji_id in ji_ids:
-        await schedule_or_run_match_recompute(
-            db=db, redis=redis, journey_instance_id=ji_id
-        )
+        await schedule_or_run_match_recompute(db=db, redis=redis, journey_instance_id=ji_id)
     return len(expired)
 
 
@@ -1703,11 +1668,7 @@ async def transition_awaiting_confirmations(
         prop.version += 1
 
     parts = list(
-        (
-            await db.execute(
-                select(SwapParticipant).where(SwapParticipant.proposal_id.in_(prop_ids))
-            )
-        )
+        (await db.execute(select(SwapParticipant).where(SwapParticipant.proposal_id.in_(prop_ids))))
         .scalars()
         .all()
     )

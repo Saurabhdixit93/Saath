@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import structlog
 from arq import cron
 from arq.connections import RedisSettings
-from sqlalchemy import delete, select, update
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from saath_api.auth.models import AuditLog, Device, RefreshToken, User
@@ -19,10 +19,10 @@ from saath_api.journeys.chart_watcher import run_chart_watcher_tick
 from saath_api.journeys.models import Booking
 from saath_api.matching.service import recompute_journey_matches
 from saath_api.notifications.service import deliver_outbox_batch
-from saath_api.public.models import SeatInvite
 from saath_api.providers.messaging import build_messaging_provider
 from saath_api.providers.push import build_web_push_provider
 from saath_api.providers.rail import build_rail_router
+from saath_api.public.models import SeatInvite
 from saath_api.swaps.service import (
     expire_pending_swaps,
     transition_awaiting_confirmations,
@@ -36,9 +36,7 @@ async def heartbeat_job(_ctx: dict[str, Any]) -> str:
     return "ok"
 
 
-async def recompute_matches_job(
-    ctx: dict[str, Any], journey_instance_id: str
-) -> int:
+async def recompute_matches_job(ctx: dict[str, Any], journey_instance_id: str) -> int:
     session_factory = ctx.get("session_factory")
     redis = ctx.get("redis")
     if session_factory is None:
@@ -129,7 +127,12 @@ async def chart_watcher_tick(ctx: dict[str, Any]) -> int:
             await redis_client.aclose()
             await engine.dispose()
 
-    rail_router = ctx.get("rail_router") or build_rail_router(settings, redis)
+    if ctx.get("rail_router") is not None:
+        rail_router = ctx["rail_router"]
+    elif redis is not None:
+        rail_router = build_rail_router(settings, redis)
+    else:
+        raise RuntimeError("chart_watcher_tick requires ctx['redis'] to build a rail router")
     async with session_factory() as db:
         return await run_chart_watcher_tick(
             settings=settings,
@@ -179,12 +182,12 @@ async def _run_retention_purge(db: AsyncSession) -> dict[str, int]:
     now = datetime.now(UTC)
     # 1. Purge expired seat invites
     invites_stmt = delete(SeatInvite).where(SeatInvite.expires_at < now)
-    invites_res = await db.execute(invites_stmt)
+    invites_res = cast(CursorResult[Any], await db.execute(invites_stmt))
     purged_invites = invites_res.rowcount or 0
 
     # 2. Purge expired bookings past purge_after
     bookings_stmt = delete(Booking).where(Booking.purge_after < now)
-    bookings_res = await db.execute(bookings_stmt)
+    bookings_res = cast(CursorResult[Any], await db.execute(bookings_stmt))
     purged_bookings = bookings_res.rowcount or 0
 
     # 3. Sweep users scheduled for erasure >24 hours

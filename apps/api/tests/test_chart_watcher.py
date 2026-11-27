@@ -55,15 +55,43 @@ async def test_simulate_chart_change_invalidates_swap_and_emits_events(
     h_a = {"Authorization": f"Bearer {tok_a}"}
     h_b = {"Authorization": f"Bearer {tok_b}"}
 
-    va = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
-    vb = (await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})).json()
-    await client.put(f"/v1/parties/{vb['party']['id']}/goal", headers=h_b, json={"goal_type": "open_to_help", "movers": [vb["seat_holders"][0]["id"]], "constraints": {}})
-    await client.put(f"/v1/parties/{va['party']['id']}/goal", headers=h_a, json={"goal_type": "lower", "movers": [va["seat_holders"][0]["id"]], "constraints": {}})
+    va = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    vb = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+    await client.put(
+        f"/v1/parties/{vb['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [vb["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{va['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [va["seat_holders"][0]["id"]], "constraints": {}},
+    )
 
-    matches = (await client.get(f"/v1/parties/{va['party']['id']}/matches?kind=pair", headers=h_a)).json()["items"]
-    swap = (await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})).json()
-    acc1 = await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]})
-    acc2 = await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": acc1.json()["version"]})
+    matches = (
+        await client.get(f"/v1/parties/{va['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    swap = (
+        await client.post("/v1/swaps", headers=h_a, json={"card_id": matches[0]["card_id"]})
+    ).json()
+    acc1 = await client.post(
+        f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]}
+    )
+    acc2 = await client.post(
+        f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": acc1.json()["version"]}
+    )
     assert acc2.status_code == 200
 
     reverify = await client.post(
@@ -78,9 +106,7 @@ async def test_simulate_chart_change_invalidates_swap_and_emits_events(
 
     app = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
-        outbox_events = list(
-            (await db.execute(select(NotificationsOutbox.event))).scalars().all()
-        )
+        outbox_events = list((await db.execute(select(NotificationsOutbox.event))).scalars().all())
         assert "BerthChanged" in outbox_events
         assert "SwapInvalidated" in outbox_events
 
@@ -92,7 +118,11 @@ async def test_chart_watcher_tick_transitions_due_journey(
 ) -> None:
     tok_a, _ = await _otp_login(client, fake_messaging, "9876543903")
     h_a = {"Authorization": f"Bearer {tok_a}"}
-    va = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
+    va = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
     ji_id = va["journey"]["id"]
 
     app = client.app  # type: ignore[attr-defined]
@@ -118,7 +148,9 @@ async def test_chart_watcher_tick_transitions_due_journey(
             now_override=future_now,
         )
         assert updated >= 1
-        ji = (await db.execute(select(JourneyInstance).where(JourneyInstance.id == ji_id))).scalar_one()
+        ji = (
+            await db.execute(select(JourneyInstance).where(JourneyInstance.id == ji_id))
+        ).scalar_one()
         assert ji.chart_state == "final"
 
     # Also verify pure compute_public_train_chart_time works directly
@@ -137,7 +169,11 @@ async def test_chart_watcher_enforces_monotonic_chart_state(
 ) -> None:
     tok_a, _ = await _otp_login(client, fake_messaging, "9876543904")
     h_a = {"Authorization": f"Bearer {tok_a}"}
-    va = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
+    va = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
     ji_id = va["journey"]["id"]
 
     app = client.app  # type: ignore[attr-defined]
@@ -154,7 +190,9 @@ async def test_chart_watcher_enforces_monotonic_chart_state(
 
     now = datetime.now(UTC)
     async with app.state.session_factory() as db:
-        ji = (await db.execute(select(JourneyInstance).where(JourneyInstance.id == ji_id))).scalar_one()
+        ji = (
+            await db.execute(select(JourneyInstance).where(JourneyInstance.id == ji_id))
+        ).scalar_one()
         ji.chart_state = "first"
         ji.chart_due_at = now - timedelta(minutes=10)
         ji.departure_at = now + timedelta(hours=5)

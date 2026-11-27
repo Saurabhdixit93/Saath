@@ -4,7 +4,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-REDACTION_TOKEN = "•••"
+REDACTION_TOKEN = "•••"  # noqa: S105
 
 _HINTS: dict[str, str] = {
     "en": "Contact details unlock after you both agree",
@@ -14,6 +14,7 @@ _HINTS: dict[str, str] = {
 
 def redaction_hint_for_locale(locale: str = "en") -> str:
     return _HINTS["hi"] if locale == "hi" else _HINTS["en"]
+
 
 _ZERO_WIDTH_CHARS: frozenset[str] = frozenset(
     {"\u200b", "\u200c", "\u200d", "\ufeff", "\u00ad", "\u034f", "\u180e"}
@@ -160,9 +161,7 @@ _SPACED_URL_RE = re.compile(
 )
 
 # 2. Standard & obfuscated emails
-_EMAIL_STD_RE = re.compile(
-    r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b"
-)
+_EMAIL_STD_RE = re.compile(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b")
 _EMAIL_OBFUSCATED_RE = re.compile(
     r"(?i)\b[a-z0-9._%+-]+\s*(?:\[at\]|\(at\)|\{at\}|@)\s*[a-z0-9.-]+\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,}(?:\s*(?:\[dot\]|\(dot\)|\{dot\}|\bdot\b|\.)\s*[a-z]{2,})*(?!/)\b"
 )
@@ -228,9 +227,7 @@ _MEETUP_PRE_AT_WORDS: frozenset[str] = frozenset(
         "you",
     }
 )
-_UPI_PSP_RE = re.compile(
-    rf"(?i)\b[a-z0-9._-]{{2,}}@(?:{_KNOWN_UPI_PSPS})\b"
-)
+_UPI_PSP_RE = re.compile(rf"(?i)\b[a-z0-9._-]{{2,}}@(?:{_KNOWN_UPI_PSPS})\b")
 _UPI_GENERIC_RE = re.compile(r"(?i)\b[a-z0-9._-]{2,}@[a-z][a-z0-9]{2,19}\b")
 _UPI_OBFUSCATED_BRACKET_KNOWN_RE = re.compile(
     rf"(?i)\b[a-z0-9._-]{{2,}}\s*(?:\[at\]|\(at\)|\{{at\}})\s*(?:{_UNAMBIGUOUS_UPI_PSPS})\b"
@@ -263,12 +260,8 @@ _PHONE_INTL_SEP = r"(?:[^\w]|_)"
 _PHONE_EXPLICIT_RE = re.compile(
     rf"(?<!\d)(?:\(\s*\+?91\s*\)|(?:\+?91|0)){_PHONE_SEP}*[6-9](?:{_PHONE_SEP}*\d){{9}}(?!\d)"
 )
-_PHONE_10_SEPARATED_RE = re.compile(
-    rf"(?<!\d)[6-9](?:{_PHONE_SEP}*\d){{9}}(?!\d)"
-)
-_PHONE_DECOY_10_RE = re.compile(
-    r"(?<!\d)(?=\d{11,22}(?!\d))\d*[6-9]\d{9}\d*(?!\d)"
-)
+_PHONE_10_SEPARATED_RE = re.compile(rf"(?<!\d)[6-9](?:{_PHONE_SEP}*\d){{9}}(?!\d)")
+_PHONE_DECOY_10_RE = re.compile(r"(?<!\d)(?=\d{11,22}(?!\d))\d*[6-9]\d{9}\d*(?!\d)")
 _PHONE_INTL_RE = re.compile(
     rf"(?<!\w)(?:\(\s*\+\d{{1,3}}\s*\)|\+\d{{1,3}}){_PHONE_INTL_SEP}*\d(?:{_PHONE_INTL_SEP}*\d){{7,13}}(?!\d)"
 )
@@ -293,9 +286,7 @@ _COACH_CODE_RE = re.compile(r"(?i)\b(?:[BSHAGMCEDF]|SL|CC|EC|AC|[BSA]E)\d{1,2}\b
 _PHONE_CONTEXT_RE = re.compile(
     r"(?i)\b(?:call|phone|mobile|mob|whatsapp|wa|contact|reach|ping|text|dial|ring|number|no\.?)\b"
 )
-_TRAIN_CONTEXT_RE = re.compile(
-    r"(?i)(?:\btrains?\b|गाड़ी|ट्रेन)"
-)
+_TRAIN_CONTEXT_RE = re.compile(r"(?i)(?:\btrains?\b|गाड़ी|ट्रेन)")
 
 # Token pattern for mixed/word-digit sequences (Latin letters, Devanagari letters+matras, or digits)
 _WORD_OR_NUM_TOKEN_RE = re.compile(r"[0-9]+|(?:[^\W\d_]|[\u0900-\u097F])+", re.UNICODE)
@@ -320,9 +311,7 @@ def _strip_invisible(text: str) -> str:
 
 def _normalize_unicode_digits(text: str) -> str:
     return "".join(
-        str(unicodedata.digit(ch))
-        if ord(ch) > 127 and unicodedata.category(ch) == "Nd"
-        else ch
+        str(unicodedata.digit(ch)) if ord(ch) > 127 and unicodedata.category(ch) == "Nd" else ch
         for ch in text
     )
 
@@ -374,7 +363,9 @@ def _is_benign_seat_list(
     if _PHONE_CONTEXT_RE.search(prefix):
         return False
     vals = [int(t) for t in numeric_tokens]
-    if not (all(1 <= v <= 120 for v in vals) and all(vals[i] > vals[i - 1] for i in range(1, len(vals)))):
+    if not (
+        all(1 <= v <= 120 for v in vals) and all(vals[i] > vals[i - 1] for i in range(1, len(vals)))
+    ):
         return False
     has_seat_or_coach = bool(
         _SEAT_CONTEXT_RE.search(prefix)
@@ -391,13 +382,11 @@ def _is_benign_seat_list(
         if has_seat_or_coach:
             return True
         # Exempt 4+ ascending 1-2 digit berth/seat numbers with small gaps (e.g. 61, 63, 65, 67)
-        if (
+        return (
             len(vals) >= 4
             and all(1 <= v <= 99 for v in vals)
             and all(1 <= vals[i] - vals[i - 1] <= 4 for i in range(1, len(vals)))
-        ):
-            return True
-        return False
+        )
     # Hyphenated ascending seat/berth range/list when seat/coach context is nearby
     return has_seat_or_coach
 
@@ -467,13 +456,11 @@ def _looks_like_pure_numeric_phone(
         return True
     if digits_only.startswith("91") and len(digits_only) == 12 and digits_only[2] in "6789":
         return True
-    if (
+    return bool(
         not _DATE_EMBEDDED_RE.search(sub)
         and 11 <= len(digits_only) <= 22
         and re.search(r"[6-9]\d{9}", digits_only)
-    ):
-        return True
-    return False
+    )
 
 
 @dataclass(frozen=True)
@@ -636,8 +623,11 @@ def _find_word_digit_spans(
             suffix = scan_text[span_end : min(len(scan_text), span_end + 32)]
             # Match if:
             # - >= 7 digits with >= 3 digit words (at least 2 non-ambiguous)
-            # - OR >= 10 total digits across mixed numeric/word tokens (excluding dates, seat lists, train pairs)
-            is_word_phone = word_digit_count >= 3 and non_ambiguous_word_count >= 2 and digit_count >= 7
+            # - OR >= 10 total digits across mixed numeric/word tokens
+            #   (excluding dates, seat lists, train pairs)
+            is_word_phone = (
+                word_digit_count >= 3 and non_ambiguous_word_count >= 2 and digit_count >= 7
+            )
             if word_digit_count > 0 or used_multiplier:
                 is_numeric_phone = digit_count >= 10 and not _is_benign_date_span(
                     sub,
@@ -695,16 +685,17 @@ def _collect_tagged_spans(
             if _DATE_LIKE_RE.fullmatch(sub):
                 continue
             prefix = scan[max(0, m.start() - 32) : m.start()]
-            if regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE, _PHONE_INTL_RE) and _is_benign_date_span(
-                sub, prefix=prefix
-            ):
+            if regex in (
+                _PHONE_EXPLICIT_RE,
+                _PHONE_10_SEPARATED_RE,
+                _PHONE_INTL_RE,
+            ) and _is_benign_date_span(sub, prefix=prefix):
                 continue
             if regex in (_PHONE_EXPLICIT_RE, _PHONE_10_SEPARATED_RE):
                 suffix = scan[m.end() : min(len(scan), m.end() + 32)]
                 num_tokens = re.findall(r"\d+", sub)
-                if (
-                    _is_benign_seat_list(sub, num_tokens, prefix, suffix)
-                    or _is_benign_train_pair(sub, num_tokens, prefix)
+                if _is_benign_seat_list(sub, num_tokens, prefix, suffix) or _is_benign_train_pair(
+                    sub, num_tokens, prefix
                 ):
                     continue
             tagged.append((m.start(), m.end(), "phone"))

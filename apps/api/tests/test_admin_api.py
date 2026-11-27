@@ -19,7 +19,7 @@ from sqlalchemy import select
 from saath_api.admin.models import FeatureFlag
 from saath_api.admin.service import verify_google_oidc_token
 from saath_api.auth.dependencies import Actor
-from saath_api.auth.models import AuditLog, Device, RefreshToken, User
+from saath_api.auth.models import AuditLog, Device, RefreshToken
 from saath_api.core.config import Settings
 from saath_api.core.crypto import create_admin_token
 from saath_api.core.errors import ProblemDetailError
@@ -27,7 +27,6 @@ from saath_api.core.ids import uuid7
 from saath_api.export_openapi import export_openapi_schema
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
 from saath_api.karma.models import KarmaLedger, RewardItem, RewardRedemption
-from saath_api.messaging.models import Message, Report
 from saath_api.notifications.models import NotificationsOutbox
 from saath_api.providers.messaging import FakeMessagingProvider
 from saath_api.swaps.models import SeatLock, SwapParticipant, SwapProposal
@@ -338,10 +337,14 @@ async def test_admin_funnel_and_providers_health(
     h_b = {"Authorization": f"Bearer {tok_b}"}
 
     va = (
-        await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
     ).json()
     vb = (
-        await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
     ).json()
     await client.put(
         f"/v1/parties/{vb['party']['id']}/goal",
@@ -386,7 +389,9 @@ async def test_admin_funnel_and_providers_health(
 
     async with app_ref.state.session_factory() as db:
         ji = (
-            await db.execute(select(JourneyInstance).where(JourneyInstance.id == UUID(va["journey"]["id"])))
+            await db.execute(
+                select(JourneyInstance).where(JourneyInstance.id == UUID(va["journey"]["id"]))
+            )
         ).scalar_one()
         service_no = ji.service_no
         service_date = ji.service_date
@@ -472,9 +477,14 @@ async def test_admin_funnel_and_providers_health(
     h_body = health.json()
     rail_items = [p for p in h_body["providers"] if p["category"] == "rail"]
     assert rail_items
-    assert any(p["circuit_state"] == "open" and p["failures"] == 5 and p["open_ttl_seconds"] > 0 for p in rail_items)
+    assert any(
+        p["circuit_state"] == "open" and p["failures"] == 5 and p["open_ttl_seconds"] > 0
+        for p in rail_items
+    )
     categories = {p["category"] for p in h_body["providers"]}
-    assert {"rail", "flight", "messaging", "push", "llm", "turnstile", "payment"}.issubset(categories)
+    assert {"rail", "flight", "messaging", "push", "llm", "turnstile", "payment"}.issubset(
+        categories
+    )
     assert h_body["outbox"]["queued"] >= 1
     assert h_body["outbox"]["sent"] >= 1
     assert h_body["outbox"]["dead_letter"] >= 1
@@ -526,7 +536,9 @@ async def test_moderation_queue_actions_audit_and_ban_enforcement(
     # Create a pending swap so ban invalidates it and releases seat lock
     swap = (await client.post("/v1/swaps", headers=h_rep, json={"card_id": card_id})).json()
 
-    convo = (await client.post("/v1/conversations", headers=h_rep, json={"card_id": card_id})).json()
+    convo = (
+        await client.post("/v1/conversations", headers=h_rep, json={"card_id": card_id})
+    ).json()
     convo_id = convo["id"]
     m1 = (
         await client.post(
@@ -640,13 +652,21 @@ async def test_moderation_queue_actions_audit_and_ban_enforcement(
 
     app_ref: Any = client.app  # type: ignore[attr-defined]
     async with app_ref.state.session_factory() as db:
-        sp = (await db.execute(select(SwapProposal).where(SwapProposal.id == UUID(swap["id"])))).scalar_one()
+        sp = (
+            await db.execute(select(SwapProposal).where(SwapProposal.id == UUID(swap["id"])))
+        ).scalar_one()
         assert sp.status == "invalidated"
-        locks = (await db.execute(select(SeatLock).where(SeatLock.proposal_id == sp.id))).scalars().all()
+        locks = (
+            (await db.execute(select(SeatLock).where(SeatLock.proposal_id == sp.id)))
+            .scalars()
+            .all()
+        )
         assert locks == []
         revoked_rows = (
-            await db.execute(select(RefreshToken).where(RefreshToken.user_id == UUID(uid_off)))
-        ).scalars().all()
+            (await db.execute(select(RefreshToken).where(RefreshToken.user_id == UUID(uid_off))))
+            .scalars()
+            .all()
+        )
         assert all(rt.revoked_at is not None for rt in revoked_rows)
 
 
@@ -869,8 +889,12 @@ async def test_flags_disputes_redemptions_and_audit_filters(
             purge_after=datetime.now(UTC) + timedelta(days=3),
         )
         db.add_all([b1, b2])
-        sh1 = SeatHolder(id=uuid7(), booking_id=b1.id, pax_seq=1, coach="B2", seat_no="1", seat_type="LB")
-        sh2 = SeatHolder(id=uuid7(), booking_id=b2.id, pax_seq=1, coach="B2", seat_no="2", seat_type="MB")
+        sh1 = SeatHolder(
+            id=uuid7(), booking_id=b1.id, pax_seq=1, coach="B2", seat_no="1", seat_type="LB"
+        )
+        sh2 = SeatHolder(
+            id=uuid7(), booking_id=b2.id, pax_seq=1, coach="B2", seat_no="2", seat_type="MB"
+        )
         db.add_all([sh1, sh2])
 
         sp = SwapProposal(

@@ -128,9 +128,7 @@ _SCAM_RE = re.compile(
     r"|(?:(?:पैसे|रुपये|एडवांस)\s+(?:भेजो|दो)|ओटीपी\s+बताओ)"
     r")"
 )
-_SEXUAL_RE = re.compile(
-    r"(?i)\b(?:nude|naked|sexting|send\s+pics|hookup|hot\s+girl|onlyfans)\b"
-)
+_SEXUAL_RE = re.compile(r"(?i)\b(?:nude|naked|sexting|send\s+pics|hookup|hot\s+girl|onlyfans)\b")
 _HARASSMENT_RE = re.compile(
     r"(?i)\b(?:idiot|stupid|harass|kill\s+you|threat|stalk|abuse|chutiya|mc|bc|gali)\b"
 )
@@ -265,15 +263,9 @@ _IMPLICIT_LOWER_HINT_RE = re.compile(
     r"(?i)(?:\bsenior|\belderly|\bmother\b|\bmom\b|\bfather\b|\bdad\b|"
     r"\bgrandm|\bgrandf|बुजुर्ग|वरिष्ठ|माँ|माताजी|पिताजी|दादी|नानी)"
 )
-_UPPER_RE = re.compile(
-    r"(?i)(?:\bupper\b|\btop\s+berth|\bub\b|\bsu\b|ऊपरी|अपर|ऊपर\s+की|upar\s+ki)"
-)
-_WINDOW_RE = re.compile(
-    r"(?i)(?:\bwindow\b|\bws\b|खिड़की|विंडो|khidki)"
-)
-_AISLE_RE = re.compile(
-    r"(?i)(?:\baisle\b|\bas\b|आइल|गलियारे)"
-)
+_UPPER_RE = re.compile(r"(?i)(?:\bupper\b|\btop\s+berth|\bub\b|\bsu\b|ऊपरी|अपर|ऊपर\s+की|upar\s+ki)")
+_WINDOW_RE = re.compile(r"(?i)(?:\bwindow\b|\bws\b|खिड़की|विंडो|khidki)")
+_AISLE_RE = re.compile(r"(?i)(?:\baisle\b|\bas\b|आइल|गलियारे)")
 _LEGROOM_RE = re.compile(
     r"(?i)(?:\blegroom\b|\bextra\s+leg|\bexit\s+row|\bbulkhead|\btall\b|लेगरूम|एग्ज़िट)"
 )
@@ -306,9 +298,7 @@ _VERIFIED_ONLY_RE = re.compile(
     r"(?i)(?:\bverified\s+only\b|\bonly\s+verified\b|\bverified\s+tickets?\b|"
     r"केवल\s+सत्यापित|सत्यापित\s+टिकट)"
 )
-_EXPLAIN_RE = re.compile(
-    r"(?i)(?:\bexplain\b|\bwhy\b|\bplan\b|\bmatch(?:es)?\b|समझा)"
-)
+_EXPLAIN_RE = re.compile(r"(?i)(?:\bexplain\b|\bwhy\b|\bplan\b|\bmatch(?:es)?\b|समझा)")
 
 
 def _clamp_draft_text(text: str, max_len: int = 300) -> str:
@@ -402,14 +392,11 @@ def _parse_concierge_intent(
         senior_or_non_lb = [
             str(m["seat_holder_id"])
             for m in members
-            if m.get("age_group") == "senior"
-            and str(m.get("seat_type") or "") not in ("LB", "SL")
+            if m.get("age_group") == "senior" and str(m.get("seat_type") or "") not in ("LB", "SL")
         ]
         if not senior_or_non_lb:
             senior_or_non_lb = [
-                str(m["seat_holder_id"])
-                for m in members
-                if m.get("age_group") == "senior"
+                str(m["seat_holder_id"]) for m in members if m.get("age_group") == "senior"
             ]
         if not senior_or_non_lb:
             senior_or_non_lb = [
@@ -461,16 +448,13 @@ def _parse_concierge_intent(
         seniors = [
             str(m["seat_holder_id"])
             for m in members
-            if m.get("age_group") == "senior"
-            and str(m.get("seat_type") or "") not in ("LB", "SL")
+            if m.get("age_group") == "senior" and str(m.get("seat_type") or "") not in ("LB", "SL")
         ]
         coaches = {str(m.get("coach") or "") for m in members if m.get("coach")}
         if seniors:
             goal_type = "lower"
             movers = seniors
-        elif len(members) > 1 and len(coaches) > 1:
-            goal_type = "together"
-        elif len(members) > 1:
+        elif len(members) > 1 and len(coaches) > 1 or len(members) > 1:
             goal_type = "together"
         elif mode == "flight":
             goal_type = "window"

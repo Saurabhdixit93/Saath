@@ -53,17 +53,11 @@ class PaymentOrder(Base):
         UUID(as_uuid=True), ForeignKey("parties.id", ondelete="SET NULL"), nullable=True
     )
     amount_paise: Mapped[int] = mapped_column(Integer, nullable=False)
-    currency: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'INR'")
-    )
+    currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'INR'"))
     provider: Mapped[str] = mapped_column(Text, nullable=False)
-    provider_order_id: Mapped[str | None] = mapped_column(
-        Text, unique=True, nullable=True
-    )
+    provider_order_id: Mapped[str | None] = mapped_column(Text, unique=True, nullable=True)
     provider_payment_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'created'")
-    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'created'"))
     idempotency_key: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -118,15 +112,11 @@ class Entitlement(Base):
     features: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'active'")
-    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
     valid_from: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    valid_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -152,12 +142,8 @@ class B2BApiKey(Base):
     scopes: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default=text("'{}'")
     )
-    rate_limit_rpm: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default=text("120")
-    )
-    status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'active'")
-    )
+    rate_limit_rpm: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("120"))
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'active'"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
+from tests.test_contracts_pii_m3 import _assert_no_pii
 
 from saath_api.admin.models import FeatureFlag
 from saath_api.ai.models import AiUsageLog
@@ -26,7 +27,6 @@ from saath_api.providers.llm import (
     build_llm_provider,
 )
 from saath_api.providers.messaging import FakeMessagingProvider
-from tests.test_contracts_pii_m3 import _assert_no_pii
 
 
 async def _otp_login(
@@ -129,13 +129,17 @@ async def test_ai_concierge_sse_non_mutating_zero_pii_and_usage_logs(
         assert goal_row is None
 
         usage_rows = (
-            await db.execute(
-                select(AiUsageLog).where(
-                    AiUsageLog.user_id == UUID(uid),
-                    AiUsageLog.endpoint == "/v1/ai/concierge",
+            (
+                await db.execute(
+                    select(AiUsageLog).where(
+                        AiUsageLog.user_id == UUID(uid),
+                        AiUsageLog.endpoint == "/v1/ai/concierge",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(usage_rows) == 1
         assert usage_rows[0].input_tokens > 0
         assert usage_rows[0].output_tokens > 0
@@ -230,13 +234,17 @@ async def test_ai_draft_request_en_hi_authz_and_usage_logs(
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
         draft_logs = (
-            await db.execute(
-                select(AiUsageLog).where(
-                    AiUsageLog.user_id == UUID(uid_a),
-                    AiUsageLog.endpoint == "/v1/ai/draft-request",
+            (
+                await db.execute(
+                    select(AiUsageLog).where(
+                        AiUsageLog.user_id == UUID(uid_a),
+                        AiUsageLog.endpoint == "/v1/ai/draft-request",
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(draft_logs) == 2
 
 
@@ -286,9 +294,7 @@ async def test_ai_auth_feature_flag_and_20_per_day_rate_limit(
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
         flag = (
-            await db.execute(
-                select(FeatureFlag).where(FeatureFlag.key == "ai_concierge_enabled")
-            )
+            await db.execute(select(FeatureFlag).where(FeatureFlag.key == "ai_concierge_enabled"))
         ).scalar_one()
         flag.value = False
         await db.commit()
@@ -600,9 +606,7 @@ _ALL_FAMILY = [_EVAL_SENIOR_ID, _EVAL_ADULT_ID, _EVAL_CHILD_ID]
 
 # 30 scripted concierge evaluation cases covering all 9 goal types, constraints,
 # Hindi/Hinglish prompts, movers selection, and prompt-injection safety.
-CONCIERGE_EVAL_CASES: list[
-    tuple[str, str, dict[str, Any], str, dict[str, Any], list[str]]
-] = [
+CONCIERGE_EVAL_CASES: list[tuple[str, str, dict[str, Any], str, dict[str, Any], list[str]]] = [
     (
         "01_senior_lower",
         "My senior mother needs a lower berth",

@@ -5,8 +5,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-
 from fastapi.openapi.utils import get_openapi
+
 from saath_api.admin.router import router as admin_router
 from saath_api.ai.router import router as ai_router
 from saath_api.auth.router import router as auth_router
@@ -26,9 +26,6 @@ from saath_api.messaging.router import router as messaging_router
 from saath_api.notifications.router import router as notifications_router
 from saath_api.parties.router import router as parties_router
 from saath_api.pricing.router import build_pricing_router
-from saath_api.public.router import router as public_router
-from saath_api.realtime.router import router as realtime_router
-from saath_api.swaps.router import router as swaps_router
 from saath_api.providers.flight.schedule import (
     FlightScheduleProvider,
     build_flight_schedule_provider,
@@ -39,6 +36,9 @@ from saath_api.providers.payment import PaymentGatewayProvider, build_payment_pr
 from saath_api.providers.push import WebPushProvider, build_web_push_provider
 from saath_api.providers.rail import ProviderRouter, build_rail_router
 from saath_api.providers.turnstile import TurnstileVerifier, build_turnstile_verifier
+from saath_api.public.router import router as public_router
+from saath_api.realtime.router import router as realtime_router
+from saath_api.swaps.router import router as swaps_router
 
 
 def create_app(
@@ -67,18 +67,14 @@ def create_app(
         app.state.db_engine = db_engine
         app.state.session_factory = session_factory
         app.state.redis = redis_client
-        app.state.rail_router = rail_router or build_rail_router(
-            resolved_settings, redis_client
-        )
+        app.state.rail_router = rail_router or build_rail_router(resolved_settings, redis_client)
         arq_pool = None
         if resolved_settings.env != "test":
             try:
                 from arq import create_pool
                 from arq.connections import RedisSettings
 
-                arq_pool = await create_pool(
-                    RedisSettings.from_dsn(resolved_settings.redis_url)
-                )
+                arq_pool = await create_pool(RedisSettings.from_dsn(resolved_settings.redis_url))
             except Exception:
                 arq_pool = None
         app.state.arq_pool = arq_pool
@@ -100,22 +96,14 @@ def create_app(
 
     app.state.settings = resolved_settings
     app.state.yaml_configs = resolved_yaml
-    app.state.turnstile_verifier = turnstile_verifier or build_turnstile_verifier(
+    app.state.turnstile_verifier = turnstile_verifier or build_turnstile_verifier(resolved_settings)
+    app.state.messaging_provider = messaging_provider or build_messaging_provider(resolved_settings)
+    app.state.flight_schedule_provider = flight_schedule_provider or build_flight_schedule_provider(
         resolved_settings
     )
-    app.state.messaging_provider = messaging_provider or build_messaging_provider(
-        resolved_settings
-    )
-    app.state.flight_schedule_provider = (
-        flight_schedule_provider or build_flight_schedule_provider(resolved_settings)
-    )
-    app.state.payment_provider = payment_provider or build_payment_provider(
-        resolved_settings
-    )
+    app.state.payment_provider = payment_provider or build_payment_provider(resolved_settings)
     app.state.llm_provider = llm_provider or build_llm_provider(resolved_settings)
-    app.state.web_push_provider = web_push_provider or build_web_push_provider(
-        resolved_settings
-    )
+    app.state.web_push_provider = web_push_provider or build_web_push_provider(resolved_settings)
 
     app.add_middleware(
         CORSMiddleware,

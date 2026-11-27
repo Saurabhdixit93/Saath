@@ -150,9 +150,7 @@ async def put_v1_party_goal(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> GoalMutationResponse:
-    return await put_party_goal(
-        db=db, redis=redis, actor=actor, party_id=party_id, req=body
-    )
+    return await put_party_goal(db=db, redis=redis, actor=actor, party_id=party_id, req=body)
 
 
 @router.delete(

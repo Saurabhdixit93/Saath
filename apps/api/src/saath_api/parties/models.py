@@ -44,9 +44,7 @@ class Party(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     leader_anon_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    invite_token_hash: Mapped[bytes | None] = mapped_column(
-        LargeBinary, unique=True, nullable=True
-    )
+    invite_token_hash: Mapped[bytes | None] = mapped_column(LargeBinary, unique=True, nullable=True)
     invite_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -57,9 +55,7 @@ class Party(Base):
 
 class PartyMember(Base):
     __tablename__ = "party_members"
-    __table_args__ = (
-        UniqueConstraint("seat_holder_id", name="uq_party_members_seat_holder"),
-    )
+    __table_args__ = (UniqueConstraint("seat_holder_id", name="uq_party_members_seat_holder"),)
 
     party_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -100,9 +96,7 @@ class Goal(Base):
         UUID(as_uuid=True), ForeignKey("parties.id", ondelete="CASCADE"), nullable=False
     )
     goal_type: Mapped[str] = mapped_column(Text, nullable=False)
-    movers: Mapped[list[uuid.UUID]] = mapped_column(
-        ARRAY(UUID(as_uuid=True)), nullable=False
-    )
+    movers: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False)
     preferred_seats: Mapped[list[str]] = mapped_column(
         ARRAY(Text), nullable=False, server_default=text("'{}'")
     )
@@ -110,9 +104,7 @@ class Goal(Base):
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     standing_offer: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("true")
-    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

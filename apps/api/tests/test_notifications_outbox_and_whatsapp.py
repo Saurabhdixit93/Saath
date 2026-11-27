@@ -69,7 +69,10 @@ async def test_push_subscription_and_profile_notification_channels(
 ) -> None:
     unauth = await client.post(
         "/v1/me/push-subscriptions",
-        json={"endpoint": "https://push.example/1", "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"}},
+        json={
+            "endpoint": "https://push.example/1",
+            "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"},
+        },
     )
     assert unauth.status_code == 401
 
@@ -79,14 +82,20 @@ async def test_push_subscription_and_profile_notification_channels(
     bad = await client.post(
         "/v1/me/push-subscriptions",
         headers=hdr,
-        json={"endpoint": "ftp://invalid", "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"}},
+        json={
+            "endpoint": "ftp://invalid",
+            "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"},
+        },
     )
     assert bad.status_code == 422
 
     ok = await client.post(
         "/v1/me/push-subscriptions",
         headers=hdr,
-        json={"endpoint": "https://push.example/sub-1", "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"}},
+        json={
+            "endpoint": "https://push.example/sub-1",
+            "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"},
+        },
     )
     assert ok.status_code == 200
     assert ok.json()["subscribed"] is True
@@ -94,7 +103,10 @@ async def test_push_subscription_and_profile_notification_channels(
     patch_me = await client.patch(
         "/v1/me",
         headers=hdr,
-        json={"locale": "hi", "notification_channels": {"push": True, "whatsapp": False, "sms": True}},
+        json={
+            "locale": "hi",
+            "notification_channels": {"push": True, "whatsapp": False, "sms": True},
+        },
     )
     assert patch_me.status_code == 200
     assert patch_me.json()["notification_channels"]["whatsapp"] is False
@@ -112,7 +124,10 @@ async def test_outbox_delivery_fallback_idempotency_and_dead_letter(
     await client.post(
         "/v1/me/push-subscriptions",
         headers=hdr,
-        json={"endpoint": "https://push.example/sub-expired", "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"}},
+        json={
+            "endpoint": "https://push.example/sub-expired",
+            "keys": {"p256dh": "p256dh-key-val", "auth": "auth-key"},
+        },
     )
 
     app = client.app  # type: ignore[attr-defined]
@@ -207,7 +222,11 @@ async def test_outbox_delivery_fallback_idempotency_and_dead_letter(
             NotificationsOutbox(
                 user_id=uid,
                 event="BerthChanged",
-                payload={"journey_instance_id": str(ji_soon.id), "new_coach": "B5", "new_seat": "12"},
+                payload={
+                    "journey_instance_id": str(ji_soon.id),
+                    "new_coach": "B5",
+                    "new_seat": "12",
+                },
                 idempotency_key="outbox-urgent-bypass",
             )
         )
@@ -249,7 +268,11 @@ async def test_whatsapp_webhook_hmac_dedupe_and_pnr_bot(
 
     good_challenge = await client.get(
         "/v1/webhooks/whatsapp",
-        params={"hub.mode": "subscribe", "hub.verify_token": "wa-verify-tok", "hub.challenge": "12345"},
+        params={
+            "hub.mode": "subscribe",
+            "hub.verify_token": "wa-verify-tok",
+            "hub.challenge": "12345",
+        },
     )
     assert good_challenge.status_code == 200
     assert good_challenge.text == "12345"

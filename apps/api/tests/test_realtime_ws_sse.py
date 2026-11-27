@@ -60,20 +60,47 @@ async def test_ws_auth_ping_pong_typing_and_pubsub_fanout(
     h_a = {"Authorization": f"Bearer {tok_a}"}
     h_b = {"Authorization": f"Bearer {tok_b}"}
 
-    va = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
-    vb = (await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})).json()
-    await client.put(f"/v1/parties/{vb['party']['id']}/goal", headers=h_b, json={"goal_type": "open_to_help", "movers": [vb["seat_holders"][0]["id"]], "constraints": {}})
-    await client.put(f"/v1/parties/{va['party']['id']}/goal", headers=h_a, json={"goal_type": "lower", "movers": [va["seat_holders"][0]["id"]], "constraints": {}})
+    va = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    vb = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+    await client.put(
+        f"/v1/parties/{vb['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [vb["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{va['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [va["seat_holders"][0]["id"]], "constraints": {}},
+    )
 
-    matches = (await client.get(f"/v1/parties/{va['party']['id']}/matches?kind=pair", headers=h_a)).json()["items"]
-    convo = (await client.post("/v1/conversations", headers=h_a, json={"card_id": matches[0]["card_id"]})).json()
+    matches = (
+        await client.get(f"/v1/parties/{va['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
+    convo = (
+        await client.post("/v1/conversations", headers=h_a, json={"card_id": matches[0]["card_id"]})
+    ).json()
     convo_id = convo["id"]
 
     app = client.app  # type: ignore[attr-defined]
     redis = app.state.redis
 
     with TestClient(app) as sync_client:
-        with sync_client.websocket_connect("/v1/ws") as ws_a, sync_client.websocket_connect("/v1/ws") as ws_b:
+        with (
+            sync_client.websocket_connect("/v1/ws") as ws_a,
+            sync_client.websocket_connect("/v1/ws") as ws_b,
+        ):
             ws_a.send_text(json.dumps({"type": "auth", "token": tok_a}))
             ws_b.send_text(json.dumps({"type": "auth", "token": tok_b}))
             assert ws_a.receive_json() == {"type": "ready"}
@@ -92,7 +119,12 @@ async def test_ws_auth_ping_pong_typing_and_pubsub_fanout(
             await publish_user_event(
                 redis,
                 uid_a,
-                {"type": "journey.chart", "journey_id": va["journey"]["id"], "state": "final", "changed": True},
+                {
+                    "type": "journey.chart",
+                    "journey_id": va["journey"]["id"],
+                    "state": "final",
+                    "changed": True,
+                },
             )
             chart_evt = ws_a.receive_json()
             assert chart_evt["type"] == "journey.chart"
@@ -101,7 +133,11 @@ async def test_ws_auth_ping_pong_typing_and_pubsub_fanout(
             await publish_conversation_event(
                 redis,
                 convo_id,
-                {"type": "message.new", "conversation_id": convo_id, "message": {"id": "m1", "body": "hi"}},
+                {
+                    "type": "message.new",
+                    "conversation_id": convo_id,
+                    "message": {"id": "m1", "body": "hi"},
+                },
             )
             msg_evt = ws_b.receive_json()
             assert msg_evt["type"] in ("typing", "message.new")

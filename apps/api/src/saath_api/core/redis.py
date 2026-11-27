@@ -41,7 +41,8 @@ def _lock_for_key(key: str) -> asyncio.Lock:
 
 
 def create_redis_client(settings: Settings) -> Redis:
-    return Redis.from_url(settings.redis_url, decode_responses=True)
+    client: Redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    return client
 
 
 def get_redis(request: Request) -> Redis:
@@ -68,7 +69,7 @@ class SlidingWindowRateLimiter:
         member = f"{now_ms}:{uuid.uuid4().hex[:8]}"
 
         try:
-            raw = await self._redis.eval(  # type: ignore[misc,no-untyped-call]
+            raw = await self._redis.eval(  # type: ignore[misc]
                 _SLIDING_WINDOW_LUA,
                 1,
                 key,

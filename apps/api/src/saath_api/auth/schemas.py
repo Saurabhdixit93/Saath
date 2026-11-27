@@ -15,7 +15,7 @@ class AnonymousAuthRequest(BaseModel):
 
 class AnonymousAuthResponse(BaseModel):
     access: str
-    token_type: Literal["bearer"] = "bearer"
+    token_type: Literal["bearer"] = "bearer"  # noqa: S105
     expires_in: int
 
 
@@ -70,9 +70,7 @@ class UserProfile(BaseModel):
     reliability_completed: int
     status: Literal["active", "restricted", "banned", "deleted"]
     leaderboard_opt_in: bool = False
-    notification_channels: NotificationChannelsDTO = Field(
-        default_factory=NotificationChannelsDTO
-    )
+    notification_channels: NotificationChannelsDTO = Field(default_factory=NotificationChannelsDTO)
     created_at: datetime
 
 

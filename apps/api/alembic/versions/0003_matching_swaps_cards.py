@@ -5,6 +5,7 @@ Revises: 0002_journeys_parties_goals
 Create Date: 2026-11-25 16:45:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -74,9 +74,7 @@ class Badge(Base):
 
 class RewardItem(Base):
     __tablename__ = "reward_items"
-    __table_args__ = (
-        CheckConstraint("cost_points > 0", name="ck_reward_items_cost_points"),
-    )
+    __table_args__ = (CheckConstraint("cost_points > 0", name="ck_reward_items_cost_points"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     code: Mapped[str] = mapped_column(Text, nullable=False, unique=True)

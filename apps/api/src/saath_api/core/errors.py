@@ -77,9 +77,7 @@ def _problem_response(
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ProblemDetailError)
-    async def handle_problem_error(
-        _request: Request, exc: ProblemDetailError
-    ) -> JSONResponse:
+    async def handle_problem_error(_request: Request, exc: ProblemDetailError) -> JSONResponse:
         return _problem_response(
             status_code=exc.status_code,
             code=exc.code,
@@ -90,9 +88,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(HTTPException)
-    async def handle_http_exception(
-        _request: Request, exc: HTTPException
-    ) -> JSONResponse:
+    async def handle_http_exception(_request: Request, exc: HTTPException) -> JSONResponse:
         detail = exc.detail if isinstance(exc.detail, str) else "HTTP error"
         return _problem_response(
             status_code=exc.status_code,
@@ -125,9 +121,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def handle_unexpected_error(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
         logger.exception(
             "unhandled_exception",
             path=str(request.url.path),
@@ -148,9 +142,7 @@ def openapi_error_responses(*statuses: int) -> dict[int | str, dict[str, Any]]:
         mapping[code] = {
             "description": "RFC 9457 Problem Details error response",
             "content": {
-                PROBLEM_JSON_MEDIA_TYPE: {
-                    "schema": {"$ref": "#/components/schemas/ProblemDetail"}
-                }
+                PROBLEM_JSON_MEDIA_TYPE: {"schema": {"$ref": "#/components/schemas/ProblemDetail"}}
             },
         }
     return mapping

@@ -5,6 +5,7 @@ Revises:
 Create Date: 2026-11-25 14:00:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -152,9 +153,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_refresh_tokens_family_id", "refresh_tokens", ["family_id"])
-    op.create_index(
-        "ix_refresh_tokens_user_device", "refresh_tokens", ["user_id", "device_id"]
-    )
+    op.create_index("ix_refresh_tokens_user_device", "refresh_tokens", ["user_id", "device_id"])
 
     op.create_table(
         "consents",
@@ -179,9 +178,7 @@ def upgrade() -> None:
             name="ck_consents_purpose",
         ),
     )
-    op.create_index(
-        "ix_consents_user_purpose_at", "consents", ["user_id", "purpose", "at"]
-    )
+    op.create_index("ix_consents_user_purpose_at", "consents", ["user_id", "purpose", "at"])
 
     op.create_table(
         "audit_log",

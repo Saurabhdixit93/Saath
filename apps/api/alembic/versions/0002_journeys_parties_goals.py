@@ -5,6 +5,7 @@ Revises: 0001_identity_and_audit
 Create Date: 2026-11-25 15:25:00.000000
 
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -481,9 +482,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_entitlements_user_status", "entitlements", ["user_id", "status"])
-    op.create_index(
-        "ix_entitlements_scope_journey", "entitlements", ["scope_journey_instance_id"]
-    )
+    op.create_index("ix_entitlements_scope_journey", "entitlements", ["scope_journey_instance_id"])
     op.create_index("ix_entitlements_scope_party", "entitlements", ["scope_party_id"])
 
     op.create_table(

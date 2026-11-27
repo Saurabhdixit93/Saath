@@ -5,18 +5,14 @@ import json
 import zipfile
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID
 
 import pytest
-from httpx import AsyncClient
 from sqlalchemy import select
 
-from saath_api.auth.models import AuditLog, Consent, RefreshToken, User
-from saath_api.core.crypto import blind_index, encrypt_phone
+from saath_api.auth.models import AuditLog, RefreshToken, User
 from saath_api.core.ids import uuid7
 from saath_api.dpdp.schemas import (
     DPDP_NOTICE_VERSION,
-    DPDP_PURPOSES,
     ConsentItemInput,
 )
 from saath_api.dpdp.service import (
@@ -27,8 +23,6 @@ from saath_api.dpdp.service import (
 )
 from saath_api.journeys.models import Booking, JourneyInstance, SeatHolder
 from saath_api.karma.models import Badge, KarmaLedger
-from saath_api.messaging.models import Conversation, ConversationMember, Message
-from saath_api.parties.models import Party, PartyMember
 from saath_api.public.models import SeatInvite
 from saath_api.swaps.models import SeatLock, SwapParticipant, SwapProposal
 from saath_api.worker import _run_retention_purge
@@ -313,9 +307,7 @@ async def test_delete_account_and_retention_purge(db_session):
     assert swap.status == "cancelled"
 
     # Verify seat lock removed
-    locks_res = await db_session.execute(
-        select(SeatLock).where(SeatLock.proposal_id == swap.id)
-    )
+    locks_res = await db_session.execute(select(SeatLock).where(SeatLock.proposal_id == swap.id))
     assert len(locks_res.scalars().all()) == 0
 
     # Simulate 24 hours passing to test retention purge worker sweep

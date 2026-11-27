@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal
@@ -105,8 +106,8 @@ def _seat_holder_dto(sh: SeatHolder) -> SeatHolderOwnDTO:
         seat_no=sh.seat_no,
         seat_type=sh.seat_type,
         bay=sh.bay,
-        age_band=sh.age_band,  # type: ignore[arg-type]
-        gender_band=sh.gender_band,  # type: ignore[arg-type]
+        age_band=sh.age_band,
+        gender_band=sh.gender_band,
         linked_user_id=sh.linked_user_id,
     )
 
@@ -117,14 +118,12 @@ def _goal_dto(goal: Goal | None) -> GoalDTO | None:
     return GoalDTO(
         id=goal.id,
         party_id=goal.party_id,
-        goal_type=goal.goal_type,  # type: ignore[arg-type]
+        goal_type=goal.goal_type,
         movers=list(goal.movers),
         preferred_seats=list(goal.preferred_seats),
         constraints=GoalConstraintsDTO.model_validate(goal.constraints or {}),
         standing_offer=(
-            StandingOfferDTO.model_validate(goal.standing_offer)
-            if goal.standing_offer
-            else None
+            StandingOfferDTO.model_validate(goal.standing_offer) if goal.standing_offer else None
         ),
         active=goal.active,
         updated_at=goal.updated_at,
@@ -134,14 +133,14 @@ def _goal_dto(goal: Goal | None) -> GoalDTO | None:
 def _journey_summary_dto(ji: JourneyInstance) -> JourneySummaryDTO:
     return JourneySummaryDTO(
         id=ji.id,
-        mode=ji.mode,  # type: ignore[arg-type]
+        mode=ji.mode,
         carrier_code=ji.carrier_code,
         service_no=ji.service_no,
         service_date=ji.service_date,
         departure_at=ji.departure_at,
         arrival_at=ji.arrival_at,
         chart_due_at=ji.chart_due_at,
-        chart_state=ji.chart_state,  # type: ignore[arg-type]
+        chart_state=ji.chart_state,
         layout_ref=ji.layout_ref,
         match_version=ji.match_version,
     )
@@ -153,7 +152,7 @@ def _booking_summary_dto(booking: Booking) -> BookingSummaryDTO:
         travel_class=booking.travel_class,
         from_code=booking.from_code,
         to_code=booking.to_code,
-        trust_tier=booking.trust_tier,  # type: ignore[arg-type]
+        trust_tier=booking.trust_tier,
         claim_conflict_flagged=booking.claim_conflict_flagged,
         last_verified_at=booking.last_verified_at,
     )
@@ -186,9 +185,7 @@ def _build_smart_suggestions(
     suggestions: list[SmartSuggestionDTO] = []
     if mode == "train":
         seniors_on_upper = [
-            m.id
-            for m in members
-            if m.age_band == "senior" and m.seat_type in ("UB", "SU")
+            m.id for m in members if m.age_band == "senior" and m.seat_type in ("UB", "SU")
         ]
         if seniors_on_upper:
             suggestions.append(
@@ -379,9 +376,7 @@ async def _ensure_party_for_booking(
         )
         pm_rows = list(existing_pm.scalars().all())
         if pm_rows:
-            party_res = await db.execute(
-                select(Party).where(Party.id == pm_rows[0].party_id)
-            )
+            party_res = await db.execute(select(Party).where(Party.id == pm_rows[0].party_id))
             existing_party = party_res.scalar_one_or_none()
             if existing_party is not None:
                 existing_sh_ids = {pm.seat_holder_id for pm in pm_rows}
@@ -464,7 +459,10 @@ async def _verify_train(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 code="rail_provider_unavailable",
                 title="Rail Provider Unavailable",
-                detail="Rail verification provider is temporarily unavailable. Try pasting your IRCTC SMS.",
+                detail=(
+                    "Rail verification provider is temporarily unavailable. "
+                    "Try pasting your IRCTC SMS."
+                ),
             )
         raw_pnr = req.pnr.strip()
         trust_tier = "verified_provider"
@@ -496,7 +494,10 @@ async def _verify_train(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 code="rail_provider_unavailable",
                 title="Rail Provider Unavailable",
-                detail="Rail verification provider is temporarily unavailable. Try pasting your IRCTC SMS.",
+                detail=(
+                    "Rail verification provider is temporarily unavailable. "
+                    "Try pasting your IRCTC SMS."
+                ),
             ) from exc
     elif req.sms_text:
         try:
@@ -558,7 +559,10 @@ async def _verify_train(
                 status_code=status.HTTP_409_CONFLICT,
                 code="pnr_already_claimed",
                 title="PNR Already Verified",
-                detail="This PNR is already verified on another account. Ask the group organiser for an invite link.",
+                detail=(
+                    "This PNR is already verified on another account. "
+                    "Ask the group organiser for an invite link."
+                ),
             )
         booking.last_verified_at = now
         booking.travel_class = travel_class
@@ -599,10 +603,8 @@ async def _verify_train(
         bay = p.bay
         seat_type = p.seat_type
         if p.seat_no and p.seat_no.isdigit() and (bay is None or seat_type is None):
-            try:
+            with contextlib.suppress(ValueError):
                 bay, seat_type, _ = seat_to_bay_and_type(travel_class, int(p.seat_no))
-            except ValueError:
-                pass
         sh = SeatHolder(
             id=uuid7(),
             booking_id=booking.id,
@@ -731,9 +733,7 @@ async def _verify_flight(
                 return ji, existing_booking, [existing_sh], party
 
             existing_booking.claim_conflict_flagged = True
-            actor_label = (
-                f"user:{actor.user_id}" if actor.user_id else (actor.anon_id or "anon")
-            )
+            actor_label = f"user:{actor.user_id}" if actor.user_id else (actor.anon_id or "anon")
             db.add(
                 AuditLog(
                     actor=actor_label,
@@ -799,7 +799,11 @@ async def _verify_flight(
                 detail="Enter a valid flight number like 6E215 or AI804.",
             )
         carrier = match.group(1)
-        svc_no = f"{carrier}{int(match.group(2))}" if match.group(2).isdigit() else f"{carrier}{match.group(2)}"
+        svc_no = (
+            f"{carrier}{int(match.group(2))}"
+            if match.group(2).isdigit()
+            else f"{carrier}{match.group(2)}"
+        )
 
         try:
             schedule = await flight_provider.lookup_flight(
@@ -852,16 +856,16 @@ async def _verify_flight(
                 Booking.pnr_hash == declared_pnr_hash,
             )
         )
-        existing_booking = existing_res.scalar_one_or_none()
-        if existing_booking is not None:
+        declared_booking = existing_res.scalar_one_or_none()
+        if declared_booking is not None:
             sh_res = await db.execute(
-                select(SeatHolder).where(SeatHolder.booking_id == existing_booking.id)
+                select(SeatHolder).where(SeatHolder.booking_id == declared_booking.id)
             )
             shs = list(sh_res.scalars().all())
             party = await _ensure_party_for_booking(
                 db=db, actor=actor, journey_instance_id=ji.id, seat_holders=shs
             )
-            return ji, existing_booking, shs, party
+            return ji, declared_booking, shs, party
 
         booking = Booking(
             id=uuid7(),
@@ -1078,7 +1082,7 @@ async def verify_journey(
         seat_holders=[_seat_holder_dto(sh) for sh in seat_holders],
         party_id=party.id,
         party=VerifyPartyRef(id=party.id),
-        trust_tier=booking.trust_tier,  # type: ignore[arg-type]
+        trust_tier=booking.trust_tier,
         chart=_chart_dto(ji),
     )
 
@@ -1165,9 +1169,7 @@ async def _load_actor_journey_context(
     actor: Actor,
     journey_id: UUID,
 ) -> tuple[JourneyInstance, Booking, Party]:
-    ji_res = await db.execute(
-        select(JourneyInstance).where(JourneyInstance.id == journey_id)
-    )
+    ji_res = await db.execute(select(JourneyInstance).where(JourneyInstance.id == journey_id))
     ji = ji_res.scalar_one_or_none()
     if ji is None:
         raise ProblemDetailError(
@@ -1208,9 +1210,7 @@ async def _load_actor_journey_context(
     )
     party = party_res.scalars().first()
     if party is None:
-        sh_res = await db.execute(
-            select(SeatHolder).where(SeatHolder.booking_id == booking.id)
-        )
+        sh_res = await db.execute(select(SeatHolder).where(SeatHolder.booking_id == booking.id))
         shs = list(sh_res.scalars().all())
         party = await _ensure_party_for_booking(
             db=db, actor=actor, journey_instance_id=ji.id, seat_holders=shs
@@ -1261,9 +1261,7 @@ async def list_journeys(
             continue
 
         count_res = await db.execute(
-            select(func.count(PartyMember.seat_holder_id)).where(
-                PartyMember.party_id == party.id
-            )
+            select(func.count(PartyMember.seat_holder_id)).where(PartyMember.party_id == party.id)
         )
         member_count = int(count_res.scalar_one() or len(own_shs))
 
@@ -1370,9 +1368,13 @@ async def reverify_journey(
                 target.bay = 15 if target.seat_no == "15A" else 16
             new_chart_state = "final"
             berth_changes.append((target, old_coach, old_seat, actor.user_id))
-    elif ji.mode == "train" and ji.chart_due_at is not None and now >= ji.chart_due_at:
-        if ji.chart_state == "pending":
-            new_chart_state = "final"
+    elif (
+        ji.mode == "train"
+        and ji.chart_due_at is not None
+        and now >= ji.chart_due_at
+        and ji.chart_state == "pending"
+    ):
+        new_chart_state = "final"
 
     if berth_changes or new_chart_state is not None:
         from saath_api.journeys.chart_watcher import apply_journey_chart_update
@@ -1407,10 +1409,10 @@ async def _prune_goal_movers(
     if not removed_seat_holder_ids:
         return
     active_goals = (
-        await db.execute(
-            select(Goal).where(Goal.party_id == party_id, Goal.active.is_(True))
-        )
-    ).scalars().all()
+        (await db.execute(select(Goal).where(Goal.party_id == party_id, Goal.active.is_(True))))
+        .scalars()
+        .all()
+    )
     now = datetime.now(UTC)
     for goal in active_goals:
         remaining = [mid for mid in goal.movers if mid not in removed_seat_holder_ids]
@@ -1442,11 +1444,7 @@ async def delete_journey_booking(
 
     deleted_id = booking.id
     deleted_sh_ids = set(
-        (
-            await db.execute(
-                select(SeatHolder.id).where(SeatHolder.booking_id == booking.id)
-            )
-        )
+        (await db.execute(select(SeatHolder.id).where(SeatHolder.booking_id == booking.id)))
         .scalars()
         .all()
     )
@@ -1488,9 +1486,7 @@ async def delete_journey_booking(
             _, next_uid, next_aid = remaining_rows[0]
             party.leader_user_id = next_uid
             party.leader_anon_id = next_aid
-        await _prune_goal_movers(
-            db=db, party_id=party.id, removed_seat_holder_ids=deleted_sh_ids
-        )
+        await _prune_goal_movers(db=db, party_id=party.id, removed_seat_holder_ids=deleted_sh_ids)
 
     ji.match_version += 1
     await db.commit()

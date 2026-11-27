@@ -497,7 +497,9 @@ class FakeRailProvider:
             coaches: list[CoachDTO] = []
             pos = 1
             for cls in entry.classes:
-                normalized = cls if cls in ("1A", "2A", "3A", "3E", "SL", "CC", "EC", "2S") else "3A"
+                normalized = (
+                    cls if cls in ("1A", "2A", "3A", "3E", "SL", "CC", "EC", "2S") else "3A"
+                )
                 cap = default_capacity_for_class(normalized)  # type: ignore[arg-type]
                 prefix = {
                     "1A": "H",

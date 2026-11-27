@@ -22,9 +22,7 @@ from saath_api.auth.models import Base
 
 class Conversation(Base):
     __tablename__ = "conversations"
-    __table_args__ = (
-        Index("ix_conversations_journey_instance_id", "journey_instance_id"),
-    )
+    __table_args__ = (Index("ix_conversations_journey_instance_id", "journey_instance_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     journey_instance_id: Mapped[uuid.UUID] = mapped_column(
@@ -33,9 +31,7 @@ class Conversation(Base):
         nullable=False,
     )
     source_card_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    unmasked: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
-    )
+    unmasked: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -46,9 +42,7 @@ class Conversation(Base):
 
 class ConversationMember(Base):
     __tablename__ = "conversation_members"
-    __table_args__ = (
-        Index("ix_conversation_members_user_id", "user_id"),
-    )
+    __table_args__ = (Index("ix_conversation_members_user_id", "user_id"),)
 
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -102,9 +96,7 @@ class Message(Base):
     client_id: Mapped[str] = mapped_column(Text, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     lang: Mapped[str | None] = mapped_column(Text, nullable=True)
-    moderation: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'ok'")
-    )
+    moderation: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'ok'"))
     moderation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -144,9 +136,7 @@ class Report(Base):
         nullable=True,
     )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'open'")
-    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'open'"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

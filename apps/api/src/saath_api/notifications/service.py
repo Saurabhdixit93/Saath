@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from datetime import UTC, datetime, timedelta
@@ -26,8 +27,8 @@ from saath_api.core.crypto import (
 )
 from saath_api.core.errors import ProblemDetailError
 from saath_api.core.ids import uuid7
-from saath_api.journeys.models import Booking, JourneyInstance
-from saath_api.journeys.schemas import VerifyJourneyRequest
+from saath_api.journeys.models import JourneyInstance
+from saath_api.journeys.schemas import GoalConstraintsDTO, VerifyJourneyRequest
 from saath_api.journeys.service import verify_journey
 from saath_api.matching.models import MatchCandidate
 from saath_api.notifications.models import NotificationsOutbox
@@ -46,7 +47,7 @@ from saath_api.notifications.templates import (
     render_notification,
 )
 from saath_api.parties.models import Party, PartyMember
-from saath_api.parties.schemas import GoalConstraintsDTO, PutGoalRequest
+from saath_api.parties.schemas import PutGoalRequest
 from saath_api.parties.service import put_party_goal
 from saath_api.providers.base import ProviderError
 from saath_api.providers.flight.schedule import FlightScheduleProvider
@@ -61,18 +62,14 @@ _PNR_RE = re.compile(r"\b([0-9]{10})\b")
 _MAX_OUTBOX_ATTEMPTS = 5
 
 
-async def _resolve_departure_at(
-    db: AsyncSession, payload: dict[str, Any]
-) -> datetime | None:
+async def _resolve_departure_at(db: AsyncSession, payload: dict[str, Any]) -> datetime | None:
     ji_raw = payload.get("journey_instance_id") or payload.get("journey_id")
     if isinstance(ji_raw, str):
         try:
             ji_id = UUID(ji_raw)
             dep = (
                 await db.execute(
-                    select(JourneyInstance.departure_at).where(
-                        JourneyInstance.id == ji_id
-                    )
+                    select(JourneyInstance.departure_at).where(JourneyInstance.id == ji_id)
                 )
             ).scalar_one_or_none()
             if dep is not None:
@@ -137,8 +134,10 @@ async def deliver_outbox_batch(
         return stats
 
     for row in rows:
-        if row.user_id is None or row.event in INTERNAL_ONLY_EVENTS or (
-            row.event not in EXTERNAL_NOTIFICATION_EVENTS
+        if (
+            row.user_id is None
+            or row.event in INTERNAL_ONLY_EVENTS
+            or (row.event not in EXTERNAL_NOTIFICATION_EVENTS)
         ):
             row.status = "sent"
             row.sent_at = now
@@ -147,18 +146,14 @@ async def deliver_outbox_batch(
 
         idemp_redis_key = f"notif:delivered:{row.idempotency_key}"
         if redis is not None:
-            try:
+            with contextlib.suppress(Exception):
                 if await redis.exists(idemp_redis_key):
                     row.status = "sent"
                     row.sent_at = now
                     stats["sent"] += 1
                     continue
-            except Exception:
-                pass
 
-        user = (
-            await db.execute(select(User).where(User.id == row.user_id))
-        ).scalar_one_or_none()
+        user = (await db.execute(select(User).where(User.id == row.user_id))).scalar_one_or_none()
         if user is None or user.status in ("banned", "deleted"):
             row.status = "sent"
             row.sent_at = now
@@ -226,9 +221,7 @@ async def deliver_outbox_batch(
 
         # 2. WhatsApp fallback
         phone_e164: str | None = None
-        if delivered_channel is None and (
-            prefs.get("whatsapp", True) or prefs.get("sms", True)
-        ):
+        if delivered_channel is None and (prefs.get("whatsapp", True) or prefs.get("sms", True)):
             try:
                 phone_e164 = decrypt_phone(user.phone_enc, settings.phone_aes_key)
             except Exception as exc:
@@ -265,10 +258,8 @@ async def deliver_outbox_batch(
 
         if delivered_channel is not None:
             if redis is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await redis.set(idemp_redis_key, "1", ex=86400)
-                except Exception:
-                    pass
             row.status = "sent"
             row.channel = delivered_channel
             row.sent_at = now
@@ -348,13 +339,9 @@ async def register_push_subscription(
     return PushSubscriptionResponse(subscribed=True)
 
 
-async def get_notification_prefs(
-    *, db: AsyncSession, actor: Actor
-) -> NotificationChannelsDTO:
+async def get_notification_prefs(*, db: AsyncSession, actor: Actor) -> NotificationChannelsDTO:
     assert actor.user_id is not None
-    user = (
-        await db.execute(select(User).where(User.id == actor.user_id))
-    ).scalar_one()
+    user = (await db.execute(select(User).where(User.id == actor.user_id))).scalar_one()
     return NotificationChannelsDTO.model_validate(user.notification_channels)
 
 
@@ -365,9 +352,7 @@ async def update_notification_prefs(
     req: NotificationChannelsPatchDTO,
 ) -> NotificationChannelsDTO:
     assert actor.user_id is not None
-    user = (
-        await db.execute(select(User).where(User.id == actor.user_id))
-    ).scalar_one()
+    user = (await db.execute(select(User).where(User.id == actor.user_id))).scalar_one()
     merged = dict(user.notification_channels)
     if req.push is not None:
         merged["push"] = req.push
@@ -411,9 +396,7 @@ def _extract_whatsapp_messages(payload: dict[str, Any]) -> list[tuple[str, str, 
                     text_val = ""
                     if m.get("type") == "text" and isinstance(m.get("text"), dict):
                         text_val = str(m["text"].get("body") or "")
-                    elif m.get("type") == "interactive" and isinstance(
-                        m.get("interactive"), dict
-                    ):
+                    elif m.get("type") == "interactive" and isinstance(m.get("interactive"), dict):
                         btn = m["interactive"].get("button_reply")
                         if isinstance(btn, dict):
                             text_val = str(btn.get("title") or btn.get("id") or "")
@@ -469,9 +452,7 @@ async def _find_or_create_whatsapp_user(
             )
             .on_conflict_do_nothing(index_elements=[User.phone_bidx])
         )
-        user = (
-            await db.execute(select(User).where(User.phone_bidx == phone_bidx))
-        ).scalar_one()
+        user = (await db.execute(select(User).where(User.phone_bidx == phone_bidx))).scalar_one()
         db.add(
             AuditLog(
                 actor=f"user:{user.id}",
@@ -680,7 +661,7 @@ async def process_whatsapp_webhook(
                         actor=actor,
                         party_id=party_id,
                         req=PutGoalRequest(
-                            goal_type=goal_type,  # type: ignore[arg-type]
+                            goal_type=goal_type,
                             movers=mover_ids,
                             constraints=GoalConstraintsDTO(),
                         ),
@@ -692,7 +673,10 @@ async def process_whatsapp_webhook(
                     )
                     await messaging_provider.send_whatsapp_reply(
                         phone_e164=phone_e164,
-                        text=f"Goal saved ({hub.goal.goal_type if hub.goal else goal_type}). View matches: {deep_link}",
+                        text=(
+                            f"Goal saved ({hub.goal.goal_type if hub.goal else goal_type}). "
+                            f"View matches: {deep_link}"
+                        ),
                     )
                 except ProblemDetailError as exc:
                     await messaging_provider.send_whatsapp_reply(

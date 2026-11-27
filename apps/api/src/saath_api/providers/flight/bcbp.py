@@ -245,9 +245,7 @@ def parse_bcbp(
                 "malformed_bcbp", f"Invalid variable length on leg {idx + 1}."
             ) from exc
         if len(raw) < cursor + 37 + var_len:
-            raise BcbpParseError(
-                "malformed_bcbp", f"Truncated variable block on leg {idx + 1}."
-            )
+            raise BcbpParseError("malformed_bcbp", f"Truncated variable block on leg {idx + 1}.")
 
         legs.append(
             _parse_leg_fields(

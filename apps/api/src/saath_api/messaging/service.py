@@ -101,9 +101,7 @@ def _format_revealed_seat(sh: SeatHolder | None) -> str | None:
     return f"{sh.seat_no} {sh.seat_type or ''}".strip()
 
 
-async def _has_mutual_block(
-    db: AsyncSession, *, user_id: UUID, other_user_ids: list[UUID]
-) -> bool:
+async def _has_mutual_block(db: AsyncSession, *, user_id: UUID, other_user_ids: list[UUID]) -> bool:
     if not other_user_ids:
         return False
     row = (
@@ -148,8 +146,10 @@ async def _build_conversation_dto(
         sh_ids = [m.seat_holder_id for m in members if m.seat_holder_id is not None]
         if sh_ids:
             sh_rows = (
-                await db.execute(select(SeatHolder).where(SeatHolder.id.in_(sh_ids)))
-            ).scalars().all()
+                (await db.execute(select(SeatHolder).where(SeatHolder.id.in_(sh_ids))))
+                .scalars()
+                .all()
+            )
             sh_by_id = {sh.id: sh for sh in sh_rows}
 
     participants: list[ConversationParticipantDTO] = []
@@ -178,9 +178,7 @@ async def _build_conversation_dto(
             )
         )
 
-    blocked = await _has_mutual_block(
-        db, user_id=actor_user_id, other_user_ids=other_uids
-    )
+    blocked = await _has_mutual_block(db, user_id=actor_user_id, other_user_ids=other_uids)
 
     alias_by_uid = {m.user_id: m.alias for m in members}
     last_msg_row = (
@@ -213,7 +211,7 @@ async def _build_conversation_dto(
             if last_msg_row.moderation == "hidden"
             else last_msg_row.body,
             lang=last_msg_row.lang,
-            moderation=last_msg_row.moderation,  # type: ignore[arg-type]
+            moderation=last_msg_row.moderation,
             redacted_hint=None,
             created_at=last_msg_row.created_at,
         )
@@ -241,9 +239,7 @@ async def _require_conversation_membership(
     actor_user_id: UUID,
 ) -> tuple[Conversation, list[ConversationMember], ConversationMember]:
     convo = (
-        await db.execute(
-            select(Conversation).where(Conversation.id == conversation_id)
-        )
+        await db.execute(select(Conversation).where(Conversation.id == conversation_id))
     ).scalar_one_or_none()
     if convo is None:
         raise ProblemDetailError(
@@ -297,8 +293,7 @@ async def list_conversations(
         .all()
     )
     items = [
-        await _build_conversation_dto(db, convo=c, actor_user_id=actor.user_id)
-        for c in convo_rows
+        await _build_conversation_dto(db, convo=c, actor_user_id=actor.user_id) for c in convo_rows
     ]
     return ConversationListResponse(items=items)
 
@@ -315,9 +310,7 @@ async def create_or_get_conversation(
     assert actor.user_id is not None
 
     cand = (
-        await db.execute(
-            select(MatchCandidate).where(MatchCandidate.card_id == card_id)
-        )
+        await db.execute(select(MatchCandidate).where(MatchCandidate.card_id == card_id))
     ).scalar_one_or_none()
     if cand is None:
         raise ProblemDetailError(
@@ -336,9 +329,7 @@ async def create_or_get_conversation(
             .where(PartyMember.party_id == cand.for_party_id)
         )
     ).all()
-    party_uids = {
-        (sh.linked_user_id or booking.owner_user_id) for sh, booking in party_sh_rows
-    }
+    party_uids = {(sh.linked_user_id or booking.owner_user_id) for sh, booking in party_sh_rows}
     if actor.user_id not in party_uids:
         raise ProblemDetailError(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -364,14 +355,21 @@ async def create_or_get_conversation(
                 status_code=status.HTTP_409_CONFLICT,
                 code="partner_unverified",
                 title="Co-Traveller Not Signed In",
-                detail="This co-traveller hasn't verified their phone for chat yet. Send a swap request instead.",
+                detail=(
+                    "This co-traveller hasn't verified their phone for chat yet. "
+                    "Send a swap request instead."
+                ),
             )
         if uid not in user_sh_map:
             user_sh_map[uid] = sh
 
     if actor.user_id not in user_sh_map:
         actor_sh = next(
-            (sh for sh, b in party_sh_rows if (sh.linked_user_id or b.owner_user_id) == actor.user_id),
+            (
+                sh
+                for sh, b in party_sh_rows
+                if (sh.linked_user_id or b.owner_user_id) == actor.user_id
+            ),
             None,
         )
         if actor_sh is not None:
@@ -395,7 +393,8 @@ async def create_or_get_conversation(
             detail="You cannot message a blocked traveller.",
         )
 
-    # Idempotent reuse: look for an existing conversation on this journey with the exact same members
+    # Idempotent reuse: look for an existing conversation on this journey with the exact same
+    # members
     existing_convos = list(
         (
             await db.execute(
@@ -426,14 +425,10 @@ async def create_or_get_conversation(
             .all()
         )
         if existing_member_uids == participant_uids:
-            return await _build_conversation_dto(
-                db, convo=existing, actor_user_id=actor.user_id
-            )
+            return await _build_conversation_dto(db, convo=existing, actor_user_id=actor.user_id)
 
     # Enforce new-account daily new-partner conversation limit
-    user_row = (
-        await db.execute(select(User).where(User.id == actor.user_id))
-    ).scalar_one()
+    user_row = (await db.execute(select(User).where(User.id == actor.user_id))).scalar_one()
     now = datetime.now(UTC)
     new_acct_days = yaml_configs.rate_limits.messages_new_partner.new_account_age_days
     per_day_limit = yaml_configs.rate_limits.messages_new_partner.per_day
@@ -449,9 +444,7 @@ async def create_or_get_conversation(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 code="new_account_chat_limit",
                 title="Daily Conversation Limit Reached",
-                detail=(
-                    f"New accounts can start up to {per_day_limit} new conversations per day."
-                ),
+                detail=(f"New accounts can start up to {per_day_limit} new conversations per day."),
                 headers={"Retry-After": str(retry_after)},
             )
 
@@ -474,9 +467,7 @@ async def create_or_get_conversation(
             uid
             for uid in (
                 await db.execute(
-                    select(SwapParticipant.user_id).where(
-                        SwapParticipant.proposal_id == prop_id
-                    )
+                    select(SwapParticipant.user_id).where(SwapParticipant.proposal_id == prop_id)
                 )
             )
             .scalars()
@@ -581,9 +572,7 @@ async def list_messages(
     rows = list(
         (
             await db.execute(
-                stmt.order_by(Message.created_at.desc(), Message.id.desc()).limit(
-                    clamped_limit + 1
-                )
+                stmt.order_by(Message.created_at.desc(), Message.id.desc()).limit(clamped_limit + 1)
             )
         )
         .scalars()
@@ -603,20 +592,16 @@ async def list_messages(
             else "Passenger",
             is_me=msg.sender_user_id == actor.user_id,
             client_id=msg.client_id,
-            body="[Hidden by safety filter]"
-            if msg.moderation == "hidden"
-            else msg.body,
+            body="[Hidden by safety filter]" if msg.moderation == "hidden" else msg.body,
             lang=msg.lang,
-            moderation=msg.moderation,  # type: ignore[arg-type]
+            moderation=msg.moderation,
             redacted_hint=None,
             created_at=msg.created_at,
         )
         for msg in page_rows
     ]
 
-    convo_dto = await _build_conversation_dto(
-        db, convo=convo, actor_user_id=actor.user_id
-    )
+    convo_dto = await _build_conversation_dto(db, convo=convo, actor_user_id=actor.user_id)
     return MessagesResponse(
         conversation=convo_dto,
         items=items,
@@ -635,9 +620,7 @@ async def send_message(
 ) -> MessageDTO:
     assert actor.user_id is not None
 
-    user_row = (
-        await db.execute(select(User).where(User.id == actor.user_id))
-    ).scalar_one()
+    user_row = (await db.execute(select(User).where(User.id == actor.user_id))).scalar_one()
     if user_row.status in ("restricted", "banned", "deleted"):
         raise ProblemDetailError(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -678,7 +661,7 @@ async def send_message(
             if existing_msg.moderation == "hidden"
             else existing_msg.body,
             lang=existing_msg.lang,
-            moderation=existing_msg.moderation,  # type: ignore[arg-type]
+            moderation=existing_msg.moderation,
             redacted_hint=(
                 redaction_hint_for_locale(existing_msg.lang or "en")
                 if existing_msg.moderation == "redacted"
@@ -784,7 +767,7 @@ async def send_message(
                 if existing_retry.moderation == "hidden"
                 else existing_retry.body,
                 lang=existing_retry.lang,
-                moderation=existing_retry.moderation,  # type: ignore[arg-type]
+                moderation=existing_retry.moderation,
                 redacted_hint=(
                     redaction_hint_for_locale(existing_retry.lang or "en")
                     if existing_retry.moderation == "redacted"
@@ -822,11 +805,9 @@ async def send_message(
         sender_alias=me.alias,
         is_me=True,
         client_id=msg_row.client_id,
-        body="[Hidden by safety filter]"
-        if msg_row.moderation == "hidden"
-        else msg_row.body,
+        body="[Hidden by safety filter]" if msg_row.moderation == "hidden" else msg_row.body,
         lang=msg_row.lang,
-        moderation=msg_row.moderation,  # type: ignore[arg-type]
+        moderation=msg_row.moderation,
         redacted_hint=redacted_hint,
         created_at=msg_row.created_at,
     )
@@ -861,9 +842,7 @@ async def translate_message(
             detail="Message was not found in this conversation.",
         )
 
-    translated = await llm_provider.translate_text(
-        text=msg.body, target_lang=req.to
-    )
+    translated = await llm_provider.translate_text(text=msg.body, target_lang=req.to)
     return TranslateMessageResponse(
         message_id=msg.id,
         translated_text=translated,
@@ -968,11 +947,7 @@ async def block_user_by_alias_ref(
         else:
             # Step 2b: actor-scoped lookup across active MatchCandidates via pseudonymous alias
             actor_party_ids = set(
-                (
-                    await db.execute(
-                        select(Party.id).where(Party.leader_user_id == actor.user_id)
-                    )
-                )
+                (await db.execute(select(Party.id).where(Party.leader_user_id == actor.user_id)))
                 .scalars()
                 .all()
             ) | set(
@@ -1000,10 +975,7 @@ async def block_user_by_alias_ref(
                             .join(
                                 JourneyInstance,
                                 (JourneyInstance.id == MatchCandidate.journey_instance_id)
-                                & (
-                                    JourneyInstance.match_version
-                                    == MatchCandidate.match_version
-                                ),
+                                & (JourneyInstance.match_version == MatchCandidate.match_version),
                             )
                             .where(MatchCandidate.for_party_id.in_(actor_party_ids))
                         )
@@ -1049,10 +1021,7 @@ async def block_user_by_alias_ref(
                             sh, uid = pair
                             if uid is None or uid == actor.user_id:
                                 continue
-                            if (
-                                make_pseudonymous_alias(sh.coach, sh.seat_type, sh.id)
-                                == alias_ref
-                            ):
+                            if make_pseudonymous_alias(sh.coach, sh.seat_type, sh.id) == alias_ref:
                                 matched_uids.add(uid)
                                 matched_ji_ids.add(cand.journey_instance_id)
                                 if matched_card_id is None:
@@ -1103,9 +1072,7 @@ async def block_user_by_alias_ref(
     actor_ji_ids = set(
         (
             await db.execute(
-                select(Booking.journey_instance_id).where(
-                    Booking.owner_user_id == actor.user_id
-                )
+                select(Booking.journey_instance_id).where(Booking.owner_user_id == actor.user_id)
             )
         )
         .scalars()
@@ -1124,9 +1091,7 @@ async def block_user_by_alias_ref(
     target_ji_ids = set(
         (
             await db.execute(
-                select(Booking.journey_instance_id).where(
-                    Booking.owner_user_id == target_user_id
-                )
+                select(Booking.journey_instance_id).where(Booking.owner_user_id == target_user_id)
             )
         )
         .scalars()
@@ -1149,9 +1114,7 @@ async def block_user_by_alias_ref(
         shared_jis = list(
             (
                 await db.execute(
-                    select(JourneyInstance).where(
-                        JourneyInstance.id.in_(shared_ji_id_set)
-                    )
+                    select(JourneyInstance).where(JourneyInstance.id.in_(shared_ji_id_set))
                 )
             )
             .scalars()

@@ -20,9 +20,7 @@ EXTERNAL_NOTIFICATION_EVENTS: frozenset[str] = frozenset(
     }
 )
 
-URGENT_CHART_EVENTS: frozenset[str] = frozenset(
-    {"BerthChanged", "ChartChanged", "SwapInvalidated"}
-)
+URGENT_CHART_EVENTS: frozenset[str] = frozenset({"BerthChanged", "ChartChanged", "SwapInvalidated"})
 
 INTERNAL_ONLY_EVENTS: frozenset[str] = frozenset(
     {
@@ -99,7 +97,10 @@ def render_notification(
             body=(
                 f"{service} पर आपकी सीट के लिए नया मिलान मिला है।"
                 if is_hi
-                else f"A new verified seat swap match is ready{' on ' + service if service else ''}."
+                else (
+                    "A new verified seat swap match is ready"
+                    f"{' on ' + service if service else ''}."
+                )
             ),
             url=url,
             params={"service": service or "Saath"},
@@ -157,9 +158,15 @@ def render_notification(
             template_name="saath_chart_changed",
             title="चार्ट / बर्थ अपडेट" if is_hi else "Chart / berth updated",
             body=(
-                f"आपकी ट्रेन का चार्ट अपडेट हुआ है{f' ({berth_info})' if berth_info else ''}। कृपया नए मिलान देखें।"
+                (
+                    f"आपकी ट्रेन का चार्ट अपडेट हुआ है{f' ({berth_info})' if berth_info else ''}। "
+                    "कृपया नए मिलान देखें।"
+                )
                 if is_hi
-                else f"Train chart updated{f' ({berth_info})' if berth_info else ''}. Check your updated matches."
+                else (
+                    f"Train chart updated{f' ({berth_info})' if berth_info else ''}. "
+                    "Check your updated matches."
+                )
             ),
             url=url,
             params={"berth": berth_info or "chart"},
@@ -185,11 +192,7 @@ def render_notification(
         url = f"/inbox/{convo_id}" if convo_id else "/inbox"
         return RenderedNotification(
             template_name="saath_message_new",
-            title=(
-                f"{sender_alias} का संदेश"
-                if is_hi
-                else f"Message from {sender_alias}"
-            ),
+            title=(f"{sender_alias} का संदेश" if is_hi else f"Message from {sender_alias}"),
             body=preview or ("नया चैट संदेश" if is_hi else "New chat message"),
             url=url,
             params={"sender": sender_alias},

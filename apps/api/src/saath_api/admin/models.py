@@ -14,9 +14,7 @@ class FeatureFlag(Base):
     __tablename__ = "feature_flags"
 
     key: Mapped[str] = mapped_column(Text, primary_key=True)
-    value: Mapped[Any] = mapped_column(
-        JSONB, nullable=False, server_default=text("'false'::jsonb")
-    )
+    value: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'false'::jsonb"))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_by: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

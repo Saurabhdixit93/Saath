@@ -46,12 +46,34 @@ async def test_masked_chat_redaction_idempotency_translate_and_unmask_on_accept(
     h_b = {"Authorization": f"Bearer {tok_b}"}
     h_c = {"Authorization": f"Bearer {tok_c}"}
 
-    va = (await client.post("/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"})).json()
-    vb = (await client.post("/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"})).json()
-    await client.put(f"/v1/parties/{vb['party']['id']}/goal", headers=h_b, json={"goal_type": "open_to_help", "movers": [vb["seat_holders"][0]["id"]], "constraints": {}})
-    await client.put(f"/v1/parties/{va['party']['id']}/goal", headers=h_a, json={"goal_type": "lower", "movers": [va["seat_holders"][0]["id"]], "constraints": {}})
+    va = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_a, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    vb = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_b, json={"mode": "train", "pnr": "4222222222"}
+        )
+    ).json()
+    await client.put(
+        f"/v1/parties/{vb['party']['id']}/goal",
+        headers=h_b,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [vb["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
+    await client.put(
+        f"/v1/parties/{va['party']['id']}/goal",
+        headers=h_a,
+        json={"goal_type": "lower", "movers": [va["seat_holders"][0]["id"]], "constraints": {}},
+    )
 
-    matches = (await client.get(f"/v1/parties/{va['party']['id']}/matches?kind=pair", headers=h_a)).json()["items"]
+    matches = (
+        await client.get(f"/v1/parties/{va['party']['id']}/matches?kind=pair", headers=h_a)
+    ).json()["items"]
     card_id = matches[0]["card_id"]
 
     # Cross-party chat creation rejected with 403
@@ -77,7 +99,10 @@ async def test_masked_chat_redaction_idempotency_translate_and_unmask_on_accept(
     m1 = await client.post(
         f"/v1/conversations/{convo_id}/messages",
         headers=h_a,
-        json={"body": "Call me at nine eight seven six five four three two one zero or asha@okicici", "client_id": "cli-1"},
+        json={
+            "body": "Call me at nine eight seven six five four three two one zero or asha@okicici",
+            "client_id": "cli-1",
+        },
     )
     assert m1.status_code == 200
     d1 = m1.json()
@@ -135,14 +160,20 @@ async def test_masked_chat_redaction_idempotency_translate_and_unmask_on_accept(
         ).scalar_one_or_none()
         assert hidden_audit is not None
 
-    msgs_b = (await client.get(f"/v1/conversations/{convo_id}/messages", headers=h_b)).json()["items"]
+    msgs_b = (await client.get(f"/v1/conversations/{convo_id}/messages", headers=h_b)).json()[
+        "items"
+    ]
     assert all(m["client_id"] != "cli-scam" for m in msgs_b)
 
     # Mutual swap accept unmasks conversation and allows phone post-accept
     swap = (await client.post("/v1/swaps", headers=h_a, json={"card_id": card_id})).json()
-    acc1 = await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]})
+    acc1 = await client.post(
+        f"/v1/swaps/{swap['id']}/accept", headers=h_a, json={"version": swap["version"]}
+    )
     assert acc1.status_code == 200
-    acc2 = await client.post(f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": acc1.json()["version"]})
+    acc2 = await client.post(
+        f"/v1/swaps/{swap['id']}/accept", headers=h_b, json={"version": acc1.json()["version"]}
+    )
     assert acc2.status_code == 200
 
     list_a = (await client.get("/v1/conversations", headers=h_a)).json()["items"]
@@ -167,21 +198,49 @@ async def test_block_and_three_distinct_reports_auto_restrict(
     tok_r3, _ = await _otp_login(client, fake_messaging, "9876543704")
 
     h_t = {"Authorization": f"Bearer {tok_target}"}
-    vt = (await client.post("/v1/journeys/verify", headers=h_t, json={"mode": "train", "pnr": "4111111111"})).json()
-    await client.put(f"/v1/parties/{vt['party']['id']}/goal", headers=h_t, json={"goal_type": "open_to_help", "movers": [vt["seat_holders"][0]["id"]], "constraints": {}})
+    vt = (
+        await client.post(
+            "/v1/journeys/verify", headers=h_t, json={"mode": "train", "pnr": "4111111111"}
+        )
+    ).json()
+    await client.put(
+        f"/v1/parties/{vt['party']['id']}/goal",
+        headers=h_t,
+        json={
+            "goal_type": "open_to_help",
+            "movers": [vt["seat_holders"][0]["id"]],
+            "constraints": {},
+        },
+    )
 
     convo_ids: list[str] = []
     for pnr, tok in [("4222222222", tok_r1), ("4333333333", tok_r2), ("4444444444", tok_r3)]:
         hdr = {"Authorization": f"Bearer {tok}"}
-        vr = (await client.post("/v1/journeys/verify", headers=hdr, json={"mode": "train", "pnr": pnr})).json()
-        await client.put(f"/v1/parties/{vr['party']['id']}/goal", headers=hdr, json={"goal_type": "lower", "movers": [vr["seat_holders"][0]["id"]], "constraints": {}})
-        matches = (await client.get(f"/v1/parties/{vr['party']['id']}/matches", headers=hdr)).json()["items"]
+        vr = (
+            await client.post(
+                "/v1/journeys/verify", headers=hdr, json={"mode": "train", "pnr": pnr}
+            )
+        ).json()
+        await client.put(
+            f"/v1/parties/{vr['party']['id']}/goal",
+            headers=hdr,
+            json={"goal_type": "lower", "movers": [vr["seat_holders"][0]["id"]], "constraints": {}},
+        )
+        matches = (
+            await client.get(f"/v1/parties/{vr['party']['id']}/matches", headers=hdr)
+        ).json()["items"]
         target_card = next((m for m in matches if m["kind"] == "pair"), matches[0])
-        convo = (await client.post("/v1/conversations", headers=hdr, json={"card_id": target_card["card_id"]})).json()
+        convo = (
+            await client.post(
+                "/v1/conversations", headers=hdr, json={"card_id": target_card["card_id"]}
+            )
+        ).json()
         convo_ids.append(convo["id"])
 
     # Reporter 1, 2, 3 submit distinct reports
-    for idx, (tok, cid) in enumerate([(tok_r1, convo_ids[0]), (tok_r2, convo_ids[1]), (tok_r3, convo_ids[2])]):
+    for idx, (tok, cid) in enumerate(
+        [(tok_r1, convo_ids[0]), (tok_r2, convo_ids[1]), (tok_r3, convo_ids[2])]
+    ):
         rep = await client.post(
             "/v1/reports",
             headers={"Authorization": f"Bearer {tok}"},
@@ -202,7 +261,12 @@ async def test_block_and_three_distinct_reports_auto_restrict(
     assert blocked_send.status_code == 403
 
     # Block user by alias_ref stops messaging with 403
-    convo_r1 = (await client.get(f"/v1/conversations/{convo_ids[0]}/messages", headers={"Authorization": f"Bearer {tok_r1}"})).json()["conversation"]
+    convo_r1 = (
+        await client.get(
+            f"/v1/conversations/{convo_ids[0]}/messages",
+            headers={"Authorization": f"Bearer {tok_r1}"},
+        )
+    ).json()["conversation"]
     blk = await client.post(
         "/v1/users/block",
         headers={"Authorization": f"Bearer {tok_r1}"},

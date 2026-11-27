@@ -421,9 +421,7 @@ def validate_and_classify_flight_seat(
             f"Seat letter {letter} does not exist on aircraft layout {spec.layout_ref}"
         )
     if normalized in spec.excluded_seats:
-        raise ValueError(
-            f"Seat {normalized} does not exist on aircraft layout {spec.layout_ref}"
-        )
+        raise ValueError(f"Seat {normalized} does not exist on aircraft layout {spec.layout_ref}")
 
     col_idx = spec.columns.index(letter)
     return AircraftSeat(

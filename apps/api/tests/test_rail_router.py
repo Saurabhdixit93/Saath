@@ -136,9 +136,7 @@ async def test_fake_rail_provider_synthetic_12951_overlaps_brc_mmct_sms() -> Non
     assert synth.from_seq == 1
     assert synth.to_seq == 9
 
-    sms = parse_irctc_sms_text(
-        "PNR 9123456789 TRN 12951 DOJ 2026-12-01 BRC-MMCT 3A CNF/B3/45/LB"
-    )
+    sms = parse_irctc_sms_text("PNR 9123456789 TRN 12951 DOJ 2026-12-01 BRC-MMCT 3A CNF/B3/45/LB")
     assert sms.from_code == "BRC"
     assert sms.to_code == "MMCT"
     assert sms.from_seq == 6
@@ -295,7 +293,18 @@ async def test_irctc_sms_parser_and_pii_masked_llm_fallback() -> None:
         "Call +919876543210 for PNR 451-2890341"
     )
     masked = mask_sms_pii_for_llm(raw_with_name)
-    for sensitive in ("4512890341", "451 289 0341", "451-2890341", "Asha", "Sharma", "Rahul", "Verma", "Priya", "Nair", "9876543210"):
+    for sensitive in (
+        "4512890341",
+        "451 289 0341",
+        "451-2890341",
+        "Asha",
+        "Sharma",
+        "Rahul",
+        "Verma",
+        "Priya",
+        "Nair",
+        "9876543210",
+    ):
         assert sensitive not in masked
     assert "Train 12951" in masked
     assert "CNF/B3/42/MB" in masked

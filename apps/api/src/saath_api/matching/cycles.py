@@ -24,7 +24,9 @@ class CandidateCycle:
     segment_overlap: Literal["full", "partial"]
 
 
-def _canonical_cycle_rotation(nodes: list[UUID], edges: list[SwapEdge]) -> tuple[tuple[UUID, ...], tuple[SwapEdge, ...]]:
+def _canonical_cycle_rotation(
+    nodes: list[UUID], edges: list[SwapEdge]
+) -> tuple[tuple[UUID, ...], tuple[SwapEdge, ...]]:
     min_idx = min(range(len(nodes)), key=lambda idx: nodes[idx].bytes)
     rot_nodes = tuple(nodes[min_idx:] + nodes[:min_idx])
     rot_edges = tuple(edges[min_idx:] + edges[:min_idx])
@@ -92,7 +94,14 @@ def enumerate_bounded_cycles(
         visited: set[UUID] = {root}
         visited_parties: set[UUID] = {graph.nodes[root].party_id}
 
-        def _dfs(curr: UUID) -> None:
+        def _dfs(
+            curr: UUID,
+            root: UUID,
+            path_nodes: list[UUID],
+            path_edges: list[SwapEdge],
+            visited: set[UUID],
+            visited_parties: set[UUID],
+        ) -> None:
             nonlocal root_found
             if root_found >= max_cycles_per_root:
                 return
@@ -111,18 +120,18 @@ def enumerate_bounded_cycles(
                         continue
                     if len({graph.nodes[uid].party_id for uid in path_nodes}) != cyc_len:
                         continue
-                    # Cycle-wide women_only invariant: if ANY member requires women_only, ALL must be verified female
+                    # Cycle-wide women_only invariant: if ANY member requires women_only,
+                    # ALL must be verified female
                     if any(graph.nodes[uid].women_only for uid in path_nodes) and not all(
                         is_verified_female(graph.nodes[uid]) for uid in path_nodes
                     ):
                         continue
-                    # Standing offer give_to='women': the member receiving that helper's seat must be verified female
+                    # Standing offer give_to='women': the member receiving that helper's
+                    # seat must be verified female
                     if any(
                         graph.nodes[path_nodes[idx]].goal_type == "open_to_help"
                         and graph.nodes[path_nodes[idx]].standing_give_to == "women"
-                        and not is_verified_female(
-                            graph.nodes[path_nodes[(idx - 1) % cyc_len]]
-                        )
+                        and not is_verified_female(graph.nodes[path_nodes[(idx - 1) % cyc_len]])
                         for idx in range(cyc_len)
                     ):
                         continue
@@ -196,9 +205,9 @@ def enumerate_bounded_cycles(
                     ):
                         continue
                     # Cycle-wide women_only check during DFS extension
-                    if any(graph.nodes[uid].women_only for uid in path_nodes) and not is_verified_female(
-                        nxt_node
-                    ):
+                    if any(
+                        graph.nodes[uid].women_only for uid in path_nodes
+                    ) and not is_verified_female(nxt_node):
                         continue
                     if nxt_node.women_only and any(
                         not is_verified_female(graph.nodes[uid]) for uid in path_nodes
@@ -214,13 +223,13 @@ def enumerate_bounded_cycles(
                     visited_parties.add(nxt_node.party_id)
                     path_nodes.append(nxt)
                     path_edges.append(edge)
-                    _dfs(nxt)
+                    _dfs(nxt, root, path_nodes, path_edges, visited, visited_parties)
                     path_edges.pop()
                     path_nodes.pop()
                     visited_parties.remove(nxt_node.party_id)
                     visited.remove(nxt)
 
-        _dfs(root)
+        _dfs(root, root, path_nodes, path_edges, visited, visited_parties)
 
     cycles.sort(key=lambda c: (-c.score, len(c.nodes), tuple(u.bytes for u in c.nodes)))
     return cycles

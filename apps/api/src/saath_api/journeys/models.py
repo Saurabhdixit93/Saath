@@ -59,13 +59,9 @@ class JourneyInstance(Base):
     departure_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     chart_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    chart_state: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'pending'")
-    )
+    chart_state: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
     layout_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
-    match_version: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, server_default=text("0")
-    )
+    match_version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -151,12 +147,8 @@ class SeatHolder(Base):
     seat_no: Mapped[str | None] = mapped_column(Text, nullable=True)
     seat_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     bay: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
-    age_band: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'unknown'")
-    )
-    gender_band: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'U'")
-    )
+    age_band: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'unknown'"))
+    gender_band: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'U'"))
     linked_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

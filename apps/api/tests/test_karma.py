@@ -348,9 +348,7 @@ async def test_pending_credit_chart_corroboration_and_dispute_reversal(
     async with app.state.session_factory() as db:
         ji = (
             await db.execute(
-                select(JourneyInstance).where(
-                    JourneyInstance.id == UUID(v_a["journey"]["id"])
-                )
+                select(JourneyInstance).where(JourneyInstance.id == UUID(v_a["journey"]["id"]))
             )
         ).scalar_one()
         ji.chart_state = "final"
@@ -472,12 +470,9 @@ async def test_pending_credit_chart_corroboration_and_dispute_reversal(
     assert k_d_after_dispute["balance"] == 0
     assert k_d_after_dispute["pending"] == 0
     assert any(
-        row["state"] == "reversed" and row["delta"] == -75
-        for row in k_d_after_dispute["history"]
+        row["state"] == "reversed" and row["delta"] == -75 for row in k_d_after_dispute["history"]
     )
-    credited_sum = sum(
-        r["delta"] for r in k_d_after_dispute["history"] if r["state"] == "credited"
-    )
+    credited_sum = sum(r["delta"] for r in k_d_after_dispute["history"] if r["state"] == "credited")
     reversed_sum = sum(
         abs(r["delta"]) for r in k_d_after_dispute["history"] if r["state"] == "reversed"
     )
@@ -485,12 +480,14 @@ async def test_pending_credit_chart_corroboration_and_dispute_reversal(
 
     async with app.state.session_factory() as db:
         rev_notifs = (
-            await db.execute(
-                select(NotificationsOutbox).where(
-                    NotificationsOutbox.event == "KarmaReversed"
+            (
+                await db.execute(
+                    select(NotificationsOutbox).where(NotificationsOutbox.event == "KarmaReversed")
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert len(rev_notifs) >= 2
 
 
@@ -516,14 +513,8 @@ async def test_anti_fraud_daily_cap_same_pair_cap_and_device_collusion(
 
     # Swap 2 between SAME pair (A and B) on different date via SMS -> 90d cap blocks credit!
     future_doj = (datetime.now(UTC) + timedelta(days=15)).strftime("%d-%m-%y")
-    sms_a = (
-        f"PNR:4111111111 TRN:12951 DOJ:{future_doj} CLS:3A "
-        "P1:CNF/B3/11/UB/68/F"
-    )
-    sms_b = (
-        f"PNR:4222222222 TRN:12951 DOJ:{future_doj} CLS:3A "
-        "P1:CNF/B3/20/LB/32/M"
-    )
+    sms_a = f"PNR:4111111111 TRN:12951 DOJ:{future_doj} CLS:3A P1:CNF/B3/11/UB/68/F"
+    sms_b = f"PNR:4222222222 TRN:12951 DOJ:{future_doj} CLS:3A P1:CNF/B3/20/LB/32/M"
     va2 = (
         await client.post(
             "/v1/journeys/verify", headers=h_a, json={"mode": "train", "sms_text": sms_a}
@@ -549,9 +540,7 @@ async def test_anti_fraud_daily_cap_same_pair_cap_and_device_collusion(
         json={"goal_type": "lower", "movers": [va2["seat_holders"][0]["id"]], "constraints": {}},
     )
     m2 = (
-        await client.get(
-            f"/v1/parties/{va2['party']['id']}/matches?kind=pair", headers=h_a
-        )
+        await client.get(f"/v1/parties/{va2['party']['id']}/matches?kind=pair", headers=h_a)
     ).json()["items"]
     assert m2
     sw2 = (await client.post("/v1/swaps", headers=h_a, json={"card_id": m2[0]["card_id"]})).json()
@@ -806,14 +795,18 @@ async def test_anti_fraud_daily_cap_same_pair_cap_and_device_collusion(
         )
         assert awarded_col == {}
         audits = (
-            await db.execute(
-                select(AuditLog).where(
-                    AuditLog.action.in_(
-                        ("karma.collusion_blocked", "karma.same_pair_cap_blocked")
+            (
+                await db.execute(
+                    select(AuditLog).where(
+                        AuditLog.action.in_(
+                            ("karma.collusion_blocked", "karma.same_pair_cap_blocked")
+                        )
                     )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         actions = {a.action for a in audits}
         assert "karma.collusion_blocked" in actions
         assert "karma.same_pair_cap_blocked" in actions
@@ -1096,19 +1089,27 @@ async def test_rewards_catalogue_flag_gated_and_redemption(
 
         async with app.state.session_factory() as db:
             db_reds = (
-                await db.execute(
-                    select(RewardRedemption).where(RewardRedemption.user_id == UUID(uid_a))
-                )
-            ).scalars().all()
-            assert len(db_reds) == 1
-            outbox_req = (
-                await db.execute(
-                    select(NotificationsOutbox).where(
-                        NotificationsOutbox.user_id == UUID(uid_a),
-                        NotificationsOutbox.event == "RewardRedemptionRequested",
+                (
+                    await db.execute(
+                        select(RewardRedemption).where(RewardRedemption.user_id == UUID(uid_a))
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
+            assert len(db_reds) == 1
+            outbox_req = (
+                (
+                    await db.execute(
+                        select(NotificationsOutbox).where(
+                            NotificationsOutbox.user_id == UUID(uid_a),
+                            NotificationsOutbox.event == "RewardRedemptionRequested",
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
             assert len(outbox_req) == 1
 
         # Out of stock -> 409

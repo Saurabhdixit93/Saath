@@ -104,7 +104,8 @@ def parse_rail_seat_number(raw_seat: str | int, travel_class: str) -> int:
             if 1 <= berth_idx <= cabin_cap:
                 return sum(counts[: cabin_idx - 1]) + berth_idx
             raise ValueError(
-                f"Invalid 1A cabin berth {raw_seat!r}: cabin {match.group(1)} has {cabin_cap} berths"
+                f"Invalid 1A cabin berth {raw_seat!r}: "
+                f"cabin {match.group(1)} has {cabin_cap} berths"
             )
     raise ValueError(f"Invalid rail seat number: {raw_seat!r}")
 
@@ -401,7 +402,5 @@ def generate_train_coach_svg(
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {max_x} {max_y}" '
         f'role="img" aria-label="{title}">'
-        f"<title>{title}</title>"
-        + "".join(rects)
-        + "</svg>"
+        f"<title>{title}</title>" + "".join(rects) + "</svg>"
     )

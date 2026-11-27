@@ -78,9 +78,7 @@ async def test_pricing_plans_no_seat_sale_invariant_and_checkout_gate(
     assert r_join_5_blocked.json()["code"] == "organiser_pass_required"
 
     # Organiser summary also gated with 402 before pass
-    summary_blocked = await client.get(
-        f"/v1/parties/{party_id}/organiser-summary", headers=org_h
-    )
+    summary_blocked = await client.get(f"/v1/parties/{party_id}/organiser-summary", headers=org_h)
     assert summary_blocked.status_code == 402
 
     # Checkout enforces server-side price (19900 paise) and rejects free_passenger
@@ -125,9 +123,7 @@ async def test_pricing_plans_no_seat_sale_invariant_and_checkout_gate(
     assert r_join_5_ok.status_code == 200
     assert r_join_5_ok.json()["party"]["member_count"] == 5
 
-    summary_ok = await client.get(
-        f"/v1/parties/{party_id}/organiser-summary", headers=org_h
-    )
+    summary_ok = await client.get(f"/v1/parties/{party_id}/organiser-summary", headers=org_h)
     assert summary_ok.status_code == 200
     assert summary_ok.json()["member_count"] == 5
 

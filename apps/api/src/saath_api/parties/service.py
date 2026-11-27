@@ -48,9 +48,7 @@ async def create_party_invite(
     actor: Actor,
     journey_id: UUID,
 ) -> PartyInviteResponse:
-    _, _, party = await _load_actor_journey_context(
-        db=db, actor=actor, journey_id=journey_id
-    )
+    _, _, party = await _load_actor_journey_context(db=db, actor=actor, journey_id=journey_id)
     authorize_resource_owner(
         actor,
         "party.create_invite",
@@ -88,9 +86,7 @@ async def join_party_via_invite(
     client_ip: str,
 ) -> JourneyHubResponse:
     token_hash = hash_invite_token(req.invite_token, settings.invite_token_secret)
-    party_res = await db.execute(
-        select(Party).where(Party.invite_token_hash == token_hash)
-    )
+    party_res = await db.execute(select(Party).where(Party.invite_token_hash == token_hash))
     target_party = party_res.scalar_one_or_none()
     if target_party is None:
         raise ProblemDetailError(
@@ -106,7 +102,10 @@ async def join_party_via_invite(
             status_code=status.HTTP_410_GONE,
             code="invite_expired",
             title="Invite Link Expired",
-            detail="This invite link has expired after 48 hours. Ask your group leader for a fresh link.",
+            detail=(
+                "This invite link has expired after 48 hours. "
+                "Ask your group leader for a fresh link."
+            ),
         )
 
     verify_req = VerifyJourneyRequest(
@@ -157,15 +156,14 @@ async def join_party_via_invite(
             title="Group-Organiser Trip Pass Required",
             detail=(
                 f"Free parties support up to {max_members} passengers. "
-                "Unlock multi-PNR coordination up to 50 travellers with the Group-Organiser Trip Pass (₹199)."
+                "Unlock multi-PNR coordination up to 50 travellers with the "
+                "Group-Organiser Trip Pass (₹199)."
             ),
         )
 
     if incoming_ids:
         # Remove from any prior solo/other party before joining target_party
-        await db.execute(
-            delete(PartyMember).where(PartyMember.seat_holder_id.in_(incoming_ids))
-        )
+        await db.execute(delete(PartyMember).where(PartyMember.seat_holder_id.in_(incoming_ids)))
         for sh_id in incoming_ids:
             db.add(PartyMember(party_id=target_party.id, seat_holder_id=sh_id))
         await db.flush()
@@ -198,9 +196,7 @@ async def join_party_via_invite(
     if incoming_ids:
         from saath_api.matching.service import schedule_or_run_match_recompute
 
-        await schedule_or_run_match_recompute(
-            db=db, redis=redis, journey_instance_id=ji.id
-        )
+        await schedule_or_run_match_recompute(db=db, redis=redis, journey_instance_id=ji.id)
     return await _build_journey_hub(
         db=db,
         yaml_configs=yaml_configs,
@@ -266,12 +262,16 @@ async def _load_party_and_actor_membership(
                 detail="You are not a member of this party.",
             )
         fallback_booking = (
-            await db.execute(
-                select(Booking)
-                .where(Booking.journey_instance_id == party.journey_instance_id)
-                .limit(1)
+            (
+                await db.execute(
+                    select(Booking)
+                    .where(Booking.journey_instance_id == party.journey_instance_id)
+                    .limit(1)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if fallback_booking is None:
             raise ProblemDetailError(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -319,9 +319,7 @@ async def remove_party_member(
         )
 
     total_res = await db.execute(
-        select(func.count(PartyMember.seat_holder_id)).where(
-            PartyMember.party_id == party.id
-        )
+        select(func.count(PartyMember.seat_holder_id)).where(PartyMember.party_id == party.id)
     )
     if int(total_res.scalar_one() or 0) <= 1:
         raise ProblemDetailError(
@@ -332,17 +330,13 @@ async def remove_party_member(
         )
 
     await db.delete(pm)
-    await _prune_goal_movers(
-        db=db, party_id=party.id, removed_seat_holder_ids={seat_holder_id}
-    )
+    await _prune_goal_movers(db=db, party_id=party.id, removed_seat_holder_ids={seat_holder_id})
     ji.match_version += 1
     await db.commit()
     await db.refresh(ji)
     from saath_api.matching.service import schedule_or_run_match_recompute
 
-    await schedule_or_run_match_recompute(
-        db=db, redis=redis, journey_instance_id=ji.id
-    )
+    await schedule_or_run_match_recompute(db=db, redis=redis, journey_instance_id=ji.id)
     return await _build_journey_hub(
         db=db, yaml_configs=yaml_configs, actor=actor, ji=ji, booking=booking, party=party
     )
@@ -356,9 +350,7 @@ async def put_party_goal(
     party_id: UUID,
     req: PutGoalRequest,
 ) -> GoalMutationResponse:
-    party, ji, _ = await _load_party_and_actor_membership(
-        db=db, actor=actor, party_id=party_id
-    )
+    party, ji, _ = await _load_party_and_actor_membership(db=db, actor=actor, party_id=party_id)
 
     member_sh_res = await db.execute(
         select(SeatHolder)
@@ -389,14 +381,13 @@ async def put_party_goal(
             detail="All selected movers must belong to your party.",
         )
 
-    if req.goal_type == "specific_seats":
-        if not (1 <= len(req.preferred_seats) <= 4):
-            raise ProblemDetailError(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                code="invalid_preferred_seats",
-                title="Select Specific Seats",
-                detail="Pick between 1 and 4 preferred seats for this goal.",
-            )
+    if req.goal_type == "specific_seats" and not (1 <= len(req.preferred_seats) <= 4):
+        raise ProblemDetailError(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            code="invalid_preferred_seats",
+            title="Select Specific Seats",
+            detail="Pick between 1 and 4 preferred seats for this goal.",
+        )
 
     if req.constraints.women_only:
         user_is_female = False
@@ -419,9 +410,7 @@ async def put_party_goal(
             )
 
     await db.execute(
-        update(Goal)
-        .where(Goal.party_id == party.id, Goal.active.is_(True))
-        .values(active=False)
+        update(Goal).where(Goal.party_id == party.id, Goal.active.is_(True)).values(active=False)
     )
     now = datetime.now(UTC)
     goal = Goal(
@@ -457,9 +446,7 @@ async def put_party_goal(
 
     from saath_api.matching.service import schedule_or_run_match_recompute
 
-    await schedule_or_run_match_recompute(
-        db=db, redis=redis, journey_instance_id=ji.id
-    )
+    await schedule_or_run_match_recompute(db=db, redis=redis, journey_instance_id=ji.id)
 
     dto = _goal_dto(goal)
     assert dto is not None
@@ -473,13 +460,9 @@ async def delete_party_goal(
     actor: Actor,
     party_id: UUID,
 ) -> DeleteGoalResponse:
-    party, ji, _ = await _load_party_and_actor_membership(
-        db=db, actor=actor, party_id=party_id
-    )
+    party, ji, _ = await _load_party_and_actor_membership(db=db, actor=actor, party_id=party_id)
     await db.execute(
-        update(Goal)
-        .where(Goal.party_id == party.id, Goal.active.is_(True))
-        .values(active=False)
+        update(Goal).where(Goal.party_id == party.id, Goal.active.is_(True)).values(active=False)
     )
     ji.match_version += 1
     await db.commit()
@@ -487,9 +470,7 @@ async def delete_party_goal(
 
     from saath_api.matching.service import schedule_or_run_match_recompute
 
-    await schedule_or_run_match_recompute(
-        db=db, redis=redis, journey_instance_id=ji.id
-    )
+    await schedule_or_run_match_recompute(db=db, redis=redis, journey_instance_id=ji.id)
     return DeleteGoalResponse(ok=True, match_version=ji.match_version)
 
 
@@ -500,9 +481,7 @@ async def get_organiser_summary(
     actor: Actor,
     party_id: UUID,
 ) -> OrganiserSummaryResponse:
-    party, ji, _ = await _load_party_and_actor_membership(
-        db=db, actor=actor, party_id=party_id
-    )
+    party, ji, _ = await _load_party_and_actor_membership(db=db, actor=actor, party_id=party_id)
     _, has_pass = await resolve_party_entitlement_limits(
         db=db, yaml_configs=yaml_configs, party=party, actor=actor
     )
@@ -511,7 +490,10 @@ async def get_organiser_summary(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             code="organiser_pass_required",
             title="Group-Organiser Trip Pass Required",
-            detail="Active Group-Organiser Trip Pass (₹199/trip) or B2B Partner entitlement is required to access organiser summaries.",
+            detail=(
+                "Active Group-Organiser Trip Pass (₹199/trip) or B2B Partner entitlement "
+                "is required to access organiser summaries."
+            ),
         )
 
     members_res = await db.execute(
@@ -543,7 +525,7 @@ async def get_organiser_summary(
     return OrganiserSummaryResponse(
         party_id=party.id,
         journey_instance_id=ji.id,
-        mode=ji.mode,  # type: ignore[arg-type]
+        mode=ji.mode,
         service_no=ji.service_no,
         service_date=ji.service_date,
         member_count=len(members),

@@ -95,7 +95,9 @@ class VAPIDPushAdapter:
         cleaned_priv_key = vapid_private_key.strip()
         cleaned_subject = vapid_subject.strip()
         if not cleaned_priv_key or not cleaned_subject:
-            raise ValueError("VAPID_PRIVATE_KEY and VAPID_SUBJECT are required when PUSH_MODE=vapid")
+            raise ValueError(
+                "VAPID_PRIVATE_KEY and VAPID_SUBJECT are required when PUSH_MODE=vapid"
+            )
         self._vapid_private_key = cleaned_priv_key
         self._vapid_subject = cleaned_subject
         self._timeout_seconds = timeout_seconds
@@ -112,7 +114,7 @@ class VAPIDPushAdapter:
         url: str,
         data: dict[str, Any] | None = None,
     ) -> None:
-        from pywebpush import WebPushException, webpush  # type: ignore[import-untyped]
+        from pywebpush import WebPushException, webpush
 
         payload = json.dumps(
             {

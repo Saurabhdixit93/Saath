@@ -12,7 +12,10 @@ _SEQUENCE = 0
 
 
 def uuid7() -> uuid.UUID:
-    """Generate a monotonic RFC 9562 UUIDv7 using 48-bit Unix ms + 12-bit counter + 62 random bits."""
+    """Generate a monotonic RFC 9562 UUIDv7.
+
+    Layout: 48-bit Unix ms + 12-bit counter + 62 random bits.
+    """
     global _LAST_TIMESTAMP_MS, _SEQUENCE
 
     with _UUID7_LOCK:

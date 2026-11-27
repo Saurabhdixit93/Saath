@@ -15,8 +15,14 @@ class ChartRulesDefaultLike(Protocol):
 
 
 class ChartRulesConfigLike(Protocol):
-    default: ChartRulesDefaultLike
-    overrides: dict[str, object]
+    # Read-only properties so concrete configs (e.g. ChartRulesConfig, whose
+    # ``default`` is a ChartRulesDefault) match structurally; mutable protocol
+    # attributes would be invariant.
+    @property
+    def default(self) -> ChartRulesDefaultLike: ...
+
+    @property
+    def overrides(self) -> dict[str, object]: ...
 
 
 def _parse_hhmm(raw: str) -> time:
@@ -48,9 +54,7 @@ def compute_chart_due_at(
 
     morning_start = _parse_hhmm(rules.default.morning_window_start_ist if rules else "05:00")
     morning_end = _parse_hhmm(rules.default.morning_window_end_ist if rules else "14:00")
-    prev_day_time = _parse_hhmm(
-        rules.default.morning_chart_previous_day_ist if rules else "20:00"
-    )
+    prev_day_time = _parse_hhmm(rules.default.morning_chart_previous_day_ist if rules else "20:00")
     standard_hours = rules.default.standard_hours_before_departure if rules else 10
 
     if rules and train_no and isinstance(rules.overrides.get(train_no), dict):

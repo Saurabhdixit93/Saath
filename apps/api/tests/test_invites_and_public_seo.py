@@ -82,7 +82,15 @@ def test_train_catalog_and_flight_layouts_counts() -> None:
 
 async def test_m5_models_imported_and_feature_flags_accessible(client: AsyncClient) -> None:
     # Verify M5 ORM classes are cleanly wired into metadata
-    for cls in (SeatInvite, KarmaLedger, Badge, FeatureFlag, RewardItem, RewardRedemption, AiUsageLog):
+    for cls in (
+        SeatInvite,
+        KarmaLedger,
+        Badge,
+        FeatureFlag,
+        RewardItem,
+        RewardRedemption,
+        AiUsageLog,
+    ):
         assert cls.__tablename__
     resp = await client.get("/v1/public/stats")
     assert resp.status_code == 200
@@ -206,10 +214,10 @@ async def test_seat_invite_lifecycle_authz_and_conversion(client: AsyncClient) -
     app: Any = client.app  # type: ignore[attr-defined]
     async with app.state.session_factory() as db:
         audits = (
-            await db.execute(
-                select(AuditLog).where(AuditLog.action == "seat_invite.converted")
-            )
-        ).scalars().all()
+            (await db.execute(select(AuditLog).where(AuditLog.action == "seat_invite.converted")))
+            .scalars()
+            .all()
+        )
         assert len(audits) == 2
 
         # Expire the token and verify 410 Gone

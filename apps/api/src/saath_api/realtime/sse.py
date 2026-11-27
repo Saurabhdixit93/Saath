@@ -131,8 +131,9 @@ async def create_sse_response(
         finally:
             with contextlib.suppress(Exception):
                 await pubsub.unsubscribe()
+            # redis-py's PubSub.aclose() is unannotated.
             with contextlib.suppress(Exception):
-                await pubsub.aclose()
+                await pubsub.aclose()  # type: ignore[no-untyped-call]
 
     return StreamingResponse(
         _event_generator(),

@@ -37,14 +37,14 @@ def _solve_bipartite_assignment(
         return []
 
     try:
-        from ortools.sat.python import cp_model  # type: ignore[import-not-found]
+        from ortools.sat.python import cp_model
 
         model = cp_model.CpModel()
-        pair_vars: dict[tuple[int, int], object] = {}
+        pair_vars: dict[tuple[int, int], cp_model.IntVar] = {}
         for i, m in enumerate(movers):
             for j, ext in enumerate(externals):
                 if (m.seat_holder_id, ext.seat_holder_id) in edge_scores:
-                    pair_vars[(i, j)] = model.NewBoolVar(f"a_{i}_{j}")
+                    pair_vars[(i, j)] = model.new_bool_var(f"a_{i}_{j}")
 
         if not pair_vars:
             return []
@@ -52,26 +52,26 @@ def _solve_bipartite_assignment(
         for i in range(len(movers)):
             row = [pair_vars[(i, j)] for j in range(len(externals)) if (i, j) in pair_vars]
             if row:
-                model.Add(sum(row) <= 1)  # type: ignore[arg-type]
+                model.add(sum(row) <= 1)
         for j in range(len(externals)):
             col = [pair_vars[(i, j)] for i in range(len(movers)) if (i, j) in pair_vars]
             if col:
-                model.Add(sum(col) <= 1)  # type: ignore[arg-type]
+                model.add(sum(col) <= 1)
 
-        model.Maximize(
+        model.maximize(
             sum(
-                edge_scores[(movers[i].seat_holder_id, externals[j].seat_holder_id)] * var  # type: ignore[operator]
+                edge_scores[(movers[i].seat_holder_id, externals[j].seat_holder_id)] * var
                 for (i, j), var in pair_vars.items()
             )
         )
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = 0.5
         solver.parameters.num_search_workers = 1
-        status = solver.Solve(model)
+        status = solver.solve(model)
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             assigned: list[tuple[SeatNode, SeatNode, int]] = []
             for (i, j), var in pair_vars.items():
-                if solver.BooleanValue(var):  # type: ignore[arg-type]
+                if solver.boolean_value(var):
                     m = movers[i]
                     ext = externals[j]
                     assigned.append((m, ext, edge_scores[(m.seat_holder_id, ext.seat_holder_id)]))
@@ -103,9 +103,7 @@ def plan_party_bay_swaps(
     """Generate atomic multi-seat bay/coach consolidation plans for together/same_coach parties."""
     plans: list[PartyBayPlan] = []
     all_active_externals = [
-        n
-        for n in graph.nodes.values()
-        if n.goal_type is not None and is_seated_and_unlocked(n)
+        n for n in graph.nodes.values() if n.goal_type is not None and is_seated_and_unlocked(n)
     ]
 
     for party_id, members in party_nodes_by_party.items():
@@ -163,9 +161,12 @@ def plan_party_bay_swaps(
                     continue
                 if not ext.coach or ext.coach.upper() != target_coach:
                     continue
-                if gtype == "together" and target_bay is not None:
-                    if ext.bay is None or abs(ext.bay - target_bay) > 1:
-                        continue
+                if (
+                    gtype == "together"
+                    and target_bay is not None
+                    and (ext.bay is None or abs(ext.bay - target_bay) > 1)
+                ):
+                    continue
                 if party_women_only and not is_verified_female(ext):
                     continue
                 if ext.women_only and not party_all_female:
@@ -191,18 +192,24 @@ def plan_party_bay_swaps(
                 if party_women_only and not is_verified_female(m):
                     continue
                 for ext in externals:
-                    if m.owner_user_id and ext.owner_user_id:
-                        if (m.owner_user_id, ext.owner_user_id) in graph.blocks or (
-                            ext.owner_user_id,
-                            m.owner_user_id,
-                        ) in graph.blocks:
-                            continue
+                    if (
+                        m.owner_user_id
+                        and ext.owner_user_id
+                        and (
+                            (m.owner_user_id, ext.owner_user_id) in graph.blocks
+                            or (ext.owner_user_id, m.owner_user_id) in graph.blocks
+                        )
+                    ):
+                        continue
                     if gtype == "together" and target_bay is not None:
                         if ext.bay is None or abs(ext.bay - target_bay) > 1:
                             continue
-                        if (m.coach or "").upper() == target_coach and m.bay is not None:
-                            if abs(ext.bay - target_bay) >= abs(m.bay - target_bay):
-                                continue
+                        if (
+                            (m.coach or "").upper() == target_coach
+                            and m.bay is not None
+                            and abs(ext.bay - target_bay) >= abs(m.bay - target_bay)
+                        ):
+                            continue
                     overlap = check_segment_overlap(m, ext)
                     ext_overlap = check_segment_overlap(ext, m)
                     if overlap is None or ext_overlap is None:
@@ -233,25 +240,24 @@ def plan_party_bay_swaps(
                             ext_accepts = False
                         else:
                             ext_accepts = True
-                    elif ext.goal_type == "lower" and m_stype in ("LB", "SL"):
-                        ext_accepts = True
-                    elif ext.goal_type == "upper" and m_stype in ("UB", "SU"):
-                        ext_accepts = True
-                    elif ext.goal_type == "window" and m_stype == "WS":
-                        ext_accepts = True
-                    elif ext.goal_type == "aisle" and m_stype == "AS":
-                        ext_accepts = True
-                    elif ext.goal_type == "specific_seats" and _matches_preferred_seats(
-                        m, ext.preferred_seats
-                    ):
-                        ext_accepts = True
-                    elif ext.goal_type == "legroom" and (
-                        m.is_exit_row or m_stype in ("SL", "LB")
-                    ):
-                        ext_accepts = True
-                    elif ext.goal_type == "together" and (
-                        (m.bay is not None and (m_coach, m.bay) in ext.party_coach_bays)
-                        or (m_coach in ext.party_coaches)
+                    elif (
+                        ext.goal_type == "lower"
+                        and m_stype in ("LB", "SL")
+                        or ext.goal_type == "upper"
+                        and m_stype in ("UB", "SU")
+                        or ext.goal_type == "window"
+                        and m_stype == "WS"
+                        or ext.goal_type == "aisle"
+                        and m_stype == "AS"
+                        or ext.goal_type == "specific_seats"
+                        and _matches_preferred_seats(m, ext.preferred_seats)
+                        or ext.goal_type == "legroom"
+                        and (m.is_exit_row or m_stype in ("SL", "LB"))
+                        or ext.goal_type == "together"
+                        and (
+                            (m.bay is not None and (m_coach, m.bay) in ext.party_coach_bays)
+                            or (m_coach in ext.party_coaches)
+                        )
                     ):
                         ext_accepts = True
 
@@ -261,9 +267,18 @@ def plan_party_bay_swaps(
                     bay_bonus = (
                         20
                         if (target_bay is not None and ext.bay == target_bay)
-                        else (10 if target_bay is not None and ext.bay is not None and abs(ext.bay - target_bay) <= 1 else 0)
+                        else (
+                            10
+                            if target_bay is not None
+                            and ext.bay is not None
+                            and abs(ext.bay - target_bay) <= 1
+                            else 0
+                        )
                     )
-                    rel = round(bayesian_reliability(ext.reliability_accepted, ext.reliability_completed) * 15)
+                    rel = round(
+                        bayesian_reliability(ext.reliability_accepted, ext.reliability_completed)
+                        * 15
+                    )
                     pen = 10 if (overlap == "partial" or ext_overlap == "partial") else 0
                     if pen:
                         partial_used = True
@@ -275,10 +290,22 @@ def plan_party_bay_swaps(
                 continue
 
             # Enforce plan-wide women_only & pairwise blocks across all assigned pairs
-            assigned.sort(key=lambda item: (-item[2], item[0].seat_holder_id.bytes, item[1].seat_holder_id.bytes))
+            assigned.sort(
+                key=lambda item: (
+                    -item[2],
+                    item[0].seat_holder_id.bytes,
+                    item[1].seat_holder_id.bytes,
+                )
+            )
             kept: list[tuple[SeatNode, SeatNode, int]] = []
             for m, ext, sc in assigned:
-                cand_nodes = [*members, *(km for km, _, _ in kept), *(ke for _, ke, _ in kept), m, ext]
+                cand_nodes = [
+                    *members,
+                    *(km for km, _, _ in kept),
+                    *(ke for _, ke, _ in kept),
+                    m,
+                    ext,
+                ]
                 if any(n.women_only for n in cand_nodes) and not all(
                     is_verified_female(n) for n in cand_nodes
                 ):
@@ -299,9 +326,7 @@ def plan_party_bay_swaps(
             if not assigned:
                 continue
 
-            cycles_tuple = tuple(
-                (m.seat_holder_id, ext.seat_holder_id) for m, ext, _ in assigned
-            )
+            cycles_tuple = tuple((m.seat_holder_id, ext.seat_holder_id) for m, ext, _ in assigned)
             if cycles_tuple in seen_plan_cycles:
                 continue
             seen_plan_cycles.add(cycles_tuple)

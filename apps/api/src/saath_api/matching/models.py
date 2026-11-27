@@ -54,9 +54,7 @@ class MatchCandidate(Base):
     cycle_seat_holders: Mapped[list[uuid.UUID]] = mapped_column(
         ARRAY(UUID(as_uuid=True)), nullable=False
     )
-    plan_cycles: Mapped[list[Any] | dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    plan_cycles: Mapped[list[Any] | dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     score: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     reasons: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")

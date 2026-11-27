@@ -46,10 +46,12 @@ _LABELED_PNR_MASK_RE = re.compile(
 )
 _TEN_DIGIT_RE = re.compile(r"\b([0-9]{10})\b")
 _SPACED_PNR_MASK_RE = re.compile(
-    r"(?<!\d)(?:\d{3}[ \t\-]\d{3}[ \t\-]\d{4}|\d{3}[ \t\-]\d{7}|\d{4}[ \t\-]\d{3}[ \t\-]\d{3}|\d{5}[ \t\-]\d{5})(?!\d)"
+    r"(?<!\d)(?:\d{3}[ \t\-]\d{3}[ \t\-]\d{4}|\d{3}[ \t\-]\d{7}"
+    r"|\d{4}[ \t\-]\d{3}[ \t\-]\d{3}|\d{5}[ \t\-]\d{5})(?!\d)"
 )
 _PHONE_MASK_RE = re.compile(
-    r"(?<!\d)(?:\+?91[ \t\-]?|0)?[6-9](?:\d{9}|\d{4}[ \t\-]\d{5}|\d{3}[ \t\-]\d{6}|\d{2}[ \t\-]\d{3}[ \t\-]\d{4})(?!\d)"
+    r"(?<!\d)(?:\+?91[ \t\-]?|0)?[6-9]"
+    r"(?:\d{9}|\d{4}[ \t\-]\d{5}|\d{3}[ \t\-]\d{6}|\d{2}[ \t\-]\d{3}[ \t\-]\d{4})(?!\d)"
 )
 _TRAIN_RE = re.compile(r"\b(?:TRAIN|TRN|T\.?NO\.?)\s*(?:NO\.?)?\s*[:\-]?\s*([0-9]{5})\b", re.I)
 _FIVE_DIGIT_TRAIN_RE = re.compile(r"\b([12][0-9]{4})\b")
@@ -68,13 +70,16 @@ _PAX_COACH_BERTH_RE = re.compile(
 )
 _PAX_STATUS_ONLY_RE = re.compile(r"\b(RAC\s*\d+|WL\s*\d+|RLWL\s*\d+|PQWL\s*\d+)\b", re.I)
 _TABULAR_PAX_RE = re.compile(
-    rf"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?{_NAME_WORDS}[ \t]*/[ \t]*\d{{1,3}}[ \t]*/[ \t]*[MFOT]\b(?:[ \t]*/)?"
+    rf"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?{_NAME_WORDS}"
+    r"[ \t]*/[ \t]*\d{1,3}[ \t]*/[ \t]*[MFOT]\b(?:[ \t]*/)?"
 )
 _PAREN_PAX_RE = re.compile(
-    rf"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?{_NAME_WORDS}[ \t]*\([ \t]*\d{{1,3}}[ \t]*[/,][ \t]*[MFOT][ \t]*\)"
+    rf"(?im)(?:^|(?<=[\s,;|]))(?:\d+[.)]\s*)?{_NAME_WORDS}"
+    r"[ \t]*\([ \t]*\d{1,3}[ \t]*[/,][ \t]*[MFOT][ \t]*\)"
 )
 _SALUTATION_RE = re.compile(
-    rf"(?i)(?<!{_NAME_CHAR})(Dear|Hi|Hello|Namaste|नमस्ते)(?!{_NAME_CHAR})(?:[ \t]*,[ \t]*|[ \t]+){_SALUTATION_NAME}"
+    rf"(?i)(?<!{_NAME_CHAR})(Dear|Hi|Hello|Namaste|नमस्ते)(?!{_NAME_CHAR})"
+    rf"(?:[ \t]*,[ \t]*|[ \t]+){_SALUTATION_NAME}"
 )
 _NAME_LABEL_RE = re.compile(
     rf"(?i)(?<!\w)(?:passenger\s*name|pax\s*name|name|passenger|pax|यात्री(?:\s*का)?\s*नाम|नाम|यात्री)\s*(?:\d+\s*)?[:\-]\s*[^\n,;|]+?(?=\s*(?:[,;|\n]|(?<!{_NAME_CHAR})(?:PNR|Train|TRN|DOJ|Date|Class|Coach|Berth|Seat|CNF|RAC|WL|Status|1A|2A|3A|3E|SL|CC|EC|2S|ट्रेन|पीएनआर|तारीख|कोच|बर्थ|सीट)(?!{_NAME_CHAR})|$))"
@@ -132,7 +137,10 @@ class SmsParseError(ValueError):
 
 
 def mask_sms_pii_for_llm(raw_text: str) -> str:
-    """Strip 10-digit PNRs, phone numbers, salutations, and passenger names before any LLM fallback."""
+    """Strip 10-digit PNRs, phone numbers, salutations, and passenger names.
+
+    Applied before any LLM fallback.
+    """
     masked = _LABELED_PNR_MASK_RE.sub("PNR:[REDACTED]", raw_text)
     masked = _PHONE_MASK_RE.sub("[REDACTED_PHONE]", masked)
     masked = _SPACED_PNR_MASK_RE.sub("[REDACTED_10D]", masked)
